@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
         business_name,
         settlement_bank,
         account_number,
-        percentage_charge: 1.0, // 1% commission to platform, 99% to subaccount
+        percentage_charge: 1.0,
       }),
     })
 

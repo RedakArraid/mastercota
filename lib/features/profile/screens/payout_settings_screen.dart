@@ -356,7 +356,7 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Enregistrez vos coordonnées de paiement pour recevoir automatiquement les fonds collectés de vos cotisations (commission de 1%).',
+              'Enregistrez vos coordonnées pour recevoir automatiquement les fonds collectés sur vos cotisations.',
               style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary, height: 1.5),
             ),
             const SizedBox(height: 28),

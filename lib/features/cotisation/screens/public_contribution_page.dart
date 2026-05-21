@@ -725,9 +725,8 @@ class _ContributorsPreview extends StatelessWidget {
 
 // ── Payment form ──────────────────────────────────────────
 
-// ── Calcul des frais réels ────────────────────────────────
-// Paystack Mobile Money CI : 1,5% plafonné à 2 000 FCFA
-// Mastercota               : 1%
+// ── Calcul des frais ──────────────────────────────────────
+// Taux appliqué sur le montant brut (gross) envoyé à Paystack
 
 const double _paystackRate = 0.015;
 const double _paystackCap  = 2000.0;   // FCFA
@@ -1253,7 +1252,7 @@ class _ModeTab extends StatelessWidget {
   }
 }
 
-// ── Fee breakdown card ─────────────────────────────────────
+// ── Fee summary card ────────────────────────────────────────
 
 class _FeeBreakdown extends StatelessWidget {
   final double grossAmount;
@@ -1265,7 +1264,7 @@ class _FeeBreakdown extends StatelessWidget {
     required this.grossAmount,
     required this.netAmount,
     required this.formatter,
-    // ignored but kept for compatibility
+    // ignored — conservés pour compatibilité ascendante si besoin
     double paystackFee = 0,
     double platformFee = 0,
   });
@@ -1300,7 +1299,7 @@ class _FeeBreakdown extends StatelessWidget {
           const SizedBox(height: 4),
           Row(
             children: [
-              Text('Frais de service (3%)',
+              Text('Frais de service (2,5%)',
                   style: AppTextStyles.caption
                       .copyWith(color: AppColors.textTertiary, fontSize: 11)),
               const Spacer(),

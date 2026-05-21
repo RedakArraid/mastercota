@@ -176,9 +176,7 @@ Contributeur → Formulaire → Paystack Checkout → Mobile Money
 
 ## Modèle économique
 
-**1% de commission** sur chaque contribution via split payment Paystack.
-
-Exemple : contribution de 10 000 FCFA → Mastercota reçoit 100 FCFA automatiquement.
+**Frais de service de 2,5%** appliqués sur chaque contribution.
 
 ---
 

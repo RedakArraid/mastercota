@@ -44,6 +44,7 @@ create table if not exists public.cotisations (
   owner_id       uuid references public.users(id) on delete cascade not null,
   status         text default 'active'
                    check (status in ('active', 'closed', 'completed')),
+  settings       jsonb default '{}'::jsonb,
   created_at     timestamptz default now()
 );
 
@@ -53,8 +54,13 @@ create index cotisations_status_idx on public.cotisations(status);
 
 alter table public.cotisations enable row level security;
 
-create policy "Voir les cotisations actives" on public.cotisations
-  for select using (status = 'active' or auth.uid() = owner_id);
+-- Cotisations actives, complétées et fermées sont visibles publiquement
+-- (nécessaire pour les liens publics /c/[slug] fonctionnent même après clôture)
+create policy "Voir les cotisations publiques" on public.cotisations
+  for select using (
+    status in ('active', 'completed', 'closed')
+    or auth.uid() = owner_id
+  );
 
 create policy "Créer ses cotisations" on public.cotisations
   for insert with check (auth.uid() = owner_id);
@@ -139,3 +145,38 @@ create trigger on_contribution_paid
 -- ──────────────────────────────────────────────────────────
 alter publication supabase_realtime add table public.cotisations;
 alter publication supabase_realtime add table public.contributions;
+
+-- ──────────────────────────────────────────────────────────
+-- TABLE : site_config (singleton — une seule ligne id=1)
+-- Paramètres du site gérés depuis l'admin
+-- ──────────────────────────────────────────────────────────
+create table if not exists public.site_config (
+  id               int primary key default 1,
+  phone_whatsapp   text not null default '',
+  email_contact    text not null default '',
+  email_support    text not null default 'support@mastercota.com',
+  social_instagram text not null default '',
+  social_facebook  text not null default '',
+  social_twitter   text not null default '',
+  social_tiktok    text not null default '',
+  social_youtube   text not null default '',
+  doc_cgu_url      text not null default '',
+  doc_privacy_url  text not null default '',
+  doc_mentions_url text not null default '',
+  updated_at       timestamptz not null default now(),
+  constraint site_config_singleton check (id = 1)
+);
+
+-- Ligne initiale (idempotent)
+insert into public.site_config (id) values (1) on conflict do nothing;
+
+alter table public.site_config enable row level security;
+
+-- Lecture publique (landing page + app mobile)
+create policy "Lecture publique site_config" on public.site_config
+  for select using (true);
+
+-- Modification via service_role uniquement (page admin Next.js)
+create policy "Upsert admin site_config" on public.site_config
+  for all using (auth.role() = 'service_role')
+  with check (auth.role() = 'service_role');

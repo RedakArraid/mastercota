@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
     // Split parameters if owner has set up their subaccount
     if (owner.paystack_subaccount_id) {
       payload.subaccount = owner.paystack_subaccount_id
-      payload.bearer = 'subaccount' // Subaccount bears the Paystack fee, so platform commission remains 1% net
+      payload.bearer = 'subaccount'
     }
 
     // 3. Call Paystack API

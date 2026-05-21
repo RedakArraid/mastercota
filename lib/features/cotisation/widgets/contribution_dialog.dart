@@ -303,14 +303,14 @@ class _ContributionDialogState extends State<ContributionDialog> {
                     ),
                     const SizedBox(height: 12),
 
-                    // ── Breakdown frais ──
+                    // ── Résumé frais ──
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 280),
                       child: (_paystackFee != null && _platformFee != null)
                           ? _DialogFeeBreakdown(
                               key: ValueKey('${_paystackFee}_$_platformFee'),
-                              paystackFee: _paystackFee!,
-                              platformFee: _platformFee!,
+                              totalFee: _paystackFee! + _platformFee!,
+                              net: double.parse(_netController.text.isEmpty ? '0' : _netController.text),
                               formatter: _formatter,
                             )
                           : Container(
@@ -327,7 +327,7 @@ class _ContributionDialogState extends State<ContributionDialog> {
                                       color: AppColors.textTertiary, size: 15),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Saisissez un montant pour voir les frais',
+                                    'Saisissez un montant pour voir la répartition',
                                     style: AppTextStyles.caption.copyWith(
                                         color: AppColors.textTertiary),
                                   ),
@@ -413,24 +413,22 @@ class _ContributionDialogState extends State<ContributionDialog> {
   }
 }
 
-// ── Dialog fee breakdown ───────────────────────────────────
+// ── Dialog fee summary (global, sans détail de la marge) ──────────────────────
 
 class _DialogFeeBreakdown extends StatelessWidget {
-  final double paystackFee;
-  final double platformFee;
+  final double totalFee;
+  final double net;
   final NumberFormat formatter;
 
   const _DialogFeeBreakdown({
     super.key,
-    required this.paystackFee,
-    required this.platformFee,
+    required this.totalFee,
+    required this.net,
     required this.formatter,
   });
 
   @override
   Widget build(BuildContext context) {
-    final paystackCapped = paystackFee >= _dialogPaystackFeeCap;
-    final total = paystackFee + platformFee;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -445,16 +443,14 @@ class _DialogFeeBreakdown extends StatelessWidget {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              paystackCapped
-                  ? 'Frais Paystack plafonné (${formatter.format(paystackFee.round())} F) + Mastercota 1% (${formatter.format(platformFee.round())} F)'
-                  : 'Frais Paystack 1,5% (${formatter.format(paystackFee.round())} F) + Mastercota 1% (${formatter.format(platformFee.round())} F)',
+              'Frais de service inclus • Dans la cagnotte : ${formatter.format(net.round())} F',
               style: AppTextStyles.caption.copyWith(
                   color: AppColors.textTertiary, fontSize: 11, height: 1.4),
             ),
           ),
           const SizedBox(width: 8),
           Text(
-            '−${formatter.format(total.round())} F',
+            '−${formatter.format(totalFee.round())} F',
             style: AppTextStyles.caption.copyWith(
                 color: AppColors.textSecondary,
                 fontWeight: FontWeight.w700,
@@ -465,4 +461,3 @@ class _DialogFeeBreakdown extends StatelessWidget {
     ).animate().fadeIn(duration: 200.ms);
   }
 }
-
