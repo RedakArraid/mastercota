@@ -9,6 +9,7 @@ class AppTextField extends StatelessWidget {
   final String? label;
   final String? suffixText;
   final Widget? suffix;
+  final Widget? prefixIcon;
   final int? maxLines;
   final TextInputType? keyboardType;
   final List<TextInputFormatter>? inputFormatters;
@@ -25,6 +26,7 @@ class AppTextField extends StatelessWidget {
     this.label,
     this.suffixText,
     this.suffix,
+    this.prefixIcon,
     this.maxLines = 1,
     this.keyboardType,
     this.inputFormatters,
@@ -61,6 +63,7 @@ class AppTextField extends StatelessWidget {
             suffixStyle: AppTextStyles.bodyMedium
                 .copyWith(color: AppColors.textSecondary),
             suffix: suffix,
+            prefixIcon: prefixIcon,
           ),
         ),
       ],

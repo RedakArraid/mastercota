@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/cotisation_model.dart';
 import '../../../core/services/supabase_service.dart';
 
@@ -28,7 +29,34 @@ final cotisationStreamProvider =
       .eq('id', id)
       .map((data) => data.isEmpty
           ? null
-          : CotisationModel.fromJson(data.first as Map<String, dynamic>));
+          : CotisationModel.fromJson(data.first));
+});
+
+// ── Public lookup by slug (no auth required) ──────────────
+final cotisationBySlugProvider =
+    FutureProvider.family<CotisationModel?, String>((ref, slug) async {
+  final response = await SupabaseService.client
+      .from('cotisations')
+      .select()
+      .eq('slug', slug)
+      .maybeSingle();
+
+  if (response == null) return null;
+  return CotisationModel.fromJson(response);
+});
+
+// ── Contributions stream by cotisation id (public) ────────
+final publicContributionsProvider =
+    StreamProvider.family<List<ContributionModel>, String>(
+        (ref, cotisationId) {
+  return SupabaseService.client
+      .from('contributions')
+      .stream(primaryKey: ['id'])
+      .eq('cotisation_id', cotisationId)
+      .order('created_at', ascending: false)
+      .map((data) => (data as List)
+          .map((e) => ContributionModel.fromJson(e as Map<String, dynamic>))
+          .toList());
 });
 
 // ── Contributions — realtime stream ───────────────────────
@@ -52,7 +80,10 @@ class CotisationNotifier extends StateNotifier<AsyncValue<void>> {
 
   final _client = SupabaseService.client;
 
-  Future<String?> createCotisation({
+  /// Remet le notifier à zéro (efface l'état d'erreur précédent).
+  void reset() => state = const AsyncValue.data(null);
+
+  Future<({String? id, String? error})> createCotisation({
     required String title,
     String? description,
     required double targetAmount,
@@ -62,7 +93,15 @@ class CotisationNotifier extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.loading();
     try {
       final userId = _client.auth.currentUser?.id;
-      if (userId == null) throw Exception('Non authentifié');
+      final userPhone = _client.auth.currentUser?.phone;
+      if (userId == null) throw Exception('Vous devez être connecté pour créer une cotisation.');
+
+      // Filet de sécurité : s'assurer que le profil existe dans public.users
+      // (peut manquer si le upsert post-OTP a échoué silencieusement)
+      await _client.from('users').upsert(
+        {'id': userId, 'phone': userPhone},
+        onConflict: 'id',
+      );
 
       final slug = _generateSlug(title);
 
@@ -78,15 +117,23 @@ class CotisationNotifier extends StateNotifier<AsyncValue<void>> {
             'cover_url': coverUrl,
             'slug': slug,
             'status': 'active',
+            'settings': const CotisationSettings().toJson(),
           })
           .select()
           .single();
 
       state = const AsyncValue.data(null);
-      return response['id'] as String;
+      return (id: response['id'] as String, error: null);
+    } on PostgrestException catch (e, st) {
+      state = AsyncValue.error(e, st);
+      // Message lisible pour les erreurs Supabase/PostgreSQL
+      final msg = e.message.contains('duplicate')
+          ? 'Ce titre existe déjà. Essayez un titre différent.'
+          : 'Erreur base de données : ${e.message}';
+      return (id: null, error: msg);
     } catch (e, st) {
       state = AsyncValue.error(e, st);
-      return null;
+      return (id: null, error: e.toString().replaceAll('Exception: ', ''));
     }
   }
 
@@ -94,6 +141,39 @@ class CotisationNotifier extends StateNotifier<AsyncValue<void>> {
     await _client
         .from('cotisations')
         .update({'status': 'closed'}).eq('id', id);
+  }
+
+  /// Met à jour les paramètres d'affichage d'une cotisation
+  Future<void> updateSettings(String cotisationId, CotisationSettings settings) async {
+    await _client
+        .from('cotisations')
+        .update({'settings': settings.toJson()}).eq('id', cotisationId);
+  }
+
+  /// Ajoute une contribution manuelle (cash/virement) avec statut 'paid' immédiat
+  Future<({String? error})> addManualContribution({
+    required String cotisationId,
+    required String contributorName,
+    required String contributorPhone,
+    required double amount,
+    String? note,
+  }) async {
+    try {
+      await _client.from('contributions').insert({
+        'cotisation_id': cotisationId,
+        'contributor_name': contributorName.trim(),
+        'contributor_phone': contributorPhone.trim(),
+        'amount': amount,
+        'status': 'paid',
+        'payment_method': 'manual',
+        'paystack_reference': null,
+      });
+      return (error: null);
+    } on PostgrestException catch (e) {
+      return (error: 'Erreur base de données : ${e.message}');
+    } catch (e) {
+      return (error: e.toString().replaceAll('Exception: ', ''));
+    }
   }
 
   String _generateSlug(String title) {

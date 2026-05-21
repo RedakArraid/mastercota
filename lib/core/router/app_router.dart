@@ -8,8 +8,11 @@ import '../../features/auth/screens/otp_screen.dart';
 import '../../features/home/screens/home_screen.dart';
 import '../../features/cotisation/screens/create_cotisation_screen.dart';
 import '../../features/cotisation/screens/cotisation_detail_screen.dart';
+import '../../features/cotisation/screens/public_contribution_page.dart';
 import '../../features/profile/screens/profile_screen.dart';
+import '../../features/profile/screens/payout_settings_screen.dart';
 import '../services/supabase_service.dart';
+import '../widgets/navigation_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -20,6 +23,9 @@ final routerProvider = Provider<GoRouter>((ref) {
 
       // Splash always shows first
       if (location == '/splash') return null;
+
+      // Page de contribution publique — accessible sans authentification
+      if (location.startsWith('/c/')) return null;
 
       final isAuthRoute = location.startsWith('/auth') ||
           location == '/onboarding';
@@ -49,9 +55,28 @@ final routerProvider = Provider<GoRouter>((ref) {
           return OtpScreen(phone: phone);
         },
       ),
+      
+      // Navigation Shell wrapping Dashboard (Home) and Profile
+      ShellRoute(
+        builder: (ctx, state, child) => NavigationShell(
+          state: state,
+          child: child,
+        ),
+        routes: [
+          GoRoute(
+            path: '/home',
+            builder: (ctx, state) => const HomeScreen(),
+          ),
+          GoRoute(
+            path: '/profile',
+            builder: (ctx, state) => const ProfileScreen(),
+          ),
+        ],
+      ),
+
       GoRoute(
-        path: '/home',
-        builder: (ctx, state) => const HomeScreen(),
+        path: '/profile/payout',
+        builder: (ctx, state) => const PayoutSettingsScreen(),
       ),
       GoRoute(
         path: '/cotisation/create',
@@ -64,13 +89,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           return CotisationDetailScreen(cotisationId: id);
         },
       ),
+
+      // ── Page publique de contribution (sans auth) ────
       GoRoute(
-        path: '/profile',
-        builder: (ctx, state) => const ProfileScreen(),
+        path: '/c/:slug',
+        builder: (ctx, state) {
+          final slug = state.pathParameters['slug']!;
+          return PublicContributionPage(slug: slug);
+        },
       ),
     ],
     errorBuilder: (ctx, state) => Scaffold(
-      backgroundColor: const Color(0xFF050B18),
+      backgroundColor: const Color(0xFF050B14),
       body: Center(
         child: Text(
           'Page introuvable\n${state.error}',

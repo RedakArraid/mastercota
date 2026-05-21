@@ -66,5 +66,14 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
+	<!-- Permissions -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Mastercota a besoin d'accéder à votre galerie pour ajouter une photo de couverture à votre cotisation.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Mastercota a besoin de votre caméra pour prendre une photo de couverture.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Mastercota a besoin d'enregistrer des images dans votre galerie.</string>
+
 </dict>
 </plist>

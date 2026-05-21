@@ -22,9 +22,30 @@ class AppButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final labelWidget = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (icon != null) ...[
+          Icon(icon,
+              size: 18,
+              color: isSecondary ? AppColors.primary : Colors.black),
+          const SizedBox(width: 8),
+        ],
+        Text(
+          label,
+          style: GoogleFonts.plusJakartaSans(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: isSecondary ? AppColors.primary : Colors.black,
+          ),
+        ),
+      ],
+    );
+
     return SizedBox(
       width: double.infinity,
-      height: 58,
+      height: 56,
       child: isSecondary
           ? OutlinedButton(
               onPressed: isLoading ? null : onPressed,
@@ -34,11 +55,17 @@ class AppButton extends StatelessWidget {
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
               ),
-              child: Text(
-                label,
-                style: AppTextStyles.labelLarge
-                    .copyWith(color: AppColors.primary, fontSize: 16),
-              ),
+              child: isLoading
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            AppColors.primary),
+                      ),
+                    )
+                  : labelWidget,
             )
           : ElevatedButton(
               onPressed: isLoading
@@ -49,7 +76,8 @@ class AppButton extends StatelessWidget {
                     },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
-                disabledBackgroundColor: AppColors.primaryDark.withValues(alpha: 0.5),
+                disabledBackgroundColor:
+                    AppColors.primaryDark.withValues(alpha: 0.5),
                 foregroundColor: Colors.black,
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(16)),
@@ -58,31 +86,15 @@ class AppButton extends StatelessWidget {
               ),
               child: isLoading
                   ? const SizedBox(
-                      width: 24,
-                      height: 24,
+                      width: 22,
+                      height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2.5,
                         valueColor:
                             AlwaysStoppedAnimation<Color>(Colors.black),
                       ),
                     )
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        if (icon != null) ...[
-                          Icon(icon, size: 20, color: Colors.black),
-                          const SizedBox(width: 8),
-                        ],
-                        Text(
-                          label,
-                          style: GoogleFonts.plusJakartaSans(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.black,
-                          ),
-                        ),
-                      ],
-                    ),
+                  : labelWidget,
             ),
     );
   }

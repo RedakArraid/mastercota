@@ -47,16 +47,13 @@ class _ContributionDialogState extends State<ContributionDialog> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  final _amountController = TextEditingController(); // montant brut (envoyé à Paystack)
-  final _inputController = TextEditingController();  // montant saisi par l'utilisateur
+  final _grossController = TextEditingController(); // montant payé (envoyé à Paystack)
+  final _netController = TextEditingController();   // montant dans la cagnotte
 
   bool _isLoading = false;
   String? _checkoutUrl;
+  bool _isUpdating = false;
 
-  // Calculateur
-  bool _modePay = true;
-  double? _grossAmount;
-  double? _netAmount;
   double? _paystackFee;
   double? _platformFee;
   final _formatter = NumberFormat('#,###', 'fr_FR');
@@ -64,67 +61,65 @@ class _ContributionDialogState extends State<ContributionDialog> {
   @override
   void initState() {
     super.initState();
-    _inputController.addListener(_recalculate);
+    _grossController.addListener(_onGrossChanged);
+    _netController.addListener(_onNetChanged);
   }
 
-  void _recalculate() {
-    final raw = double.tryParse(_inputController.text.trim());
+  void _onGrossChanged() {
+    if (_isUpdating) return;
+    final raw = double.tryParse(_grossController.text.trim());
     if (raw == null || raw <= 0) {
-      setState(() {
-        _grossAmount = _netAmount = _paystackFee = _platformFee = null;
-        _amountController.text = '';
-      });
+      _isUpdating = true;
+      _netController.text = '';
+      _isUpdating = false;
+      setState(() { _paystackFee = null; _platformFee = null; });
       return;
     }
-    double gross, net, paystackFee, platformFee;
-    if (_modePay) {
-      gross = raw;
-      paystackFee = (gross * _dialogPaystackRate).clamp(0, _dialogPaystackFeeCap);
-      platformFee = gross * _dialogPlatformRate;
-    } else {
-      net = raw;
-      // Tentative sans plafond
-      final grossNoCap = net / (1 - _dialogTotalFeeRate);
-      if (grossNoCap * _dialogPaystackRate <= _dialogPaystackFeeCap) {
-        gross = grossNoCap;
-        paystackFee = gross * _dialogPaystackRate;
-      } else {
-        // Plafond Paystack atteint : paystackFee = 2000, platformFee = gross * 1%
-        // net = gross * (1 - 0.01) - 2000  →  gross = (net + 2000) / 0.99
-        gross = (net + _dialogPaystackFeeCap) / (1 - _dialogPlatformRate);
-        paystackFee = _dialogPaystackFeeCap;
-      }
-      platformFee = gross * _dialogPlatformRate;
-    }
-    net = gross - paystackFee - platformFee;
-    setState(() {
-      _grossAmount = gross;
-      _netAmount = net;
-      _paystackFee = paystackFee;
-      _platformFee = platformFee;
-      _amountController.text = gross.toStringAsFixed(0);
-    });
+    final gross = raw;
+    final paystackFee = (gross * _dialogPaystackRate).clamp(0.0, _dialogPaystackFeeCap);
+    final platformFee = gross * _dialogPlatformRate;
+    final net = gross - paystackFee - platformFee;
+    _isUpdating = true;
+    _netController.text = net.toStringAsFixed(0);
+    _isUpdating = false;
+    setState(() { _paystackFee = paystackFee; _platformFee = platformFee; });
   }
 
-  void _switchMode(bool payMode) {
-    if (_modePay == payMode) return;
-    setState(() => _modePay = payMode);
-    if (_grossAmount != null && _netAmount != null) {
-      _inputController.removeListener(_recalculate);
-      _inputController.text = payMode
-          ? _grossAmount!.toStringAsFixed(0)
-          : _netAmount!.toStringAsFixed(0);
-      _inputController.addListener(_recalculate);
+  void _onNetChanged() {
+    if (_isUpdating) return;
+    final raw = double.tryParse(_netController.text.trim());
+    if (raw == null || raw <= 0) {
+      _isUpdating = true;
+      _grossController.text = '';
+      _isUpdating = false;
+      setState(() { _paystackFee = null; _platformFee = null; });
+      return;
     }
+    final net = raw;
+    double gross, paystackFee;
+    final grossNoCap = net / (1 - _dialogTotalFeeRate);
+    if (grossNoCap * _dialogPaystackRate <= _dialogPaystackFeeCap) {
+      gross = grossNoCap;
+      paystackFee = gross * _dialogPaystackRate;
+    } else {
+      gross = (net + _dialogPaystackFeeCap) / (1 - _dialogPlatformRate);
+      paystackFee = _dialogPaystackFeeCap;
+    }
+    final platformFee = gross * _dialogPlatformRate;
+    _isUpdating = true;
+    _grossController.text = gross.toStringAsFixed(0);
+    _isUpdating = false;
+    setState(() { _paystackFee = paystackFee; _platformFee = platformFee; });
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _amountController.dispose();
-    _inputController.removeListener(_recalculate);
-    _inputController.dispose();
+    _grossController.removeListener(_onGrossChanged);
+    _grossController.dispose();
+    _netController.removeListener(_onNetChanged);
+    _netController.dispose();
     super.dispose();
   }
 
@@ -135,7 +130,7 @@ class _ContributionDialogState extends State<ContributionDialog> {
     HapticFeedback.mediumImpact();
 
     try {
-      final amount = double.parse(_amountController.text.trim());
+      final amount = double.parse(_grossController.text.trim());
 
       final response = await SupabaseService.client.functions.invoke(
         'paystack-initialize',
@@ -255,63 +250,65 @@ class _ContributionDialogState extends State<ContributionDialog> {
                     ),
                     const SizedBox(height: 20),
 
-                    // ── Mode toggle ──
-                    Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceElevated,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: AppColors.border),
-                      ),
-                      child: Row(
-                        children: [
-                          _DialogModeTab(
+                    // ── Deux champs synchronisés ──
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: AppTextField(
+                            controller: _grossController,
                             label: 'Je veux payer',
-                            icon: Icons.payments_outlined,
-                            isActive: _modePay,
-                            onTap: () => _switchMode(true),
+                            hint: '5 000',
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            suffixText: 'F',
+                            prefixIcon: const Icon(Icons.payments_outlined,
+                                color: AppColors.textSecondary, size: 18),
+                            validator: (_) {
+                              final val = _grossController.text.trim();
+                              if (val.isEmpty) return 'Saisir un montant';
+                              final amt = double.tryParse(val);
+                              if (amt == null || amt <= 0) return 'Invalide';
+                              return null;
+                            },
                           ),
-                          _DialogModeTab(
-                            label: 'Mettre dans la cagnotte',
-                            icon: Icons.savings_outlined,
-                            isActive: !_modePay,
-                            onTap: () => _switchMode(false),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 28),
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 8),
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceElevated,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: AppColors.border),
+                            ),
+                            child: const Icon(Icons.swap_horiz_rounded,
+                                size: 16, color: AppColors.textTertiary),
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-
-                    // Montant
-                    AppTextField(
-                      controller: _inputController,
-                      label: _modePay ? 'Montant que je paie' : 'Montant à verser dans la cagnotte',
-                      hint: 'Ex: 5000',
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                      suffixText: 'FCFA',
-                      prefixIcon: Icon(
-                        _modePay ? Icons.payments_outlined : Icons.savings_outlined,
-                        color: AppColors.textSecondary, size: 20,
-                      ),
-                      validator: (_) {
-                        final val = _amountController.text.trim();
-                        if (val.isEmpty) return 'Veuillez saisir le montant';
-                        final amt = double.tryParse(val);
-                        if (amt == null || amt <= 0) return 'Montant invalide';
-                        return null;
-                      },
+                        ),
+                        Expanded(
+                          child: AppTextField(
+                            controller: _netController,
+                            label: 'Dans la cagnotte',
+                            hint: '4 850',
+                            keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                            suffixText: 'F',
+                            prefixIcon: const Icon(Icons.savings_outlined,
+                                color: AppColors.textSecondary, size: 18),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
 
-                    // ── Breakdown ──
+                    // ── Breakdown frais ──
                     AnimatedSwitcher(
                       duration: const Duration(milliseconds: 280),
-                      child: (_grossAmount != null && _netAmount != null && _paystackFee != null && _platformFee != null)
+                      child: (_paystackFee != null && _platformFee != null)
                           ? _DialogFeeBreakdown(
-                              key: ValueKey('$_grossAmount'),
-                              grossAmount: _grossAmount!,
-                              netAmount: _netAmount!,
+                              key: ValueKey('${_paystackFee}_$_platformFee'),
                               paystackFee: _paystackFee!,
                               platformFee: _platformFee!,
                               formatter: _formatter,
@@ -322,8 +319,7 @@ class _ContributionDialogState extends State<ContributionDialog> {
                               decoration: BoxDecoration(
                                 color: AppColors.surfaceElevated,
                                 borderRadius: BorderRadius.circular(12),
-                                border:
-                                    Border.all(color: AppColors.borderLight),
+                                border: Border.all(color: AppColors.borderLight),
                               ),
                               child: Row(
                                 children: [
@@ -331,7 +327,7 @@ class _ContributionDialogState extends State<ContributionDialog> {
                                       color: AppColors.textTertiary, size: 15),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Répartition des frais affichée ici',
+                                    'Saisissez un montant pour voir les frais',
                                     style: AppTextStyles.caption.copyWith(
                                         color: AppColors.textTertiary),
                                   ),
@@ -417,81 +413,15 @@ class _ContributionDialogState extends State<ContributionDialog> {
   }
 }
 
-// ── Dialog mode tab ────────────────────────────────────────
-
-class _DialogModeTab extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isActive;
-  final VoidCallback onTap;
-  const _DialogModeTab(
-      {required this.label,
-      required this.icon,
-      required this.isActive,
-      required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-          decoration: BoxDecoration(
-            color: isActive ? AppColors.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: isActive
-                ? [
-                    BoxShadow(
-                        color: AppColors.primary.withValues(alpha: 0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3))
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon,
-                  size: 14,
-                  color: isActive ? Colors.black : AppColors.textSecondary),
-              const SizedBox(width: 5),
-              Flexible(
-                child: Text(
-                  label,
-                  style: AppTextStyles.caption.copyWith(
-                    color: isActive ? Colors.black : AppColors.textSecondary,
-                    fontWeight:
-                        isActive ? FontWeight.w700 : FontWeight.w500,
-                    fontSize: 11,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ── Dialog fee breakdown ───────────────────────────────────
 
 class _DialogFeeBreakdown extends StatelessWidget {
-  final double grossAmount;
-  final double netAmount;
   final double paystackFee;
   final double platformFee;
   final NumberFormat formatter;
 
   const _DialogFeeBreakdown({
     super.key,
-    required this.grossAmount,
-    required this.netAmount,
     required this.paystackFee,
     required this.platformFee,
     required this.formatter,
@@ -500,70 +430,35 @@ class _DialogFeeBreakdown extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final paystackCapped = paystackFee >= _dialogPaystackFeeCap;
+    final total = paystackFee + platformFee;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.background,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.borderLight),
       ),
-      child: Column(
+      child: Row(
         children: [
-          Row(
-            children: [
-              Text('Vous payez',
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.textSecondary)),
-              const Spacer(),
-              Text('${formatter.format(grossAmount.round())} FCFA',
-                  style: AppTextStyles.bodySmall.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary)),
-            ],
+          const Icon(Icons.info_outline_rounded,
+              size: 13, color: AppColors.textTertiary),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              paystackCapped
+                  ? 'Frais Paystack plafonné (${formatter.format(paystackFee.round())} F) + Mastercota 1% (${formatter.format(platformFee.round())} F)'
+                  : 'Frais Paystack 1,5% (${formatter.format(paystackFee.round())} F) + Mastercota 1% (${formatter.format(platformFee.round())} F)',
+              style: AppTextStyles.caption.copyWith(
+                  color: AppColors.textTertiary, fontSize: 11, height: 1.4),
+            ),
           ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Text(
-                paystackCapped
-                    ? 'Frais Paystack (plafonné)'
-                    : 'Frais Paystack (1,5%)',
-                style: AppTextStyles.caption.copyWith(
-                    color: AppColors.textTertiary, fontSize: 11)),
-              const Spacer(),
-              Text('−${formatter.format(paystackFee.round())} FCFA',
-                  style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textTertiary, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(height: 3),
-          Row(
-            children: [
-              Text('Commission Mastercota (1%)',
-                  style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textTertiary, fontSize: 11)),
-              const Spacer(),
-              Text('−${formatter.format(platformFee.round())} FCFA',
-                  style: AppTextStyles.caption.copyWith(
-                      color: AppColors.textTertiary, fontSize: 11)),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 8),
-            child: Divider(color: AppColors.borderLight, height: 1),
-          ),
-          Row(
-            children: [
-              Expanded(
-                child: Text('Dans la cagnotte',
-                    style: AppTextStyles.bodySmall.copyWith(
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.success)),
-              ),
-              Text('${formatter.format(netAmount.round())} FCFA',
-                  style: AppTextStyles.titleMedium.copyWith(
-                      fontWeight: FontWeight.w800, color: AppColors.success)),
-            ],
+          const SizedBox(width: 8),
+          Text(
+            '−${formatter.format(total.round())} F',
+            style: AppTextStyles.caption.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
+                fontSize: 11),
           ),
         ],
       ),
@@ -571,31 +466,3 @@ class _DialogFeeBreakdown extends StatelessWidget {
   }
 }
 
-class _Row extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool bold;
-  final Color color;
-  const _Row(this.label, this.value,
-      {this.bold = false, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(label,
-              style: AppTextStyles.caption.copyWith(
-                color: color,
-                fontWeight: bold ? FontWeight.w700 : FontWeight.w400,
-              )),
-        ),
-        Text(value,
-            style: AppTextStyles.bodySmall.copyWith(
-              color: color,
-              fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
-            )),
-      ],
-    );
-  }
-}

@@ -1,5 +1,89 @@
 // ─────────────────────────────────────────────────────────
-// CotisationModel & ContributionModel
+// CotisationSettings — paramètres d'affichage public
+// ─────────────────────────────────────────────────────────
+
+class CotisationSettings {
+  /// Afficher le meilleur contributeur (top montant)
+  final bool showBestContributor;
+
+  /// Afficher la liste des contributeurs
+  final bool showContributors;
+
+  /// Afficher la barre de progression + montant collecté
+  final bool showProgress;
+
+  /// Afficher le montant cible
+  final bool showTargetAmount;
+
+  /// Permettre les contributions sans nom (anonyme)
+  final bool anonymousAllowed;
+
+  /// Montant minimum de contribution (0 = pas de minimum)
+  final double minAmount;
+
+  /// Message personnalisé accompagnant le lien de partage
+  final String? shareMessage;
+
+  const CotisationSettings({
+    this.showBestContributor = true,
+    this.showContributors = true,
+    this.showProgress = true,
+    this.showTargetAmount = true,
+    this.anonymousAllowed = false,
+    this.minAmount = 0,
+    this.shareMessage,
+  });
+
+  static const CotisationSettings defaults = CotisationSettings();
+
+  factory CotisationSettings.fromJson(Map<String, dynamic>? json) {
+    if (json == null) return const CotisationSettings();
+    return CotisationSettings(
+      showBestContributor: json['show_best_contributor'] as bool? ?? true,
+      showContributors: json['show_contributors'] as bool? ?? true,
+      showProgress: json['show_progress'] as bool? ?? true,
+      showTargetAmount: json['show_target_amount'] as bool? ?? true,
+      anonymousAllowed: json['anonymous_allowed'] as bool? ?? false,
+      minAmount: (json['min_amount'] as num?)?.toDouble() ?? 0,
+      shareMessage: json['share_message'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'show_best_contributor': showBestContributor,
+        'show_contributors': showContributors,
+        'show_progress': showProgress,
+        'show_target_amount': showTargetAmount,
+        'anonymous_allowed': anonymousAllowed,
+        'min_amount': minAmount,
+        'share_message': shareMessage,
+      };
+
+  CotisationSettings copyWith({
+    bool? showBestContributor,
+    bool? showContributors,
+    bool? showProgress,
+    bool? showTargetAmount,
+    bool? anonymousAllowed,
+    double? minAmount,
+    String? shareMessage,
+    bool clearShareMessage = false,
+  }) {
+    return CotisationSettings(
+      showBestContributor: showBestContributor ?? this.showBestContributor,
+      showContributors: showContributors ?? this.showContributors,
+      showProgress: showProgress ?? this.showProgress,
+      showTargetAmount: showTargetAmount ?? this.showTargetAmount,
+      anonymousAllowed: anonymousAllowed ?? this.anonymousAllowed,
+      minAmount: minAmount ?? this.minAmount,
+      shareMessage:
+          clearShareMessage ? null : (shareMessage ?? this.shareMessage),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// CotisationModel
 // ─────────────────────────────────────────────────────────
 
 class CotisationModel {
@@ -14,6 +98,7 @@ class CotisationModel {
   final String ownerId;
   final String status;
   final DateTime createdAt;
+  final CotisationSettings settings;
 
   const CotisationModel({
     required this.id,
@@ -27,6 +112,7 @@ class CotisationModel {
     required this.ownerId,
     required this.status,
     required this.createdAt,
+    this.settings = const CotisationSettings(),
   });
 
   // ── Computed ────────────────────────────────────────────
@@ -54,6 +140,8 @@ class CotisationModel {
       ownerId: json['owner_id'] as String,
       status: json['status'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
+      settings: CotisationSettings.fromJson(
+          json['settings'] as Map<String, dynamic>?),
     );
   }
 
@@ -69,6 +157,7 @@ class CotisationModel {
         'owner_id': ownerId,
         'status': status,
         'created_at': createdAt.toIso8601String(),
+        'settings': settings.toJson(),
       };
 
   CotisationModel copyWith({
@@ -83,6 +172,7 @@ class CotisationModel {
     String? ownerId,
     String? status,
     DateTime? createdAt,
+    CotisationSettings? settings,
   }) {
     return CotisationModel(
       id: id ?? this.id,
@@ -96,9 +186,11 @@ class CotisationModel {
       ownerId: ownerId ?? this.ownerId,
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
+      settings: settings ?? this.settings,
     );
   }
 }
+
 
 // ─────────────────────────────────────────────────────────
 

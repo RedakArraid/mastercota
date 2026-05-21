@@ -11,6 +11,18 @@ final currentUserProvider = Provider<User?>((ref) {
   return SupabaseService.currentUser;
 });
 
+// Stream of the current user's profile from the public.users table
+final userProfileProvider = StreamProvider<Map<String, dynamic>?>((ref) {
+  final userId = SupabaseService.currentUser?.id;
+  if (userId == null) return Stream.value(null);
+
+  return SupabaseService.client
+      .from('users')
+      .stream(primaryKey: ['id'])
+      .eq('id', userId)
+      .map((data) => data.isEmpty ? null : data.first);
+});
+
 // ── Auth actions ─────────────────────────────────────────
 class AuthNotifier extends StateNotifier<AsyncValue<void>> {
   AuthNotifier() : super(const AsyncValue.data(null));

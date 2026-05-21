@@ -14,6 +14,12 @@ class AppConstants {
     defaultValue:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbXRvaW5ld3Nva3Rua3J0YmJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzMTc2ODgsImV4cCI6MjA5NDg5MzY4OH0.Okyz8FNsW8-3TYt-M7UYBkdphtu_IdmEAREFjmgtzsk',
   );
+  
+  // Paystack
+  static const String paystackPublicKey = String.fromEnvironment(
+    'PAYSTACK_PUBLIC_KEY',
+    defaultValue: 'pk_test_7ad05dc9dd5951f4463b8fbccea934e102ead21a',
+  );
 
   // Phone
   static const String defaultCountryCode = '+225';

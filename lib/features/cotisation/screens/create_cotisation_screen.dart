@@ -4,10 +4,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/cotisation_provider.dart';
+import '../../auth/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_text_field.dart';
+import '../../../core/widgets/glass_card.dart';
 
 class CreateCotisationScreen extends ConsumerStatefulWidget {
   const CreateCotisationScreen({super.key});
@@ -63,10 +65,22 @@ class _CreateCotisationScreenState
       return;
     }
 
+    // ── Vérification compte de versement ──
+    final profile = ref.read(userProfileProvider).valueOrNull;
+    final subaccountId = profile?['paystack_subaccount_id'] as String?;
+    if (subaccountId == null || subaccountId.isEmpty) {
+      if (!mounted) return;
+      await _showNoSubaccountDialog();
+      return;
+    }
+
     setState(() => _isLoading = true);
 
+    // Reset l'état d'erreur précédent pour permettre une nouvelle tentative
+    ref.read(cotisationNotifierProvider.notifier).reset();
+
     final raw = _amountController.text.trim().replaceAll(RegExp(r'\s'), '');
-    final id =
+    final result =
         await ref.read(cotisationNotifierProvider.notifier).createCotisation(
               title: _titleController.text.trim(),
               description: _descriptionController.text.trim().isEmpty
@@ -79,16 +93,149 @@ class _CreateCotisationScreenState
     if (!mounted) return;
     setState(() => _isLoading = false);
 
-    if (id != null) {
-      context.go('/cotisation/$id');
+    if (result.id != null) {
+      // Invalider le cache de la liste pour qu'elle se rafraîchisse
+      ref.invalidate(userCotisationsProvider);
+      context.go('/cotisation/${result.id}');
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Erreur lors de la création. Réessayez.'),
+        SnackBar(
+          content: Text(result.error ?? 'Erreur lors de la création. Réessayez.'),
           backgroundColor: AppColors.error,
+          duration: const Duration(seconds: 5),
         ),
       );
     }
+  }
+
+  Future<void> _showNoSubaccountDialog() async {
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.all(28),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: AppColors.border),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.3),
+                blurRadius: 40,
+                offset: const Offset(0, 12),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Icon
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                      color: AppColors.warning.withValues(alpha: 0.3), width: 2),
+                ),
+                child: const Icon(
+                  Icons.account_balance_wallet_rounded,
+                  color: AppColors.warning,
+                  size: 40,
+                ),
+              ).animate().scale(duration: 400.ms, curve: Curves.elasticOut),
+
+              const SizedBox(height: 20),
+
+              Text(
+                'Compte de versement requis',
+                style: AppTextStyles.headlineMedium
+                    .copyWith(fontWeight: FontWeight.w800),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Pour créer une cotisation et recevoir les paiements, vous devez d\'abord configurer votre compte de versement (Mobile Money ou banque).',
+                textAlign: TextAlign.center,
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.textSecondary,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.07),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline_rounded,
+                        color: AppColors.primary, size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Mastercota prélève 1% de commission. Le reste vous est versé automatiquement.',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.primary,
+                          height: 1.4,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 28),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    context.push('/profile/payout');
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16)),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    elevation: 0,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.account_balance_wallet_rounded,
+                          size: 18),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Configurer mon compte',
+                        style: AppTextStyles.labelLarge
+                            .copyWith(color: Colors.black, fontSize: 15),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  'Plus tard',
+                  style: AppTextStyles.bodyMedium
+                      .copyWith(color: AppColors.textSecondary),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -112,7 +259,7 @@ class _CreateCotisationScreenState
                       color: AppColors.textPrimary,
                     ),
                     Text('Nouvelle cotisation',
-                        style: AppTextStyles.headlineMedium),
+                        style: AppTextStyles.headlineLarge),
                   ],
                 ),
               ),
@@ -127,148 +274,226 @@ class _CreateCotisationScreenState
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         // Hero illustration
-                        Container(
-                          width: double.infinity,
-                          height: 118,
-                          decoration: BoxDecoration(
-                            gradient: const LinearGradient(
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                              colors: [
-                                Color(0xFF667EEA),
-                                Color(0xFF764BA2)
-                              ],
-                            ),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Center(
-                            child: Text('🎯',
-                                style: TextStyle(fontSize: 60)),
-                          ),
-                        )
-                            .animate()
-                            .fadeIn(duration: 400.ms)
-                            .scale(
-                                begin: const Offset(0.95, 0.95),
-                                duration: 400.ms,
-                                curve: Curves.easeOut),
-
-                        const SizedBox(height: 28),
-
-                        AppTextField(
-                          controller: _titleController,
-                          label: 'Titre *',
-                          hint: 'Ex: Mariage Koffi & Aminata',
-                          validator: (v) => v?.trim().isEmpty == true
-                              ? 'Ce champ est requis'
-                              : null,
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        AppTextField(
-                          controller: _descriptionController,
-                          label: 'Description (optionnel)',
-                          hint: 'Donnez plus de contexte à vos contributeurs…',
-                          maxLines: 3,
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        AppTextField(
-                          controller: _amountController,
-                          label: 'Objectif financier *',
-                          hint: '500 000',
-                          suffixText: 'FCFA',
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                          ],
-                          validator: (v) {
-                            if (v?.trim().isEmpty == true) {
-                              return 'Ce champ est requis';
-                            }
-                            final n = double.tryParse(v!.trim());
-                            if (n == null || n <= 0) {
-                              return 'Montant invalide';
-                            }
-                            return null;
-                          },
-                        ),
-
-                        const SizedBox(height: 20),
-
-                        // Date picker
-                        Text('Date limite *',
-                            style: AppTextStyles.labelLarge),
-                        const SizedBox(height: 8),
-                        GestureDetector(
-                          onTap: _pickDate,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 18),
-                            decoration: BoxDecoration(
-                              color: AppColors.surfaceElevated,
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(color: AppColors.border),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.calendar_month_rounded,
-                                    color: AppColors.textSecondary,
-                                    size: 20),
-                                const SizedBox(width: 12),
-                                Text(
-                                  _deadline != null
-                                      ? '${_deadline!.day.toString().padLeft(2, '0')}/${_deadline!.month.toString().padLeft(2, '0')}/${_deadline!.year}'
-                                      : 'Choisir une date',
-                                  style: _deadline != null
-                                      ? AppTextStyles.bodyLarge
-                                      : AppTextStyles.bodyLarge.copyWith(
-                                          color: AppColors.textTertiary),
-                                ),
-                                const Spacer(),
-                                const Icon(Icons.chevron_right_rounded,
-                                    color: AppColors.textTertiary),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 16),
-
-                        // Commission note
-                        Container(
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                                color: AppColors.primary.withValues(alpha: 0.2)),
-                          ),
+                        GlassCard(
+                          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+                          opacity: 0.05,
                           child: Row(
                             children: [
-                              const Text('💡',
-                                  style: TextStyle(fontSize: 16)),
-                              const SizedBox(width: 10),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(alpha: 0.1),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: AppColors.primary.withValues(alpha: 0.3),
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.ads_click_rounded,
+                                  size: 32,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
                               Expanded(
-                                child: Text(
-                                  '1% de commission est prélevé automatiquement sur chaque contribution. Transparent pour tous.',
-                                  style: AppTextStyles.bodySmall
-                                      .copyWith(color: AppColors.primary),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Définissez votre projet',
+                                      style: AppTextStyles.titleLarge,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Créez une cagnotte transparente pour vos événements',
+                                      style: AppTextStyles.bodySmall.copyWith(
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
                           ),
-                        ),
+                        )
+                            .animate()
+                            .fadeIn(duration: 400.ms)
+                            .slideY(
+                                begin: -0.05,
+                                end: 0,
+                                duration: 400.ms,
+                                curve: Curves.easeOut),
+
+                        const SizedBox(height: 24),
+
+                        // Form content wrapped in GlassCard
+                        GlassCard(
+                          padding: const EdgeInsets.all(20),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              AppTextField(
+                                controller: _titleController,
+                                label: 'Titre de la cagnotte *',
+                                hint: 'Ex: Mariage Koffi & Aminata',
+                                prefixIcon: Icon(
+                                  Icons.mode_edit_outline_outlined,
+                                  color: AppColors.primary.withValues(alpha: 0.8),
+                                  size: 20,
+                                ),
+                                validator: (v) => v?.trim().isEmpty == true
+                                    ? 'Ce champ est requis'
+                                    : null,
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              AppTextField(
+                                controller: _descriptionController,
+                                label: 'Description (optionnel)',
+                                hint: 'Donnez plus de contexte à vos contributeurs…',
+                                prefixIcon: const Icon(
+                                  Icons.description_outlined,
+                                  color: AppColors.textSecondary,
+                                  size: 20,
+                                ),
+                                maxLines: 3,
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              AppTextField(
+                                controller: _amountController,
+                                label: 'Objectif financier *',
+                                hint: '500 000',
+                                suffixText: 'FCFA',
+                                prefixIcon: Icon(
+                                  Icons.payments_outlined,
+                                  color: AppColors.primary.withValues(alpha: 0.8),
+                                  size: 20,
+                                ),
+                                keyboardType: TextInputType.number,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                validator: (v) {
+                                  if (v?.trim().isEmpty == true) {
+                                    return 'Ce champ est requis';
+                                  }
+                                  final n = double.tryParse(v!.trim());
+                                  if (n == null || n <= 0) {
+                                    return 'Montant invalide';
+                                  }
+                                  return null;
+                                },
+                              ),
+
+                              const SizedBox(height: 20),
+
+                              // Date picker
+                              Text('Date limite *',
+                                  style: AppTextStyles.labelLarge),
+                              const SizedBox(height: 8),
+                              GestureDetector(
+                                onTap: _pickDate,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16, vertical: 16),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceElevated,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: AppColors.border),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.calendar_month_rounded,
+                                        color: _deadline != null
+                                            ? AppColors.primary
+                                            : AppColors.textSecondary,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Text(
+                                        _deadline != null
+                                            ? '${_deadline!.day.toString().padLeft(2, '0')}/${_deadline!.month.toString().padLeft(2, '0')}/${_deadline!.year}'
+                                            : 'Choisir une date',
+                                        style: _deadline != null
+                                            ? AppTextStyles.bodyLarge
+                                            : AppTextStyles.bodyLarge.copyWith(
+                                                color: AppColors.textTertiary),
+                                      ),
+                                      const Spacer(),
+                                      const Icon(Icons.chevron_right_rounded,
+                                          color: AppColors.textTertiary),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
+
+                        const SizedBox(height: 20),
+
+                        // Commission note (Premium Amber Info Box)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                                color: AppColors.primary.withValues(alpha: 0.15),
+                                width: 1),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primary.withValues(alpha: 0.01),
+                                blurRadius: 10,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Icon(
+                                Icons.info_outline_rounded,
+                                color: AppColors.primary,
+                                size: 22,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Frais de service de 1%',
+                                      style: AppTextStyles.titleMedium.copyWith(
+                                        color: AppColors.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'Une commission de 1% est prélevée sur chaque contribution reçue. Transparence absolue pour vous et vos contributeurs.',
+                                      style: AppTextStyles.bodySmall.copyWith(
+                                        color: AppColors.textSecondary,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ).animate().fadeIn(delay: 200.ms, duration: 400.ms),
 
                         const SizedBox(height: 32),
 
                         AppButton(
-                          label: 'Publier la cotisation 🚀',
+                          label: 'Créer ma cotisation ✨',
                           onPressed: _isLoading ? null : _create,
                           isLoading: _isLoading,
-                        ),
+                        ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
 
                         const SizedBox(height: 40),
                       ],

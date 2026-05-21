@@ -84,9 +84,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   @override
   Widget build(BuildContext context) {
     final defaultTheme = PinTheme(
-      width: 54,
-      height: 60,
-      textStyle: AppTextStyles.headlineLarge,
+      width: 50,
+      height: 58,
+      textStyle: AppTextStyles.headlineLarge.copyWith(
+        fontWeight: FontWeight.bold,
+        color: Colors.white,
+      ),
       decoration: BoxDecoration(
         color: AppColors.surfaceElevated,
         borderRadius: BorderRadius.circular(14),
@@ -96,8 +99,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
     return Scaffold(
       body: Container(
-        decoration:
-            const BoxDecoration(gradient: AppColors.backgroundGradient),
+        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
         child: SafeArea(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 28),
@@ -107,8 +109,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                 const SizedBox(height: 20),
 
                 IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                      size: 20),
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
                   onPressed: () => context.pop(),
                   color: AppColors.textPrimary,
                   padding: EdgeInsets.zero,
@@ -116,13 +117,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
 
                 const SizedBox(height: 32),
 
-                Text('Code de vérification',
-                        style: AppTextStyles.displayMedium)
+                Text('Code de vérification', style: AppTextStyles.displayMedium)
                     .animate()
                     .fadeIn(delay: 100.ms)
-                    .slideX(begin: -0.08),
+                    .slideX(begin: -0.06),
 
-                const SizedBox(height: 10),
+                const SizedBox(height: 12),
 
                 RichText(
                   text: TextSpan(
@@ -133,7 +133,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                         text: widget.phone,
                         style: AppTextStyles.bodyMedium.copyWith(
                           color: AppColors.primary,
-                          fontWeight: FontWeight.w700,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
@@ -149,19 +149,19 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                     defaultPinTheme: defaultTheme,
                     focusedPinTheme: defaultTheme.copyWith(
                       decoration: defaultTheme.decoration!.copyWith(
-                        border: Border.all(
-                            color: AppColors.primary, width: 2),
+                        border: Border.all(color: AppColors.primary, width: 1.5),
                         boxShadow: [
                           BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.25),
+                            color: AppColors.primary.withValues(alpha: 0.15),
                             blurRadius: 12,
+                            spreadRadius: 1,
                           ),
                         ],
                       ),
                     ),
                     submittedPinTheme: defaultTheme.copyWith(
                       decoration: defaultTheme.decoration!.copyWith(
-                        color: AppColors.primary.withValues(alpha: 0.12),
+                        color: AppColors.primary.withValues(alpha: 0.08),
                         border: Border.all(color: AppColors.primary),
                       ),
                     ),
@@ -171,12 +171,12 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                     onCompleted: (_) => _verify(),
                   ),
                 ).animate().fadeIn(delay: 300.ms).scale(
-                      begin: const Offset(0.9, 0.9),
+                      begin: const Offset(0.95, 0.95),
                       duration: 400.ms,
                       curve: Curves.easeOut,
                     ),
 
-                const SizedBox(height: 32),
+                const SizedBox(height: 36),
 
                 Center(
                   child: _canResend
@@ -184,13 +184,24 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
                           onPressed: _resend,
                           child: Text(
                             'Renvoyer le code',
-                            style: AppTextStyles.bodyMedium
-                                .copyWith(color: AppColors.primary),
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         )
-                      : Text(
-                          'Renvoyer dans $_resendSeconds s',
-                          style: AppTextStyles.bodyMedium,
+                      : Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.03),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            'Renvoyer dans $_resendSeconds s',
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
                 ).animate().fadeIn(delay: 400.ms),
 

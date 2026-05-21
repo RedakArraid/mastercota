@@ -12,7 +12,7 @@ class MastercotaApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'Mastercota',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.dark,
+      theme: AppTheme.light,
       routerConfig: router,
     );
   }
