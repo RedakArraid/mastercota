@@ -34,7 +34,7 @@ class CotisationDetailScreen extends ConsumerWidget {
               return const Center(
                 child: Text(
                   'Cotisation introuvable',
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: AppColors.textPrimary),
                 ),
               );
             }
@@ -334,7 +334,7 @@ class CotisationDetailScreen extends ConsumerWidget {
           error: (e, _) => Center(
             child: Text(
               'Erreur : $e',
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: AppColors.textPrimary),
             ),
           ),
         ),
@@ -388,7 +388,7 @@ class _ProgressCard extends StatelessWidget {
                 label: 'Jours restants',
                 value: '$daysLeft',
                 unit: 'jours',
-                color: daysLeft <= 3 ? AppColors.warning : Colors.white,
+                color: daysLeft <= 3 ? AppColors.warning : AppColors.textPrimary,
               ),
             ],
           ),

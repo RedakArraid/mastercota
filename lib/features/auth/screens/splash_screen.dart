@@ -116,7 +116,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
                       children: [
                         TextSpan(
                           text: 'Master',
-                          style: TextStyle(color: Colors.white),
+                          style: TextStyle(color: AppColors.textPrimary),
                         ),
                         TextSpan(
                           text: 'Cota',

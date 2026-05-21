@@ -127,7 +127,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         color: AppColors.primary, size: 20),
                     const SizedBox(width: 10),
                     Text('Politique de confidentialité',
-                        style: AppTextStyles.headlineSmall
+                        style: AppTextStyles.headlineMedium
                             .copyWith(fontWeight: FontWeight.bold)),
                   ],
                 ),

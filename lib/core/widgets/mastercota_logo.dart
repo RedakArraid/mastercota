@@ -27,7 +27,7 @@ class MasterCotaLogo extends StatelessWidget {
       height: size,
       child: CustomPaint(
         painter: _DoubleCLogoPainter(
-          iconColor: iconColor ?? Colors.white,
+          iconColor: iconColor ?? AppColors.accent,
           goldColor: AppColors.primary,
           progress: animationProgress,
         ),
@@ -52,7 +52,7 @@ class MasterCotaLogo extends StatelessWidget {
             children: [
               TextSpan(
                 text: 'Master',
-                style: TextStyle(color: textColor ?? Colors.white),
+                style: TextStyle(color: textColor ?? AppColors.textPrimary),
               ),
               const TextSpan(
                 text: 'Cota',
@@ -68,7 +68,7 @@ class MasterCotaLogo extends StatelessWidget {
             style: TextStyle(
               fontSize: size * 0.11,
               fontWeight: FontWeight.w600,
-              color: (textColor ?? Colors.white).withValues(alpha: 0.6),
+              color: (textColor ?? AppColors.textPrimary).withValues(alpha: 0.6),
               fontFamily: 'Plus Jakarta Sans',
               letterSpacing: 0.2,
             ),

@@ -245,7 +245,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         Text(
                           '375 000 F',
                           style: AppTextStyles.titleLarge.copyWith(
-                            color: Colors.white,
+                            color: AppColors.textPrimary,
                           ),
                         ),
                       ],
