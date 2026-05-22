@@ -1,7 +1,7 @@
 # Mastercota 🤝
 
 > Plateforme de cotisations communautaires pour l'Afrique francophone.  
-> **Flutter · Supabase · Paystack**
+> **Flutter · Supabase · Paystack · Termii**
 
 ---
 
@@ -10,11 +10,11 @@
 | Couche | Technologie |
 |---|---|
 | Mobile | Flutter 3.44+ (iOS & Android) |
-| Backend | Supabase (Auth OTP, PostgreSQL, Realtime, Storage) |
+| Backend | Supabase (Auth OTP, PostgreSQL, Realtime) |
 | Paiement | Paystack (subaccounts + webhooks) |
-| Notifications | Termii (SMS/WhatsApp) |
-| État | Riverpod |
-| Navigation | GoRouter |
+| SMS OTP | Termii (via Supabase Auth Hook) |
+| État | Riverpod 2.5+ |
+| Navigation | GoRouter 14.2+ |
 
 ---
 
@@ -22,9 +22,10 @@
 
 ### Prérequis
 
-- Flutter 3.44+ installé (`flutter --version`)
-- Un projet [Supabase](https://supabase.com) créé
+- Flutter 3.44+ (`flutter --version`)
+- Un projet [Supabase](https://supabase.com) créé (plan Pro recommandé)
 - Un compte [Paystack](https://paystack.com)
+- Un compte [Termii](https://termii.com) avec crédit SMS
 
 ### 1. Cloner et installer les dépendances
 
@@ -36,14 +37,14 @@ flutter pub get
 
 ### 2. Configurer Supabase
 
-Copiez vos clés dans `lib/core/constants/app_constants.dart` :
+Renseigner les clés dans `lib/core/constants/app_constants.dart` :
 
 ```dart
 static const String supabaseUrl = 'https://xxxx.supabase.co';
 static const String supabaseAnonKey = 'eyJ...';
 ```
 
-Ou via dart-define (recommandé) :
+Ou via dart-define (recommandé en CI/CD) :
 
 ```bash
 flutter run \
@@ -53,19 +54,62 @@ flutter run \
 
 ### 3. Créer la base de données
 
-Dans l'éditeur SQL de votre projet Supabase, exécutez :
+Dans l'éditeur SQL du projet Supabase, exécuter :
 
 ```
 supabase/schema.sql
 ```
 
-### 4. Configurer l'auth SMS dans Supabase
+### 4. Déployer les Edge Functions
 
+```bash
+supabase link --project-ref <project-ref>
+supabase functions deploy
+```
+
+### 5. Configurer les secrets Supabase
+
+Dans **Dashboard → Project Settings → Edge Functions → Secrets** :
+
+| Secret | Description |
+|---|---|
+| `PAYSTACK_SECRET_KEY` | Clé secrète Paystack |
+| `TERMII_API_KEY` | Live API Key Termii |
+| `SEND_SMS_HOOK_SECRET` | Secret de signature du hook SMS (généré par Supabase) |
+
+### 6. Configurer l'auth SMS (Termii via Hook)
+
+**Étape A — Activer Phone Auth**
 - Dashboard → Authentication → Providers → Phone
-- Activer Twilio ou Vonage (ou utiliser Supabase built-in pour dev)
-- Activer "OTP via SMS"
+- Activer "Enable Phone provider"
+- Activer "Enable phone confirmations"
+- SMS OTP Length : `6`
+- Cliquer Save
 
-### 5. Lancer l'app
+**Étape B — Enregistrer le hook SMS**
+- Dashboard → Authentication → Hooks → Send SMS
+- Hook type : `HTTPS`
+- URL : `https://<project-ref>.supabase.co/functions/v1/send-sms-otp`
+- Copier la clé de signature générée → l'ajouter comme secret `SEND_SMS_HOOK_SECRET`
+
+**Étape C — Numéros de test (optionnel)**
+- Dashboard → Authentication → Providers → Phone → Test Phone Numbers
+- Exemple : `+22500000001=123456`
+- Permet de tester sans envoyer de vrai SMS
+
+### 7. Configurer Paystack
+
+Renseigner la clé publique dans `lib/core/constants/app_constants.dart` :
+
+```dart
+static const String paystackPublicKey = 'pk_live_...';
+```
+
+Configurer le webhook Paystack :
+- Dashboard Paystack → Settings → Webhooks
+- URL : `https://<project-ref>.supabase.co/functions/v1/paystack-webhook`
+
+### 8. Lancer l'app
 
 ```bash
 # iOS Simulator
@@ -97,46 +141,69 @@ lib/
 │   ├── services/supabase_service.dart # Client Supabase singleton
 │   └── widgets/
 │       ├── app_button.dart            # Bouton primaire/secondaire + loading
-│       └── app_text_field.dart        # Champ texte réutilisable
+│       ├── app_text_field.dart        # Champ texte réutilisable
+│       ├── glass_card.dart            # Carte glassmorphism
+│       ├── mastercota_logo.dart       # Logo animé
+│       └── navigation_shell.dart     # Shell de navigation partagé
 │
 └── features/
     ├── auth/
-    │   ├── providers/auth_provider.dart   # Login OTP, logout, upsert profil
+    │   ├── providers/auth_provider.dart   # sendOtp, verifyOtp, logout, upsert profil
     │   └── screens/
     │       ├── splash_screen.dart         # Logo animé + redirect
     │       ├── onboarding_screen.dart     # 3 slides + pagination
-    │       ├── phone_screen.dart          # Saisie numéro + country code
-    │       └── otp_screen.dart            # Pinput 6 chiffres + countdown
+    │       ├── phone_screen.dart          # Saisie numéro + country code +225
+    │       └── otp_screen.dart            # Pinput 6 chiffres + countdown 60s
     │
     ├── home/
     │   ├── screens/home_screen.dart       # Dashboard + liste cotisations
-    │   └── widgets/cotisation_card.dart   # Card avec gradient + progress bar
+    │   └── widgets/cotisation_card.dart   # Card gradient + barre de progression
     │
     ├── cotisation/
-    │   ├── models/cotisation_model.dart   # CotisationModel + ContributionModel
-    │   ├── providers/cotisation_provider.dart  # CRUD + streams Realtime
-    │   └── screens/
-    │       ├── create_cotisation_screen.dart   # Formulaire création
-    │       └── cotisation_detail_screen.dart   # Dashboard temps réel
+    │   ├── models/cotisation_model.dart         # CotisationModel + ContributionModel
+    │   ├── providers/cotisation_provider.dart   # CRUD + streams Realtime
+    │   ├── screens/
+    │   │   ├── create_cotisation_screen.dart    # Formulaire création
+    │   │   ├── cotisation_detail_screen.dart    # Dashboard temps réel
+    │   │   └── public_contribution_page.dart    # Page publique de contribution (lien partagé)
+    │   └── widgets/
+    │       └── contribution_dialog.dart         # Dialogue saisie contribution manuelle
     │
     └── profile/
-        └── screens/profile_screen.dart    # Profil + logout
+        └── screens/
+            ├── profile_screen.dart          # Profil, édition, déconnexion
+            └── payout_settings_screen.dart  # Configuration compte de retrait (Mobile Money / banque)
 ```
+
+---
+
+## Edge Functions Supabase
+
+| Fonction | JWT | Rôle |
+|---|---|---|
+| `send-sms-otp` | Non | Auth Hook — envoie le code OTP via Termii |
+| `paystack-initialize` | Non | Initialise un paiement Paystack |
+| `paystack-webhook` | Non | Reçoit les confirmations de paiement Paystack |
+| `paystack-subaccount` | Oui | Crée un sous-compte Paystack pour un utilisateur |
+| `paystack-verify-account` | Oui | Vérifie un numéro de compte bancaire ou Mobile Money |
+| `dev-auth` | Non | Authentification rapide en mode développement |
 
 ---
 
 ## Routes de navigation
 
-| Route | Écran |
-|---|---|
-| `/splash` | Splash screen |
-| `/onboarding` | Onboarding 3 slides |
-| `/auth/phone` | Saisie du numéro |
-| `/auth/otp` | Vérification OTP |
-| `/home` | Dashboard principal |
-| `/cotisation/create` | Créer une cotisation |
-| `/cotisation/:id` | Détail + contributions |
-| `/profile` | Profil utilisateur |
+| Route | Écran | Accès |
+|---|---|---|
+| `/splash` | Splash screen | Public |
+| `/onboarding` | Onboarding 3 slides | Public |
+| `/auth/phone` | Saisie du numéro | Public |
+| `/auth/otp` | Vérification OTP | Public |
+| `/home` | Dashboard principal | Authentifié |
+| `/profile` | Profil utilisateur | Authentifié |
+| `/profile/payout` | Paramètres de retrait | Authentifié |
+| `/cotisation/create` | Créer une cotisation | Authentifié |
+| `/cotisation/:id` | Détail + contributions | Authentifié |
+| `/c/:slug` | Page publique de contribution | Public |
 
 ---
 
@@ -146,43 +213,86 @@ Voir [`supabase/schema.sql`](supabase/schema.sql) pour le schéma complet.
 
 ### Tables principales
 
-- `users` — profil utilisateur lié à `auth.users`
-- `cotisations` — les cotisations créées
-- `contributions` — chaque paiement reçu
+| Table | Description |
+|---|---|
+| `users` | Profil utilisateur lié à `auth.users` |
+| `cotisations` | Les cotisations créées par les utilisateurs |
+| `contributions` | Chaque paiement reçu sur une cotisation |
+| `site_config` | Configuration globale de la plateforme (singleton) |
 
 ### Trigger automatique
 
-Un trigger PostgreSQL met à jour `current_amount` et passe la cotisation en `completed` automatiquement quand une contribution passe à `paid` via webhook Paystack.
+Un trigger PostgreSQL met à jour `current_amount` et passe la cotisation en `completed` automatiquement quand une contribution passe à `paid` via le webhook Paystack.
 
 ---
+
+## Flux SMS OTP
+
+```
+App Flutter
+    │  signInWithOtp(phone)
+    ▼
+Supabase Auth — génère le code OTP
+    │  déclenche le Hook "Send SMS"
+    ▼
+Edge Function send-sms-otp
+    │  vérifie la signature HMAC-SHA256
+    │  appelle l'API Termii
+    ▼
+Termii → SMS envoyé à l'utilisateur
+    │
+    ▼
+App Flutter
+    │  verifyOTP(phone, code)
+    ▼
+Supabase Auth ✓ — session créée
+```
 
 ## Flux de paiement
 
 ```
-Contributeur → Formulaire → Paystack Checkout → Mobile Money
-                                    ↓
-                          Webhook Paystack
-                                    ↓
-                    Edge Function Supabase (update contribution status)
-                                    ↓
-                         Trigger DB → current_amount++
-                                    ↓
-                    Realtime → Dashboard mis à jour en live
-                                    ↓
-                         SMS confirmation (Termii)
+Contributeur → Page publique /c/:slug → Paystack Checkout
+                                               │
+                                       Webhook Paystack
+                                               │
+                              Edge Function paystack-webhook
+                                               │
+                                  Trigger DB → current_amount++
+                                               │
+                              Realtime → Dashboard mis à jour en live
 ```
 
 ---
 
 ## Modèle économique
 
-**Frais de service de 2,5%** appliqués sur chaque contribution.
+**Frais de service de 1%** appliqués sur chaque contribution reçue.
+
+---
+
+## Coûts d'infrastructure estimés
+
+| Service | Coût | Détail |
+|---|---|---|
+| Supabase Pro | 25$/mois | Requis pour Auth Hooks |
+| Termii SMS | ~3-5 FCFA/SMS | ~0,005-0,008$ par OTP envoyé |
+
+Estimation mensuelle selon l'activité :
+
+| Utilisateurs actifs | SMS/mois | Total estimé |
+|---|---|---|
+| 100 | ~300 | ~27$/mois |
+| 500 | ~1 500 | ~37$/mois |
+| 2 000 | ~6 000 | ~75$/mois |
 
 ---
 
 ## Roadmap
 
-- [x] **MVP** — Auth OTP, création, dashboard, partage
+- [x] **MVP** — Auth OTP SMS, création de cotisation, dashboard, partage public
+- [x] **SMS via Termii** — Hook Auth Supabase + vérification de signature
+- [x] **Paiements** — Paystack Mobile Money + sous-comptes + webhooks
+- [x] **Profil** — Édition, paramètres de retrait (Mobile Money / banque)
 - [ ] **V2** — Tontines, QR code, export PDF
 - [ ] **V3** — API publique, multi-langues
 
