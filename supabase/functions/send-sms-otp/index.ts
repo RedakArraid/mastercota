@@ -10,9 +10,42 @@ interface SmsHookPayload {
   };
 }
 
-Deno.serve(async (req: Request) => {
-  const payload: SmsHookPayload = await req.json();
+async function verifySignature(req: Request, body: string): Promise<boolean> {
+  const signature = req.headers.get("x-supabase-signature");
+  if (!signature) return false;
 
+  const rawSecret = Deno.env.get("SEND_SMS_HOOK_SECRET") ?? "";
+  const secretBase64 = rawSecret.replace("whsec_", "");
+  const secretBytes = Uint8Array.from(atob(secretBase64), (c) => c.charCodeAt(0));
+
+  const key = await crypto.subtle.importKey(
+    "raw",
+    secretBytes,
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+
+  const sigBytes = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body));
+  const expectedHex = Array.from(new Uint8Array(sigBytes))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+  return signature === `v1=${expectedHex}`;
+}
+
+Deno.serve(async (req: Request) => {
+  const body = await req.text();
+
+  const valid = await verifySignature(req, body);
+  if (!valid) {
+    return new Response(JSON.stringify({ error: "Invalid signature" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  const payload: SmsHookPayload = JSON.parse(body);
   const phone = payload.user.phone;
   const otp = payload.sms.otp;
 
