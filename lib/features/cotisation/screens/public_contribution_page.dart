@@ -949,13 +949,17 @@ class _PaymentFormState extends State<_PaymentForm> {
             AppTextField(
               controller: widget.phoneController,
               label: 'Votre numéro de téléphone',
-              hint: 'Ex: +22507080910',
+              hint: 'Ex: +2250707070707',
               keyboardType: TextInputType.phone,
               prefixIcon: const Icon(Icons.phone_outlined,
                   color: AppColors.textSecondary, size: 20),
               validator: (val) {
                 if (val == null || val.trim().isEmpty) {
                   return 'Veuillez saisir votre numéro';
+                }
+                final digits = val.replaceAll(RegExp(r'\D'), '');
+                if (digits.length != 10 && digits.length != 13) {
+                  return 'Numéro invalide (doit contenir 10 chiffres)';
                 }
                 return null;
               },

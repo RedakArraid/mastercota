@@ -66,7 +66,11 @@ class CotisationDetailScreen extends ConsumerWidget {
                         leading: GestureDetector(
                           onTap: () {
                             HapticFeedback.lightImpact();
-                            context.pop();
+                            if (context.canPop()) {
+                              context.pop();
+                            } else {
+                              context.go('/home');
+                            }
                           },
                           child: Container(
                             margin: const EdgeInsets.all(10),
@@ -823,7 +827,9 @@ void _showSettingsSheet(
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
+    useRootNavigator: true,
     backgroundColor: Colors.transparent,
+    constraints: const BoxConstraints(maxWidth: 550),
     builder: (ctx) => _SettingsSheet(cot: cot, ref: ref),
   );
 }
@@ -1208,7 +1214,9 @@ void _showManualContributionSheet(
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
+    useRootNavigator: true,
     backgroundColor: Colors.transparent,
+    constraints: const BoxConstraints(maxWidth: 550),
     builder: (ctx) =>
         _ManualContributionSheet(cotisationId: cotisationId, ref: ref),
   );
@@ -1351,13 +1359,20 @@ class _ManualContributionSheetState
                   AppTextField(
                     controller: _phoneCtrl,
                     label: 'Numéro de téléphone',
-                    hint: 'Ex: +22507080910',
+                    hint: 'Ex: +2250707070707',
                     keyboardType: TextInputType.phone,
                     prefixIcon: const Icon(Icons.phone_outlined,
                         color: AppColors.textSecondary, size: 20),
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Téléphone requis'
-                        : null,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) {
+                        return 'Téléphone requis';
+                      }
+                      final digits = v.replaceAll(RegExp(r'\D'), '');
+                      if (digits.length != 10 && digits.length != 13) {
+                        return 'Numéro invalide (doit contenir 10 chiffres)';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 16),
                   AppTextField(

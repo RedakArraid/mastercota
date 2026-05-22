@@ -81,7 +81,6 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
             // S'assurer que le profil public existe dans la table public.users
             await SupabaseService.client.from('users').upsert({
               'id': res.user!.id,
-              'phone': '+2250700000000',
               'name': 'Développeur MasterCota',
             });
             
@@ -105,7 +104,6 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
       if (currentUser != null) {
         await SupabaseService.client.from('users').upsert({
           'id': currentUser.id,
-          'phone': '+2250700000000',
           'name': 'Développeur MasterCota',
         });
       }
@@ -244,8 +242,8 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                                   if (v == null || v.trim().isEmpty) {
                                     return 'Entrez votre numéro';
                                   }
-                                  if (v.trim().length < 8) {
-                                    return 'Numéro invalide';
+                                  if (v.trim().length != 10) {
+                                    return 'Numéro invalide (doit contenir 10 chiffres)';
                                   }
                                   return null;
                                 },

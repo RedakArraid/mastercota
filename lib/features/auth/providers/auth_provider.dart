@@ -11,21 +11,22 @@ final currentUserProvider = Provider<User?>((ref) {
   return SupabaseService.currentUser;
 });
 
-// Stream of the current user's profile from the public.users table
-final userProfileProvider = StreamProvider<Map<String, dynamic>?>((ref) {
+// Future of the current user's profile from the public.users table
+final userProfileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
   final userId = SupabaseService.currentUser?.id;
-  if (userId == null) return Stream.value(null);
+  if (userId == null) return null;
 
-  return SupabaseService.client
+  final res = await SupabaseService.client
       .from('users')
-      .stream(primaryKey: ['id'])
-      .eq('id', userId)
-      .map((data) => data.isEmpty ? null : data.first);
+      .select()
+      .eq('id', userId);
+  return res.isEmpty ? null : res.first;
 });
 
 // ── Auth actions ─────────────────────────────────────────
 class AuthNotifier extends StateNotifier<AsyncValue<void>> {
-  AuthNotifier() : super(const AsyncValue.data(null));
+  final Ref _ref;
+  AuthNotifier(this._ref) : super(const AsyncValue.data(null));
 
   final _client = SupabaseService.client;
 
@@ -56,6 +57,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<void>> {
           'id': userId,
           'phone': phone,
         });
+        _ref.invalidate(userProfileProvider);
       }
       state = const AsyncValue.data(null);
       return true;
@@ -67,20 +69,39 @@ class AuthNotifier extends StateNotifier<AsyncValue<void>> {
 
   Future<void> signOut() async {
     await _client.auth.signOut();
+    _ref.invalidate(userProfileProvider);
     state = const AsyncValue.data(null);
   }
 
   Future<void> updateProfile({String? name, String? avatarUrl}) async {
     final userId = _client.auth.currentUser?.id;
     if (userId == null) return;
-    await _client.from('users').update({
-      if (name != null) 'name': name,
-      if (avatarUrl != null) 'avatar_url': avatarUrl,
-    }).eq('id', userId);
+    
+    final phone = _client.auth.currentUser?.phone;
+    final cleanPhone = (phone != null && phone.trim().isNotEmpty) ? phone.trim() : null;
+    
+    // Check if the user profile exists first
+    final check = await _client.from('users').select('id').eq('id', userId).maybeSingle();
+    
+    if (check == null) {
+      await _client.from('users').insert({
+        'id': userId,
+        if (cleanPhone != null) 'phone': cleanPhone,
+        'name': name ?? '',
+        'avatar_url': avatarUrl ?? '👤',
+      });
+    } else {
+      await _client.from('users').update({
+        if (name != null) 'name': name,
+        if (avatarUrl != null) 'avatar_url': avatarUrl,
+      }).eq('id', userId);
+    }
+    
+    _ref.invalidate(userProfileProvider);
   }
 }
 
 final authNotifierProvider =
     StateNotifierProvider<AuthNotifier, AsyncValue<void>>(
-  (ref) => AuthNotifier(),
+  (ref) => AuthNotifier(ref),
 );

@@ -50,16 +50,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   // ── Helpers ──────────────────────────────────────────────
 
-  static void _showComingSoon(BuildContext context, String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$feature — bientôt disponible'),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: AppColors.surfaceElevated,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
 
   Future<void> _openSupport() async {
     final emailUri = Uri(
@@ -96,7 +86,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
+      constraints: const BoxConstraints(maxWidth: 550),
       builder: (_) => DraggableScrollableSheet(
         initialChildSize: 0.7,
         maxChildSize: 0.92,
@@ -186,7 +178,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   static void _showAbout(BuildContext context) {
     showDialog(
       context: context,
-      builder: (_) => Dialog(
+      builder: (dialogContext) => Dialog(
         backgroundColor: AppColors.surface,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -253,7 +245,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               SizedBox(
                 width: double.infinity,
                 child: TextButton(
-                  onPressed: () => Navigator.pop(context),
+                  onPressed: () => Navigator.pop(dialogContext),
                   style: TextButton.styleFrom(
                     backgroundColor: AppColors.surfaceElevated,
                     shape: RoundedRectangleBorder(
@@ -279,6 +271,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Widget build(BuildContext context) {
     final phone = SupabaseService.currentUser?.phone ?? '';
     final profileAsync = ref.watch(userProfileProvider);
+    final profile = profileAsync.value;
+    final name = profile?['name'] as String?;
+    final avatarUrl = profile?['avatar_url'] as String? ?? '👤';
 
     return Scaffold(
       body: Container(
@@ -294,7 +289,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     IconButton(
                       icon: const Icon(Icons.arrow_back_ios_new_rounded,
                           size: 20),
-                      onPressed: () => context.pop(),
+                      onPressed: () {
+                        context.go('/home');
+                      },
                       color: AppColors.textPrimary,
                     ),
                     Text('Profil', style: AppTextStyles.headlineLarge),
@@ -312,42 +309,105 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         padding: const EdgeInsets.all(20),
                         child: Column(
                           children: [
-                            Container(
-                              width: 88,
-                              height: 88,
-                              decoration: BoxDecoration(
-                                gradient: AppColors.primaryGradient,
-                                borderRadius: BorderRadius.circular(28),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primary
-                                        .withValues(alpha: 0.3),
-                                    blurRadius: 24,
-                                    spreadRadius: 1,
-                                    offset: const Offset(0, 4),
+                            GestureDetector(
+                              onTap: () => _showEditProfileSheet(context, name, avatarUrl),
+                              child: Stack(
+                                children: [
+                                  Container(
+                                    width: 88,
+                                    height: 88,
+                                    decoration: BoxDecoration(
+                                      gradient: AppColors.primaryGradient,
+                                      borderRadius: BorderRadius.circular(28),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: AppColors.primary
+                                              .withValues(alpha: 0.3),
+                                          blurRadius: 24,
+                                          spreadRadius: 1,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        avatarUrl,
+                                        style: const TextStyle(fontSize: 38),
+                                      ),
+                                    ),
+                                  )
+                                      .animate()
+                                      .scale(
+                                          duration: 500.ms,
+                                          curve: Curves.elasticOut,
+                                          begin: const Offset(0.7, 0.7))
+                                      .fadeIn(),
+                                  Positioned(
+                                    bottom: 0,
+                                    right: 0,
+                                    child: Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                            color: AppColors.surface, width: 2),
+                                      ),
+                                      child: const Icon(
+                                        Icons.edit_rounded,
+                                        size: 12,
+                                        color: Colors.white,
+                                      ),
+                                    ),
                                   ),
                                 ],
                               ),
-                              child: const Center(
-                                child: Text('👤',
-                                    style: TextStyle(fontSize: 38)),
-                              ),
-                            )
-                                .animate()
-                                .scale(
-                                    duration: 500.ms,
-                                    curve: Curves.elasticOut,
-                                    begin: const Offset(0.7, 0.7))
-                                .fadeIn(),
+                            ),
 
                             const SizedBox(height: 16),
 
-                            Text(
-                              phone.isNotEmpty
-                                  ? phone
-                                  : '+225 01 02 03 04',
-                              style: AppTextStyles.headlineMedium,
-                            ).animate().fadeIn(delay: 150.ms),
+                            if (name != null && name.trim().isNotEmpty) ...[
+                              Text(
+                                name,
+                                style: AppTextStyles.headlineMedium,
+                                textAlign: TextAlign.center,
+                              ).animate().fadeIn(delay: 150.ms),
+                              const SizedBox(height: 4),
+                              Text(
+                                phone.isNotEmpty ? phone : '+225 01 02 03 04 05',
+                                style: AppTextStyles.bodyMedium.copyWith(
+                                  color: AppColors.textSecondary,
+                                ),
+                              ).animate().fadeIn(delay: 180.ms),
+                            ] else ...[
+                              Text(
+                                phone.isNotEmpty ? phone : '+225 01 02 03 04 05',
+                                style: AppTextStyles.headlineMedium,
+                                textAlign: TextAlign.center,
+                              ).animate().fadeIn(delay: 150.ms),
+                              const SizedBox(height: 4),
+                              GestureDetector(
+                                onTap: () => _showEditProfileSheet(context, name, avatarUrl),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Ajouter votre nom',
+                                      style: AppTextStyles.bodyMedium.copyWith(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(
+                                      Icons.add_circle_outline_rounded,
+                                      size: 16,
+                                      color: AppColors.primary,
+                                    ),
+                                  ],
+                                ),
+                              ).animate().fadeIn(delay: 180.ms),
+                            ],
 
                             const SizedBox(height: 8),
 
@@ -449,8 +509,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             _buildTile(
                               icon: Icons.notifications_none_rounded,
                               label: 'Notifications',
-                              onTap: () => _showComingSoon(
-                                  context, 'Notifications'),
+                              onTap: () => _showNotificationSheet(context),
                               showDivider: true,
                             ),
                             _buildTile(
@@ -522,6 +581,71 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         ),
       ),
     );
+  }
+
+  void _showEditProfileSheet(BuildContext context, String? name, String? avatar) {
+    final isWide = MediaQuery.of(context).size.width > 600;
+    if (isWide) {
+      showDialog(
+        context: context,
+        useRootNavigator: true,
+        builder: (dialogContext) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 500),
+            child: _EditProfileSheet(
+              initialName: name,
+              initialAvatar: avatar,
+              isDialog: true,
+            ),
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useRootNavigator: true,
+        backgroundColor: Colors.transparent,
+        constraints: const BoxConstraints(maxWidth: 550),
+        builder: (_) => _EditProfileSheet(
+          initialName: name,
+          initialAvatar: avatar,
+          isDialog: false,
+        ),
+      );
+    }
+  }
+
+  void _showNotificationSheet(BuildContext context) {
+    final isWide = MediaQuery.of(context).size.width > 600;
+    if (isWide) {
+      showDialog(
+        context: context,
+        useRootNavigator: true,
+        builder: (dialogContext) => Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 550, maxHeight: 650),
+            child: const _NotificationSheet(isDialog: true),
+          ),
+        ),
+      );
+    } else {
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        useRootNavigator: true,
+        backgroundColor: Colors.transparent,
+        constraints: const BoxConstraints(maxWidth: 550),
+        builder: (_) => SizedBox(
+          height: MediaQuery.of(context).size.height * 0.8,
+          child: const _NotificationSheet(isDialog: false),
+        ),
+      );
+    }
   }
 
   Widget _buildTile({
@@ -599,6 +723,675 @@ class _PrivacySection extends StatelessWidget {
           Text(body,
               style: AppTextStyles.bodySmall.copyWith(
                   color: AppColors.textSecondary, height: 1.6)),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Interactive Profile Editing Widget ───────────────────
+
+class _EditProfileSheet extends ConsumerStatefulWidget {
+  final String? initialName;
+  final String? initialAvatar;
+  final bool isDialog;
+
+  const _EditProfileSheet({
+    this.initialName,
+    this.initialAvatar,
+    this.isDialog = false,
+  });
+
+  @override
+  ConsumerState<_EditProfileSheet> createState() => _EditProfileSheetState();
+}
+
+class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
+  late final TextEditingController _nameController;
+  late String _selectedAvatar;
+  bool _isLoading = false;
+
+  final List<String> _avatars = ['👤', '🦁', '🦊', '🐯', '🐼', '🌟', '🐹', '🐨', '🐱', '🐶'];
+
+  @override
+  void initState() {
+    super.initState();
+    _nameController = TextEditingController(text: widget.initialName);
+    _selectedAvatar = widget.initialAvatar ?? '👤';
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: widget.isDialog
+            ? BorderRadius.circular(24)
+            : const BorderRadius.vertical(top: Radius.circular(24)),
+        border: widget.isDialog
+            ? Border.all(color: AppColors.border)
+            : const Border(top: BorderSide(color: AppColors.border)),
+      ),
+      padding: widget.isDialog
+          ? const EdgeInsets.symmetric(horizontal: 24, vertical: 24)
+          : EdgeInsets.only(
+              left: 24,
+              right: 24,
+              top: 12,
+              bottom: 32 + MediaQuery.of(context).viewInsets.bottom,
+            ),
+      child: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+          // Drag handle
+          if (!widget.isDialog) ...[
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+          Row(
+            children: [
+              const Icon(Icons.edit_rounded, color: AppColors.primary, size: 20),
+              const SizedBox(width: 10),
+              Text(
+                'Modifier le profil',
+                style: AppTextStyles.headlineMedium.copyWith(fontWeight: FontWeight.bold),
+              ),
+              if (widget.isDialog) ...[
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+                  onPressed: () => Navigator.pop(context),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 24),
+          
+          // Nom complet Label & Input
+          Text(
+            'Nom complet',
+            style: AppTextStyles.bodyMedium.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _nameController,
+            style: AppTextStyles.bodyLarge.copyWith(color: AppColors.textPrimary),
+            textCapitalization: TextCapitalization.words,
+            decoration: InputDecoration(
+              hintText: 'Entrez votre nom complet',
+              hintStyle: AppTextStyles.bodyLarge.copyWith(color: AppColors.textTertiary),
+              prefixIcon: const Icon(Icons.person_outline_rounded, color: AppColors.textSecondary),
+              filled: true,
+              fillColor: AppColors.surfaceElevated,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+              ),
+            ),
+          ),
+          
+          const SizedBox(height: 24),
+          
+          // Avatar Selection Label
+          Text(
+            'Choisir un avatar',
+            style: AppTextStyles.bodyMedium.copyWith(
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 60,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _avatars.length,
+              itemBuilder: (context, index) {
+                final avatar = _avatars[index];
+                final isSelected = _selectedAvatar == avatar;
+                return GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _selectedAvatar = avatar;
+                    });
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.only(right: 12),
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary.withValues(alpha: 0.15)
+                          : AppColors.surfaceElevated,
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: isSelected ? AppColors.primary : AppColors.border,
+                        width: isSelected ? 2.0 : 1.0,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        avatar,
+                        style: const TextStyle(fontSize: 28),
+                      ),
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          
+          const SizedBox(height: 32),
+          
+          // Enregistrer Button
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _isLoading
+                  ? null
+                  : () async {
+                      setState(() {
+                        _isLoading = true;
+                      });
+                      try {
+                        await ref.read(authNotifierProvider.notifier).updateProfile(
+                              name: _nameController.text.trim(),
+                              avatarUrl: _selectedAvatar,
+                            );
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: const Text('Profil mis à jour avec succès'),
+                              behavior: SnackBarBehavior.floating,
+                              backgroundColor: AppColors.success,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Erreur lors de la mise à jour : $e'),
+                              behavior: SnackBarBehavior.floating,
+                              backgroundColor: AppColors.error,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        }
+                      } finally {
+                        if (mounted) {
+                          setState(() {
+                            _isLoading = false;
+                          });
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.5),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                elevation: 0,
+              ),
+              child: _isLoading
+                  ? const SizedBox(
+                      height: 20,
+                      width: 20,
+                      child: CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        strokeWidth: 2,
+                      ),
+                    )
+                  : Text(
+                      'Enregistrer',
+                      style: AppTextStyles.bodyLarge.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
+                    ),
+            ),
+          ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Comprehensive Notification Dashboard Widget ─────────
+
+class _NotificationSheet extends StatefulWidget {
+  final bool isDialog;
+  const _NotificationSheet({this.isDialog = false});
+
+  @override
+  State<_NotificationSheet> createState() => _NotificationSheetState();
+}
+
+class _NotificationSheetState extends State<_NotificationSheet> {
+  // Local state for settings
+  bool _pushEnabled = true;
+  bool _smsEnabled = false;
+  bool _emailEnabled = true;
+
+  // Local state for notifications history
+  late List<Map<String, dynamic>> _notifications;
+
+  @override
+  void initState() {
+    super.initState();
+    _notifications = [
+      {
+        'id': '1',
+        'icon': Icons.monetization_on_outlined,
+        'title': 'Cotisation reçue',
+        'body': 'Marc K. a cotisé 5 000 FCFA à "Cadeau de mariage"',
+        'time': 'Il y a 10 min',
+        'unread': true,
+        'color': AppColors.success,
+      },
+      {
+        'id': '2',
+        'icon': Icons.account_balance_wallet_outlined,
+        'title': 'Versement effectué',
+        'body': '50 000 FCFA ont été transférés vers votre compte Orange Money.',
+        'time': 'Il y a 2 h',
+        'unread': true,
+        'color': AppColors.primary,
+      },
+      {
+        'id': '3',
+        'icon': Icons.emoji_events_outlined,
+        'title': 'Objectif atteint !',
+        'body': 'Félicitations ! L\'objectif de 150 000 FCFA pour "Anniversaire de Papa" est atteint.',
+        'time': 'Hier, 14:32',
+        'unread': false,
+        'color': AppColors.warning,
+      },
+      {
+        'id': '4',
+        'icon': Icons.person_add_alt_1_outlined,
+        'title': 'Nouveau membre',
+        'body': 'Awa D. a rejoint votre groupe de cotisation.',
+        'time': 'Il y a 3 jours',
+        'unread': false,
+        'color': AppColors.textSecondary,
+      },
+    ];
+  }
+
+  void _markAsRead(String id) {
+    setState(() {
+      final index = _notifications.indexWhere((n) => n['id'] == id);
+      if (index != -1) {
+        _notifications[index]['unread'] = false;
+      }
+    });
+  }
+
+  void _markAllAsRead() {
+    setState(() {
+      for (var n in _notifications) {
+        n['unread'] = false;
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 2,
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: widget.isDialog
+              ? BorderRadius.circular(24)
+              : const BorderRadius.vertical(top: Radius.circular(24)),
+          border: widget.isDialog
+              ? Border.all(color: AppColors.border)
+              : const Border(top: BorderSide(color: AppColors.border)),
+        ),
+        child: Column(
+          children: [
+            if (!widget.isDialog) ...[
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+            ],
+            Padding(
+              padding: EdgeInsets.fromLTRB(24, widget.isDialog ? 24 : 20, 24, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.notifications_none_rounded,
+                          color: AppColors.primary, size: 22),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Notifications',
+                        style: AppTextStyles.headlineMedium.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: _markAllAsRead,
+                        child: Text(
+                          'Tout lire',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      if (widget.isDialog) ...[
+                        const SizedBox(width: 16),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded, color: AppColors.textSecondary),
+                          onPressed: () => Navigator.pop(context),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            
+            // TabBar
+            const TabBar(
+              tabs: [
+                Tab(text: 'Historique'),
+                Tab(text: 'Paramètres'),
+              ],
+              indicatorColor: AppColors.primary,
+              labelColor: AppColors.primary,
+              unselectedLabelColor: AppColors.textSecondary,
+              indicatorSize: TabBarIndicatorSize.tab,
+            ),
+            
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _buildHistoryTab(),
+                  _buildSettingsTab(),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHistoryTab() {
+    if (_notifications.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.notifications_off_outlined,
+                size: 64, color: AppColors.textTertiary),
+            const SizedBox(height: 16),
+            Text(
+              'Aucune notification',
+              style: AppTextStyles.bodyLarge.copyWith(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      itemCount: _notifications.length,
+      itemBuilder: (context, index) {
+        final notif = _notifications[index];
+        final isUnread = notif['unread'] as bool;
+        final color = notif['color'] as Color;
+
+        return GestureDetector(
+          onTap: () => _markAsRead(notif['id'] as String),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: isUnread
+                  ? AppColors.primary.withValues(alpha: 0.05)
+                  : AppColors.surfaceElevated,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isUnread
+                    ? AppColors.primary.withValues(alpha: 0.2)
+                    : AppColors.border,
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Icon
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    notif['icon'] as IconData,
+                    color: color,
+                    size: 20,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                
+                // Content
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              notif['title'] as String,
+                              style: AppTextStyles.bodyLarge.copyWith(
+                                fontWeight:
+                                    isUnread ? FontWeight.bold : FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                          if (isUnread)
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        notif['body'] as String,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: isUnread
+                              ? AppColors.textSecondary
+                              : AppColors.textTertiary,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        notif['time'] as String,
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.textTertiary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSettingsTab() {
+    return ListView(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      children: [
+        _buildSettingsToggle(
+          icon: Icons.notifications_active_outlined,
+          title: 'Notifications Push',
+          description: 'Alerte instantanée sur le mobile pour chaque activité importante.',
+          value: _pushEnabled,
+          onChanged: (val) {
+            setState(() {
+              _pushEnabled = val;
+            });
+          },
+        ),
+        const SizedBox(height: 16),
+        _buildSettingsToggle(
+          icon: Icons.sms_outlined,
+          title: 'Alertes SMS',
+          description: 'Notifications par SMS pour les versements et cotisations critiques.',
+          value: _smsEnabled,
+          onChanged: (val) {
+            setState(() {
+              _smsEnabled = val;
+            });
+          },
+        ),
+        const SizedBox(height: 16),
+        _buildSettingsToggle(
+          icon: Icons.mail_outline_rounded,
+          title: 'Rapports par Email',
+          description: 'Rapport hebdomadaire sur le résumé de vos cotisations actives.',
+          value: _emailEnabled,
+          onChanged: (val) {
+            setState(() {
+              _emailEnabled = val;
+            });
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSettingsToggle({
+    required IconData icon,
+    required String title,
+    required String description,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Icon(icon, color: AppColors.textSecondary, size: 20),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: AppTextStyles.bodyLarge.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          Switch.adaptive(
+            value: value,
+            activeTrackColor: AppColors.primary,
+            onChanged: onChanged,
+          ),
         ],
       ),
     );

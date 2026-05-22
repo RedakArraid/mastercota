@@ -677,8 +677,10 @@ class _QuickActionButton extends StatelessWidget {
 void _showHelpBottomSheet(BuildContext context) {
   showModalBottomSheet(
     context: context,
+    useRootNavigator: true,
     backgroundColor: Colors.transparent,
     isScrollControlled: true,
+    constraints: const BoxConstraints(maxWidth: 550),
     builder: (context) {
       final theme = Theme.of(context);
       final isDark = theme.brightness == Brightness.dark;

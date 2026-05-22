@@ -31,7 +31,9 @@ class ContributionDialog extends StatefulWidget {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useRootNavigator: true,
       backgroundColor: Colors.transparent,
+      constraints: const BoxConstraints(maxWidth: 550),
       builder: (context) => ContributionDialog(
         cotisationId: cotisationId,
         cotisationTitle: cotisationTitle,
@@ -239,11 +241,15 @@ class _ContributionDialogState extends State<ContributionDialog> {
                     AppTextField(
                       controller: _phoneController,
                       label: 'Votre Numéro de téléphone',
-                      hint: 'Ex: +22507080910',
+                      hint: 'Ex: +2250707070707',
                       keyboardType: TextInputType.phone,
                       validator: (val) {
                         if (val == null || val.trim().isEmpty) {
                           return 'Veuillez saisir votre téléphone';
+                        }
+                        final digits = val.replaceAll(RegExp(r'\D'), '');
+                        if (digits.length != 10 && digits.length != 13) {
+                          return 'Numéro invalide (doit contenir 10 chiffres)';
                         }
                         return null;
                       },
