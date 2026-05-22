@@ -13,6 +13,7 @@
 | Backend | Supabase (Auth OTP, PostgreSQL, Realtime) |
 | Paiement | Paystack (subaccounts + webhooks) |
 | SMS OTP | Termii (via Supabase Auth Hook) |
+| Email | Hostinger (SMTP) |
 | État | Riverpod 2.5+ |
 | Navigation | GoRouter 14.2+ |
 
@@ -26,6 +27,7 @@
 - Un projet [Supabase](https://supabase.com) créé (plan Pro recommandé)
 - Un compte [Paystack](https://paystack.com)
 - Un compte [Termii](https://termii.com) avec crédit SMS
+- Une adresse email sur [Hostinger](https://hostinger.com) (ex: `support@mastercota.com`)
 
 ### 1. Cloner et installer les dépendances
 
@@ -97,7 +99,23 @@ Dans **Dashboard → Project Settings → Edge Functions → Secrets** :
 - Exemple : `+22500000001=123456`
 - Permet de tester sans envoyer de vrai SMS
 
-### 7. Configurer Paystack
+### 7. Configurer l'email (Hostinger SMTP)
+
+Dans **Dashboard Supabase → Project Settings → Auth → SMTP Settings** :
+
+| Paramètre | Valeur |
+|---|---|
+| Enable Custom SMTP | Activé |
+| Sender email | `support@mastercota.com` |
+| Sender name | `Mastercota` |
+| Host | `smtp.hostinger.com` |
+| Port | `465` |
+| Username | `support@mastercota.com` |
+| Password | Mot de passe de la boîte mail Hostinger |
+
+> Le mot de passe SMTP est le même que celui de la boîte mail défini dans **hPanel → Emails → Manage**.
+
+### 8. Configurer Paystack
 
 Renseigner la clé publique dans `lib/core/constants/app_constants.dart` :
 
@@ -109,7 +127,7 @@ Configurer le webhook Paystack :
 - Dashboard Paystack → Settings → Webhooks
 - URL : `https://<project-ref>.supabase.co/functions/v1/paystack-webhook`
 
-### 8. Lancer l'app
+### 9. Lancer l'app
 
 ```bash
 # iOS Simulator
