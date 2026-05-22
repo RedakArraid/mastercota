@@ -1341,44 +1341,6 @@ class _FeeBreakdown extends StatelessWidget {
   }
 }
 
-class _FeeRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool isBold;
-  final Color color;
-
-  const _FeeRow({
-    required this.label,
-    required this.value,
-    this.isBold = false,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Text(
-            label,
-            style: AppTextStyles.caption.copyWith(
-              color: color,
-              fontWeight: isBold ? FontWeight.w700 : FontWeight.w400,
-            ),
-          ),
-        ),
-        Text(
-          value,
-          style: AppTextStyles.bodySmall.copyWith(
-            color: color,
-            fontWeight: isBold ? FontWeight.w700 : FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 // ── Payment success state ─────────────────────────────────
 
 class _PaymentSuccess extends StatelessWidget {

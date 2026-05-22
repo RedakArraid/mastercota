@@ -3,18 +3,18 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/widgets/app_button.dart';
-import '../../../core/widgets/app_text_field.dart';
 import '../../auth/providers/auth_provider.dart';
 
 class PayoutSettingsScreen extends ConsumerStatefulWidget {
   const PayoutSettingsScreen({super.key});
 
   @override
-  ConsumerState<PayoutSettingsScreen> createState() => _PayoutSettingsScreenState();
+  ConsumerState<PayoutSettingsScreen> createState() =>
+      _PayoutSettingsScreenState();
 }
 
 class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
@@ -58,7 +58,10 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
 
   // Réinitialise la vérification si l'utilisateur change le numéro ou l'opérateur
   void _onAccountChanged() {
-    if (_isVerified) setState(() { _isVerified = false; _verifiedName = null; });
+    if (_isVerified) setState(() {
+      _isVerified = false;
+      _verifiedName = null;
+    });
   }
 
   // Vérifie le numéro de compte via l'API Paystack
@@ -153,448 +156,864 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
     }
   }
 
+  // ── Field2 underline wrapper ──────────────────────────────────
+  Widget _field2({
+    required String label,
+    String? hint,
+    required Widget child,
+  }) {
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.line, width: 1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: AppTextStyles.caption,
+              ),
+              if (hint != null)
+                Text(
+                  hint,
+                  style: AppTextStyles.caption.copyWith(fontSize: 10),
+                ),
+            ],
+          ),
+          child,
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final profileAsync = ref.watch(userProfileProvider);
+    final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
       backgroundColor: AppColors.cream,
-      body: SafeArea(
+      body: profileAsync.when(
+        data: (profile) {
+          final subaccountId = profile?['paystack_subaccount_id'] as String?;
+          final hasSubaccount = subaccountId != null && subaccountId.isNotEmpty;
+
+          // Prefill name if empty
+          if (_nameController.text.isEmpty && profile != null) {
+            _nameController.text = profile['name'] ?? '';
+          }
+
+          if (hasSubaccount && !_isEditing) {
+            return _buildConnectedState(subaccountId, topPadding);
+          }
+
+          return _buildFormState(hasSubaccount, topPadding);
+        },
+        loading: () => const Center(
+          child: CircularProgressIndicator(color: AppColors.primary),
+        ),
+        error: (e, _) => Center(
+          child: Text(
+            'Erreur de chargement du profil',
+            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.error),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── Connected state (already has subaccount) ─────────────────
+  Widget _buildConnectedState(String subaccountId, double topPadding) {
+    return Stack(
+      children: [
+        SingleChildScrollView(
+          padding: EdgeInsets.only(bottom: 100, top: topPadding),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Custom Header
+              // Header
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                child: Row(
                   children: [
                     GestureDetector(
-                      onTap: () => context.canPop() ? context.pop() : context.go('/profile'),
+                      onTap: () => context.canPop()
+                          ? context.pop()
+                          : context.go('/profile'),
                       child: Container(
-                        width: 38, height: 38,
+                        width: 38,
+                        height: 38,
                         decoration: BoxDecoration(
                           color: AppColors.paper,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: AppColors.line),
                         ),
-                        child: const Center(child: Text('←', style: TextStyle(fontSize: 16))),
+                        child: const Center(
+                          child: Text(
+                            '←',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: AppColors.ink,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-                    Text('PAIEMENTS', style: AppTextStyles.caption.copyWith(color: AppColors.ink3)),
-                    const SizedBox(height: 6),
+                    Expanded(
+                      child: Center(
+                        child: Text(
+                          'COMPTE DE VERSEMENT',
+                          style: AppTextStyles.caption,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 38),
+                  ],
+                ),
+              ),
+
+              // Title
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     RichText(
                       text: TextSpan(
-                        style: AppTextStyles.displayMedium.copyWith(fontSize: 26, letterSpacing: -0.6, height: 1.05),
                         children: [
-                          const TextSpan(text: 'Compte de\n'),
                           TextSpan(
-                            text: 'versement.',
-                            style: AppTextStyles.serifItalic.copyWith(fontSize: 26, letterSpacing: -0.6),
+                            text: 'Où recevoir\n',
+                            style: GoogleFonts.dmSans(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.ink,
+                              letterSpacing: -0.7,
+                              height: 1.05,
+                            ),
+                          ),
+                          TextSpan(
+                            text: 'vos fonds ?',
+                            style: AppTextStyles.serifItalic.copyWith(
+                              fontSize: 28,
+                              letterSpacing: -0.7,
+                              height: 1.05,
+                            ),
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
                   ],
                 ),
               ),
 
-              Expanded(
-                child: profileAsync.when(
-                  data: (profile) {
-                    final subaccountId = profile?['paystack_subaccount_id'] as String?;
-                    final hasSubaccount = subaccountId != null && subaccountId.isNotEmpty;
-
-                    // Prefill name if empty
-                    if (_nameController.text.isEmpty && profile != null) {
-                      _nameController.text = profile['name'] ?? '';
-                    }
-
-                    if (hasSubaccount && !_isEditing) {
-                      return _buildConnectedState(subaccountId);
-                    }
-
-                    return _buildFormState();
-                  },
-                  loading: () => const Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
+              // Connected card
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.paper,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.line),
                   ),
-                  error: (e, _) => Center(
-                    child: Text(
-                      'Erreur de chargement du profil',
-                      style: AppTextStyles.bodyMedium.copyWith(color: AppColors.error),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'COMPTE DE VERSEMENT',
+                            style: AppTextStyles.caption.copyWith(
+                              color: AppColors.ink3,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.forestSoft,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              'Actif',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.forest,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        subaccountId,
+                        style: AppTextStyles.mono.copyWith(
+                          fontSize: 13,
+                          color: AppColors.ink2,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Paystack Subaccount',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.ink4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ).animate().fadeIn(delay: 100.ms).slideY(
+                      begin: 0.05,
+                      end: 0,
+                      curve: Curves.easeOut,
                     ),
-                  ),
-                ),
               ),
             ],
           ),
         ),
+
+        // Sticky CTA — "Modifier"
+        Positioned(
+          bottom: 24,
+          left: 16,
+          right: 16,
+          child: SizedBox(
+            height: 52,
+            child: ElevatedButton(
+              onPressed: () => setState(() => _isEditing = true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.paper,
+                foregroundColor: AppColors.ink,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: const BorderSide(color: AppColors.line),
+                ),
+              ),
+              child: Text(
+                'Modifier',
+                style: AppTextStyles.bodyMedium.copyWith(
+                  color: AppColors.ink,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
-  Widget _buildConnectedState(String subaccountId) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
-      child: Column(
+  // ── Form state (setup or editing) ────────────────────────────
+  Widget _buildFormState(bool hasSubaccount, double topPadding) {
+    final isMM = _selectedProvider['type'] == 'MM';
+
+    return Form(
+      key: _formKey,
+      child: Stack(
         children: [
-          const SizedBox(height: 20),
-          // Success Glow Widget
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: AppColors.success.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
-              border: Border.all(color: AppColors.success.withValues(alpha: 0.25), width: 2),
-            ),
-            child: const Icon(
-              Icons.check_circle_outline_rounded,
-              color: AppColors.success,
-              size: 72,
-            ),
-          ).animate().scale(duration: 500.ms, curve: Curves.elasticOut),
-
-          const SizedBox(height: 24),
-          Text(
-            'Versement Configuré',
-            style: AppTextStyles.headlineLarge.copyWith(fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'Vos fonds collectés seront transférés automatiquement sur ce compte de versement sous 2 jours ouvrés.',
-            textAlign: TextAlign.center,
-            style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary, height: 1.5),
-          ),
-
-          const SizedBox(height: 36),
-
-          // Paystack Card Mockup
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
-              ),
-              borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: AppColors.border, width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
-                  blurRadius: 20,
-                  offset: const Offset(0, 8),
-                ),
-              ],
-            ),
+          SingleChildScrollView(
+            padding: EdgeInsets.only(bottom: 100, top: topPadding),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'COMPTE DE VERSEMENT',
-                      style: AppTextStyles.caption.copyWith(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                    const Icon(Icons.payment_rounded, color: Colors.white, size: 24),
-                  ],
-                ),
-                const SizedBox(height: 32),
-                Text(
-                  subaccountId,
-                  style: AppTextStyles.displayMedium.copyWith(
-                    color: Colors.white,
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2,
-                  ),
-                ),
-                const SizedBox(height: 28),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Paystack Subaccount',
-                      style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.success.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        'Actif',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.success,
-                          fontWeight: FontWeight.bold,
+                // Header
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => context.canPop()
+                            ? context.pop()
+                            : context.go('/profile'),
+                        child: Container(
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: AppColors.paper,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.line),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              '←',
+                              style: TextStyle(
+                                fontSize: 16,
+                                color: AppColors.ink,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                      Expanded(
+                        child: Center(
+                          child: Text(
+                            'COMPTE DE VERSEMENT',
+                            style: AppTextStyles.caption,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 38),
+                    ],
+                  ),
+                ),
+
+                // Title section
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      RichText(
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: 'Où recevoir\n',
+                              style: GoogleFonts.dmSans(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.ink,
+                                letterSpacing: -0.7,
+                                height: 1.05,
+                              ),
+                            ),
+                            TextSpan(
+                              text: 'vos fonds ?',
+                              style: AppTextStyles.serifItalic.copyWith(
+                                fontSize: 28,
+                                letterSpacing: -0.7,
+                                height: 1.05,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Les contributions sont versées automatiquement sur ce compte sous 48 h ouvrées.',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontSize: 13,
+                          color: AppColors.ink2,
+                          height: 1.5,
+                        ),
+                      ),
+
+                      // Warning box — only if no subaccount yet
+                      if (!hasSubaccount && !_isEditing) ...[
+                        const SizedBox(height: 22),
+                        Container(
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: const Color(0x14B8731A),
+                            border: Border.all(
+                              color: const Color(0x40B8731A),
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 18,
+                                height: 18,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.warn,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Center(
+                                  child: Text(
+                                    '!',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                      height: 1,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text.rich(
+                                  TextSpan(
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      fontSize: 12,
+                                      color: AppColors.warn,
+                                      height: 1.5,
+                                    ),
+                                    children: const [
+                                      TextSpan(
+                                        text: 'Configuration requise. ',
+                                        style: TextStyle(
+                                            fontWeight: FontWeight.w600),
+                                      ),
+                                      TextSpan(
+                                        text:
+                                            'Sans compte de versement, vous ne pourrez pas recevoir les fonds.',
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                // Method selector
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('MÉTHODE', style: AppTextStyles.caption),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _MethodCard(
+                              name: 'Mobile Money',
+                              sub: 'Wave · Orange · MTN · Moov',
+                              active: _selectedProvider['type'] == 'MM',
+                              onTap: () {
+                                // Switch to first MM provider
+                                final mmProvider = _providers.firstWhere(
+                                  (p) => p['type'] == 'MM',
+                                  orElse: () => _providers.first,
+                                );
+                                setState(() {
+                                  _selectedProviderCode = mmProvider['code']!;
+                                  _isVerified = false;
+                                  _verifiedName = null;
+                                });
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _MethodCard(
+                              name: 'Compte bancaire',
+                              sub: 'UBA · Ecobank · SGBCI · …',
+                              active: _selectedProvider['type'] == 'Bank',
+                              onTap: () {
+                                // Switch to first Bank provider
+                                final bankProvider = _providers.firstWhere(
+                                  (p) => p['type'] == 'Bank',
+                                  orElse: () => _providers.first,
+                                );
+                                setState(() {
+                                  _selectedProviderCode =
+                                      bankProvider['code']!;
+                                  _isVerified = false;
+                                  _verifiedName = null;
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Form fields — underline style
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                  child: Column(
+                    children: [
+                      // Opérateur field
+                      _field2(
+                        label: 'Opérateur',
+                        child: GestureDetector(
+                          onTap: _showProviderPicker,
+                          behavior: HitTestBehavior.opaque,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    color: Color(int.parse(
+                                        _selectedProvider['color']!)),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _selectedProvider['name']!,
+                                  style: AppTextStyles.bodyLarge.copyWith(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w500,
+                                    color: AppColors.ink,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                const Text(
+                                  '▼',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: AppColors.ink3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      // Account number field
+                      _field2(
+                        label: isMM ? 'Numéro Wave' : 'Numéro de compte',
+                        hint: isMM ? 'Doit être à votre nom' : null,
+                        child: TextFormField(
+                          controller: _accountController,
+                          keyboardType: isMM
+                              ? TextInputType.phone
+                              : TextInputType.text,
+                          style: AppTextStyles.mono.copyWith(
+                            fontSize: 16,
+                            color: AppColors.ink,
+                            letterSpacing: 0.01 * 16,
+                          ),
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding:
+                                EdgeInsets.only(top: 8, bottom: 4),
+                            isDense: true,
+                          ),
+                          validator: (val) {
+                            if (val == null || val.trim().isEmpty) {
+                              return 'Veuillez saisir votre numéro de compte';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+
+                      // Verified badge
+                      if (_isVerified && _verifiedName != null) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppColors.forestSoft,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: AppColors.forest.withValues(alpha: 0.25)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.check_circle_rounded,
+                                  color: AppColors.forest, size: 16),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Compte vérifié : $_verifiedName',
+                                  style: AppTextStyles.caption.copyWith(
+                                    color: AppColors.forest,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(height: 18),
+
+                      // Beneficiary name field
+                      _field2(
+                        label: 'Nom du titulaire',
+                        child: TextFormField(
+                          controller: _nameController,
+                          style: AppTextStyles.bodyLarge.copyWith(
+                            fontSize: 16,
+                            color: AppColors.ink,
+                          ),
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            enabledBorder: InputBorder.none,
+                            focusedBorder: InputBorder.none,
+                            contentPadding:
+                                EdgeInsets.only(top: 8, bottom: 4),
+                            isDense: true,
+                          ),
+                          validator: (val) {
+                            if (val == null || val.trim().isEmpty) {
+                              return 'Veuillez saisir le nom';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
+
+                      // Verify hint
+                      if (!_isVerified) ...[
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.info_outline_rounded,
+                                size: 12, color: AppColors.ink4),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Vérifiez d\'abord le numéro pour pouvoir enregistrer',
+                              style: AppTextStyles.caption.copyWith(
+                                color: AppColors.ink4,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ],
             ),
-          ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1, end: 0, curve: Curves.easeOut),
+          ),
 
-          const SizedBox(height: 48),
-
-          AppButton(
-            label: 'Modifier le compte',
-            isSecondary: true,
-            onPressed: () {
-              setState(() {
-                _isEditing = true;
-              });
-            },
+          // Sticky CTA bar
+          Positioned(
+            bottom: 24,
+            left: 16,
+            right: 16,
+            child: Row(
+              children: [
+                // "Plus tard" button
+                SizedBox(
+                  height: 52,
+                  child: OutlinedButton(
+                    onPressed: () => context.canPop()
+                        ? context.pop()
+                        : context.go('/profile'),
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: AppColors.paper,
+                      foregroundColor: AppColors.ink,
+                      side: const BorderSide(color: AppColors.line),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 22),
+                    ),
+                    child: Text(
+                      'Plus tard',
+                      style: AppTextStyles.bodyMedium.copyWith(
+                        color: AppColors.ink,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // "Vérifier et enregistrer" button
+                Expanded(
+                  child: SizedBox(
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _isLoading
+                          ? null
+                          : (_isVerified ? _submit : _verify),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accent,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: _isLoading || _isVerifying
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : Text(
+                              _isVerified
+                                  ? 'Vérifier et enregistrer'
+                                  : 'Vérifier le compte',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildFormState() {
-    final activeColorHex = _selectedProvider['color']!;
-    final cardColor = Color(int.parse(activeColorHex));
+  void _showProviderPicker() {
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.paper,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.line,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  'CHOISIR L\'OPÉRATEUR',
+                  style: AppTextStyles.caption,
+                ),
+              ),
+              const SizedBox(height: 8),
+              for (final provider in _providers)
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 24, vertical: 4),
+                  leading: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: Color(int.parse(provider['color']!)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  title: Text(
+                    provider['name']!,
+                    style: AppTextStyles.bodyLarge.copyWith(fontSize: 15),
+                  ),
+                  subtitle: Text(
+                    provider['type'] == 'MM' ? 'Mobile Money' : 'Banque',
+                    style: AppTextStyles.caption.copyWith(fontSize: 10),
+                  ),
+                  trailing: _selectedProviderCode == provider['code']
+                      ? const Icon(Icons.check_circle_rounded,
+                          color: AppColors.accent, size: 20)
+                      : null,
+                  onTap: () {
+                    setState(() {
+                      _selectedProviderCode = provider['code']!;
+                      _isVerified = false;
+                      _verifiedName = null;
+                    });
+                    Navigator.pop(ctx);
+                  },
+                ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
 
-    return Form(
-      key: _formKey,
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+// ── Method card widget ───────────────────────────────────────────
+class _MethodCard extends StatelessWidget {
+  final String name;
+  final String sub;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _MethodCard({
+    required this.name,
+    required this.sub,
+    required this.active,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: active ? AppColors.ink : AppColors.paper,
+          border: Border.all(
+            color: active ? AppColors.ink : AppColors.line,
+          ),
+          borderRadius: BorderRadius.circular(14),
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    name,
+                    style: AppTextStyles.bodyMedium.copyWith(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      color: active ? AppColors.paper : AppColors.ink,
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 14,
+                  height: 14,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: active
+                          ? AppColors.accent
+                          : AppColors.ink3,
+                    ),
+                    color: active ? AppColors.accent : Colors.transparent,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
             Text(
-              'Enregistrez vos coordonnées pour recevoir automatiquement les fonds collectés sur vos cotisations.',
-              style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary, height: 1.5),
-            ),
-            const SizedBox(height: 28),
-
-            // Card Mockup dynamic styling
-            Container(
-              width: double.infinity,
-              height: 160,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    cardColor.withValues(alpha: 0.85),
-                    cardColor.darken(0.3),
-                  ],
-                ),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.15), width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: cardColor.withValues(alpha: 0.25),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _selectedProvider['type'] == 'MM' ? 'MOBILE MONEY' : 'COMPTE BANCAIRE',
-                        style: AppTextStyles.caption.copyWith(
-                          color: Colors.white70,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      Text(
-                        _selectedProvider['name']!,
-                        style: AppTextStyles.titleMedium.copyWith(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Text(
-                    _accountController.text.isNotEmpty
-                        ? _accountController.text
-                        : '•••• •••• •••• ••••',
-                    style: AppTextStyles.headlineLarge.copyWith(
-                      color: Colors.white,
-                      letterSpacing: 2,
-                      fontSize: 20,
-                    ),
-                  ),
-                  Text(
-                    _nameController.text.isNotEmpty
-                        ? _nameController.text.toUpperCase()
-                        : 'NOM DU BÉNÉFICIAIRE',
-                    style: AppTextStyles.caption.copyWith(color: Colors.white70),
-                  ),
-                ],
+              sub,
+              style: AppTextStyles.caption.copyWith(
+                fontSize: 11,
+                color: active
+                    ? Colors.white.withValues(alpha: 0.55)
+                    : AppColors.ink3,
               ),
             ),
-
-            const SizedBox(height: 32),
-
-            // Name Input
-            AppTextField(
-              controller: _nameController,
-              label: 'Nom du bénéficiaire (personne ou entreprise)',
-              hint: 'Ex: Kader Sylla',
-              validator: (val) {
-                if (val == null || val.trim().isEmpty) {
-                  return 'Veuillez saisir le nom';
-                }
-                return null;
-              },
-            ),
-
-            const SizedBox(height: 20),
-
-            // Provider Dropdown
-            Text('Opérateur / Banque', style: AppTextStyles.labelLarge),
-            const SizedBox(height: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: _selectedProviderCode,
-                  isExpanded: true,
-                  dropdownColor: AppColors.surface,
-                  items: _providers.map((provider) {
-                    return DropdownMenuItem<String>(
-                      value: provider['code'],
-                      child: Text(
-                        provider['name']!,
-                        style: AppTextStyles.bodyLarge,
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        _selectedProviderCode = val;
-                      });
-                    }
-                  },
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 20),
-
-            // Account number input
-            AppTextField(
-              controller: _accountController,
-              label: _selectedProvider['type'] == 'MM'
-                  ? 'Numéro de Mobile Money'
-                  : 'Numéro de compte (RIB / IBAN)',
-              hint: _selectedProvider['type'] == 'MM' ? 'Ex: 0707080910' : 'Saisissez votre RIB complet',
-              keyboardType: _selectedProvider['type'] == 'MM'
-                  ? TextInputType.phone
-                  : TextInputType.text,
-              validator: (val) {
-                if (val == null || val.trim().isEmpty) {
-                  return 'Veuillez saisir votre numéro de compte';
-                }
-                return null;
-              },
-            ),
-
-            // Badge vérifié
-            if (_isVerified && _verifiedName != null) ...[  
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.success.withValues(alpha: 0.25)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle_rounded,
-                        color: AppColors.success, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Compte vérifié : $_verifiedName',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.success,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 32),
-
-            // Bouton de vérification
-            if (!_isVerified)
-              AppButton(
-                label: _isVerifying ? 'Vérification...' : 'Vérifier le compte',
-                icon: Icons.verified_outlined,
-                isSecondary: true,
-                isLoading: _isVerifying,
-                onPressed: _verify,
-              ),
-
-            const SizedBox(height: 12),
-
-            AppButton(
-              label: 'Enregistrer le compte',
-              icon: Icons.save_rounded,
-              isLoading: _isLoading,
-              onPressed: _isVerified ? _submit : null,
-            ),
-
-            if (!_isVerified) ...[  
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.info_outline_rounded,
-                      size: 12, color: AppColors.textTertiary),
-                  const SizedBox(width: 4),
-                  Text(
-                    'Vérifiez d\'abord le numéro pour pouvoir enregistrer',
-                    style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textTertiary, fontSize: 10),
-                  ),
-                ],
-              ),
-            ],
-
-            if (_isEditing) ...[
-              const SizedBox(height: 12),
-              AppButton(
-                label: 'Annuler',
-                isSecondary: true,
-                onPressed: () {
-                  setState(() {
-                    _isEditing = false;
-                  });
-                },
-              ),
-            ],
           ],
         ),
       ),

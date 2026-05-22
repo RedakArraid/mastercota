@@ -10,8 +10,6 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/widgets/app_button.dart';
-import '../../../core/widgets/mastercota_logo.dart';
 
 class PhoneScreen extends ConsumerStatefulWidget {
   const PhoneScreen({super.key});
@@ -25,7 +23,6 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isDevLoading = false;
-  bool _isInputFocused = false;
 
   String get _fullPhone =>
       '${AppConstants.defaultCountryCode}${_phoneController.text.trim()}';

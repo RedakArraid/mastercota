@@ -7,8 +7,7 @@ import '../providers/cotisation_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/widgets/app_button.dart';
-import '../../../core/widgets/app_text_field.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class CreateCotisationScreen extends ConsumerStatefulWidget {
   const CreateCotisationScreen({super.key});
@@ -27,6 +26,11 @@ class _CreateCotisationScreenState
   DateTime? _deadline;
   bool _isLoading = false;
 
+  // Toggle states
+  bool _allowAnonymous = true;
+  bool _showProgress = true;
+  bool _showTopContributor = false;
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -44,7 +48,8 @@ class _CreateCotisationScreenState
       lastDate: now.add(const Duration(days: 365)),
       builder: (ctx, child) => Theme(
         data: ThemeData.light().copyWith(
-          colorScheme: const ColorScheme.light(primary: AppColors.ink, onPrimary: Colors.white),
+          colorScheme: const ColorScheme.light(
+              primary: AppColors.ink, onPrimary: Colors.white),
         ),
         child: child!,
       ),
@@ -202,8 +207,7 @@ class _CreateCotisationScreenState
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.account_balance_wallet_rounded,
-                          size: 18),
+                      const Icon(Icons.account_balance_wallet_rounded, size: 18),
                       const SizedBox(width: 8),
                       Text(
                         'Configurer mon compte',
@@ -230,195 +234,592 @@ class _CreateCotisationScreenState
     );
   }
 
+  // ── Field2 underline wrapper ──────────────────────────────────
+  Widget _field2({
+    required String label,
+    String? hint,
+    required Widget child,
+  }) {
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(
+          bottom: BorderSide(color: AppColors.line, width: 1),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label.toUpperCase(),
+                style: AppTextStyles.caption,
+              ),
+              if (hint != null)
+                Text(
+                  hint,
+                  style: AppTextStyles.caption.copyWith(fontSize: 10),
+                ),
+            ],
+          ),
+          child,
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+
+  // ── Toggle row ─────────────────────────────────────────────────
+  Widget _toggleRow({
+    required String label,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+    bool last = false,
+  }) {
+    return Container(
+      decoration: last
+          ? null
+          : const BoxDecoration(
+              border: Border(
+                bottom: BorderSide(color: AppColors.line, width: 1),
+              ),
+            ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: AppTextStyles.bodyMedium.copyWith(
+                color: AppColors.ink,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          Switch.adaptive(
+            value: value,
+            onChanged: onChanged,
+            activeColor: AppColors.accent,
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Scaffold(
       backgroundColor: AppColors.cream,
-      body: SafeArea(
-          child: Column(
-            children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () => context.canPop() ? context.pop() : context.go('/home'),
-                      child: Container(
-                        width: 38, height: 38,
-                        decoration: BoxDecoration(
-                          color: AppColors.paper,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.line),
-                        ),
-                        child: const Center(child: Text('←', style: TextStyle(fontSize: 16))),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text('NOUVELLE COTISATION', style: AppTextStyles.caption.copyWith(color: AppColors.ink3)),
-                    const SizedBox(height: 8),
-                    RichText(
-                      text: TextSpan(
-                        style: AppTextStyles.displayMedium.copyWith(fontSize: 32, letterSpacing: -0.8, height: 1.05),
-                        children: [
-                          const TextSpan(text: 'Lancez votre\n'),
-                          TextSpan(
-                            text: 'cagnotte.',
-                            style: AppTextStyles.serifItalic.copyWith(fontSize: 32, letterSpacing: -0.8),
+      body: Stack(
+        children: [
+          // ── Scrollable content ──────────────────────────────────
+          SingleChildScrollView(
+            padding: EdgeInsets.only(bottom: 120, top: topPadding),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Header ──────────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                    child: Row(
+                      children: [
+                        // Close button
+                        GestureDetector(
+                          onTap: () => context.canPop()
+                              ? context.pop()
+                              : context.go('/home'),
+                          child: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: AppColors.paper,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: AppColors.line),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                '✕',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: AppColors.ink,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Créez une cagnotte transparente pour vos événements.',
-                      style: AppTextStyles.bodyMedium.copyWith(height: 1.55, color: AppColors.ink2),
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                ),
-              ),
+                        ),
 
-              // Scrollable form
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Form(
-                    key: _formKey,
+                        // Center eyebrow
+                        Expanded(
+                          child: Center(
+                            child: Text(
+                              'NOUVELLE CAGNOTTE',
+                              style: AppTextStyles.caption,
+                            ),
+                          ),
+                        ),
+
+                        // Draft button
+                        GestureDetector(
+                          onTap: () {},
+                          child: SizedBox(
+                            width: 68,
+                            child: Text(
+                              'Brouillon',
+                              textAlign: TextAlign.end,
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                color: AppColors.ink3,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Title section ────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Form content
-                        Container(
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: AppColors.paper,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: AppColors.line),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                        RichText(
+                          text: TextSpan(
                             children: [
-                              AppTextField(
-                                controller: _titleController,
-                                label: 'Titre de la cagnotte *',
-                                hint: 'Ex: Mariage Koffi & Aminata',
-                                prefixIcon: Icon(
-                                  Icons.mode_edit_outline_outlined,
-                                  color: AppColors.primary.withValues(alpha: 0.8),
-                                  size: 20,
+                              TextSpan(
+                                text: 'Créez votre\n',
+                                style: GoogleFonts.dmSans(
+                                  fontSize: 30,
+                                  fontWeight: FontWeight.w500,
+                                  color: AppColors.ink,
+                                  letterSpacing: -0.75,
+                                  height: 1.05,
                                 ),
-                                validator: (v) => v?.trim().isEmpty == true
-                                    ? 'Ce champ est requis'
-                                    : null,
                               ),
-
-                              const SizedBox(height: 20),
-
-                              AppTextField(
-                                controller: _descriptionController,
-                                label: 'Description (optionnel)',
-                                hint: 'Donnez plus de contexte à vos contributeurs…',
-                                prefixIcon: const Icon(
-                                  Icons.description_outlined,
-                                  color: AppColors.textSecondary,
-                                  size: 20,
-                                ),
-                                maxLines: 3,
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              AppTextField(
-                                controller: _amountController,
-                                label: 'Objectif financier *',
-                                hint: '500 000',
-                                suffixText: 'FCFA',
-                                prefixIcon: Icon(
-                                  Icons.payments_outlined,
-                                  color: AppColors.primary.withValues(alpha: 0.8),
-                                  size: 20,
-                                ),
-                                keyboardType: TextInputType.number,
-                                inputFormatters: [
-                                  FilteringTextInputFormatter.digitsOnly,
-                                ],
-                                validator: (v) {
-                                  if (v?.trim().isEmpty == true) {
-                                    return 'Ce champ est requis';
-                                  }
-                                  final n = double.tryParse(v!.trim());
-                                  if (n == null || n <= 0) {
-                                    return 'Montant invalide';
-                                  }
-                                  return null;
-                                },
-                              ),
-
-                              const SizedBox(height: 20),
-
-                              // Date picker
-                              Text('Date limite *',
-                                  style: AppTextStyles.labelLarge),
-                              const SizedBox(height: 8),
-                              GestureDetector(
-                                onTap: _pickDate,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 16),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.surfaceElevated,
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(color: AppColors.border),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.calendar_month_rounded,
-                                        color: _deadline != null
-                                            ? AppColors.primary
-                                            : AppColors.textSecondary,
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        _deadline != null
-                                            ? '${_deadline!.day.toString().padLeft(2, '0')}/${_deadline!.month.toString().padLeft(2, '0')}/${_deadline!.year}'
-                                            : 'Choisir une date',
-                                        style: _deadline != null
-                                            ? AppTextStyles.bodyLarge
-                                            : AppTextStyles.bodyLarge.copyWith(
-                                                color: AppColors.textTertiary),
-                                      ),
-                                      const Spacer(),
-                                      const Icon(Icons.chevron_right_rounded,
-                                          color: AppColors.textTertiary),
-                                    ],
-                                  ),
+                              TextSpan(
+                                text: 'cagnotte.',
+                                style: AppTextStyles.serifItalic.copyWith(
+                                  fontSize: 30,
+                                  letterSpacing: -0.75,
+                                  height: 1.05,
                                 ),
                               ),
                             ],
                           ),
-                        ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
-
-                        const SizedBox(height: 24),
-
-                        AppButton(
-                          label: 'Créer ma cotisation ✨',
-                          onPressed: _isLoading ? null : _create,
-                          isLoading: _isLoading,
-                        ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
-
-                        const SizedBox(height: 40),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          'Quelques infos suffisent. Vous pourrez tout ajuster plus tard.',
+                          style: AppTextStyles.bodyMedium.copyWith(
+                            fontSize: 13,
+                            color: AppColors.ink2,
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                ),
+
+                  // ── Form fields ──────────────────────────────────
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Titre field
+                        _field2(
+                          label: 'Titre',
+                          child: TextFormField(
+                            controller: _titleController,
+                            style: AppTextStyles.bodyLarge.copyWith(
+                              fontSize: 16,
+                              color: AppColors.ink,
+                            ),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: EdgeInsets.only(top: 8, bottom: 4),
+                              isDense: true,
+                            ),
+                            validator: (v) => v?.trim().isEmpty == true
+                                ? 'Ce champ est requis'
+                                : null,
+                          ),
+                        ),
+
+                        const SizedBox(height: 22),
+
+                        // Description field
+                        _field2(
+                          label: 'Description',
+                          hint: '180 car. max',
+                          child: TextFormField(
+                            controller: _descriptionController,
+                            maxLines: 2,
+                            maxLength: 180,
+                            style: AppTextStyles.bodyLarge.copyWith(
+                              fontSize: 16,
+                              color: AppColors.ink,
+                            ),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              enabledBorder: InputBorder.none,
+                              focusedBorder: InputBorder.none,
+                              contentPadding: EdgeInsets.only(top: 8, bottom: 4),
+                              isDense: true,
+                              counterText: '',
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 22),
+
+                        // Objectif — big mono number
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'OBJECTIF',
+                              style: AppTextStyles.caption,
+                            ),
+                            Container(
+                              margin: const EdgeInsets.only(top: 10),
+                              padding: const EdgeInsets.only(bottom: 12),
+                              decoration: const BoxDecoration(
+                                border: Border(
+                                  bottom: BorderSide(
+                                      color: AppColors.ink, width: 1),
+                                ),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.baseline,
+                                textBaseline: TextBaseline.alphabetic,
+                                children: [
+                                  Expanded(
+                                    child: TextFormField(
+                                      controller: _amountController,
+                                      keyboardType: TextInputType.number,
+                                      inputFormatters: [
+                                        FilteringTextInputFormatter.digitsOnly,
+                                      ],
+                                      style: AppTextStyles.mono.copyWith(
+                                        fontSize: 36,
+                                        fontWeight: FontWeight.w500,
+                                        color: AppColors.ink,
+                                        letterSpacing: -0.72,
+                                      ),
+                                      decoration: const InputDecoration(
+                                        border: InputBorder.none,
+                                        enabledBorder: InputBorder.none,
+                                        focusedBorder: InputBorder.none,
+                                        contentPadding: EdgeInsets.zero,
+                                        isDense: true,
+                                      ),
+                                      validator: (v) {
+                                        if (v?.trim().isEmpty == true) {
+                                          return 'Ce champ est requis';
+                                        }
+                                        final n = double.tryParse(
+                                            v!.trim().replaceAll(RegExp(r'\s'), ''));
+                                        if (n == null || n <= 0) {
+                                          return 'Montant invalide';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'FCFA',
+                                    style: AppTextStyles.mono.copyWith(
+                                      fontSize: 14,
+                                      color: AppColors.ink3,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Preset chips
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Row(
+                                children: [
+                                  for (final preset in [
+                                    ('50 000', '50000'),
+                                    ('100 000', '100000'),
+                                    ('250 000', '250000'),
+                                    ('500 000', '500000'),
+                                    ('1 M', '1000000'),
+                                  ]) ...[
+                                    GestureDetector(
+                                      onTap: () {
+                                        _amountController.text = preset.$2;
+                                      },
+                                      child: Container(
+                                        margin: const EdgeInsets.only(right: 8),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.transparent,
+                                          borderRadius: BorderRadius.circular(999),
+                                          border: Border.all(color: AppColors.line),
+                                        ),
+                                        child: Text(
+                                          '${preset.$1} F',
+                                          style: AppTextStyles.mono.copyWith(
+                                            fontSize: 11,
+                                            color: AppColors.ink2,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 22),
+
+                        // Échéance + Visibilité — 2-column
+                        Row(
+                          children: [
+                            // Échéance
+                            Expanded(
+                              child: _field2(
+                                label: 'Échéance',
+                                child: GestureDetector(
+                                  onTap: _pickDate,
+                                  behavior: HitTestBehavior.opaque,
+                                  child: Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Row(
+                                      children: [
+                                        Text(
+                                          _deadline != null
+                                              ? '${_deadline!.day} ${_monthName(_deadline!.month)}'
+                                              : '—',
+                                          style: AppTextStyles.mono.copyWith(
+                                            fontSize: 16,
+                                            color: _deadline != null
+                                                ? AppColors.ink
+                                                : AppColors.ink3,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        const Text(
+                                          '▼',
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: AppColors.ink3,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            // Visibilité
+                            Expanded(
+                              child: _field2(
+                                label: 'Visibilité',
+                                child: Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        'Publique',
+                                        style: AppTextStyles.bodyLarge.copyWith(
+                                          fontSize: 16,
+                                          color: AppColors.ink,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      const Text(
+                                        '▼',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          color: AppColors.ink3,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        const SizedBox(height: 22),
+
+                        // Toggle options
+                        Container(
+                          decoration: BoxDecoration(
+                            color: AppColors.paper,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: AppColors.line),
+                          ),
+                          clipBehavior: Clip.hardEdge,
+                          child: Column(
+                            children: [
+                              _toggleRow(
+                                label: 'Dons anonymes autorisés',
+                                value: _allowAnonymous,
+                                onChanged: (v) =>
+                                    setState(() => _allowAnonymous = v),
+                              ),
+                              _toggleRow(
+                                label: 'Afficher la barre de progression',
+                                value: _showProgress,
+                                onChanged: (v) =>
+                                    setState(() => _showProgress = v),
+                              ),
+                              _toggleRow(
+                                label: 'Mettre en avant le meilleur contributeur',
+                                value: _showTopContributor,
+                                onChanged: (v) =>
+                                    setState(() => _showTopContributor = v),
+                                last: true,
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 22),
+
+                        // Fee note
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentSoft,
+                            border: Border.all(color: AppColors.accentLine),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text.rich(
+                            TextSpan(
+                              style: AppTextStyles.bodySmall.copyWith(
+                                fontSize: 12,
+                                color: AppColors.accentDark,
+                                height: 1.5,
+                              ),
+                              children: const [
+                                TextSpan(
+                                  text: 'Frais : 2,5 % ',
+                                  style: TextStyle(fontWeight: FontWeight.w500),
+                                ),
+                                TextSpan(
+                                  text:
+                                      'par contribution. Aucun frais de création, aucun abonnement.',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+
+          // ── Sticky CTA bar ──────────────────────────────────────
+          Positioned(
+            bottom: 24,
+            left: 16,
+            right: 16,
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: AppColors.ink,
+                borderRadius: BorderRadius.circular(18),
+              ),
+              child: Row(
+                children: [
+                  // Aperçu ghost button
+                  SizedBox(
+                    height: 50,
+                    child: TextButton(
+                      onPressed: () {},
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.paper,
+                        padding: const EdgeInsets.symmetric(horizontal: 18),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'Aperçu',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          color: AppColors.paper,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  // Create button
+                  Expanded(
+                    child: SizedBox(
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _create,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  color: Colors.white,
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Text(
+                                'Créer la cagnotte →',
+                                style: AppTextStyles.bodyMedium.copyWith(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
     );
+  }
+
+  String _monthName(int month) {
+    const months = [
+      'jan', 'fév', 'mar', 'avr', 'mai', 'juin',
+      'juil', 'août', 'sep', 'oct', 'nov', 'déc',
+    ];
+    return months[month - 1];
   }
 }

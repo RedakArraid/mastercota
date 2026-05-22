@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../../core/constants/app_constants.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -48,7 +46,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   // ── Helpers ──────────────────────────────────────────────
-
 
   Future<void> _openSupport() async {
     final emailUri = Uri(
@@ -174,437 +171,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     );
   }
 
-  static void _showAbout(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => Dialog(
-        backgroundColor: AppColors.surface,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.3),
-                      blurRadius: 20,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-                child: const Center(
-                  child: Text('₣',
-                      style: TextStyle(
-                          fontSize: 36,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(AppConstants.appName,
-                  style: AppTextStyles.headlineLarge
-                      .copyWith(fontWeight: FontWeight.w900)),
-              const SizedBox(height: 4),
-              Text(AppConstants.appTagline,
-                  style: AppTextStyles.bodySmall
-                      .copyWith(color: AppColors.textSecondary),
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 6),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppColors.surfaceElevated,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: Text('Version 1.0.0',
-                    style: AppTextStyles.caption.copyWith(
-                        color: AppColors.textTertiary,
-                        fontWeight: FontWeight.bold)),
-              ),
-              const SizedBox(height: 20),
-              const Divider(color: AppColors.border),
-              const SizedBox(height: 12),
-              Text(
-                'Mastercota simplifie les cotisations collectives en Afrique de l\'Ouest grâce à la technologie mobile et aux paiements sécurisés.',
-                style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.textSecondary, height: 1.5),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  style: TextButton.styleFrom(
-                    backgroundColor: AppColors.surfaceElevated,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  child: Text('Fermer',
-                      style: AppTextStyles.bodyMedium.copyWith(
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Build ─────────────────────────────────────────────────
-
-  @override
-  Widget build(BuildContext context) {
-    final phone = SupabaseService.currentUser?.phone ?? '';
-    final profileAsync = ref.watch(userProfileProvider);
-    final profile = profileAsync.value;
-    final name = profile?['name'] as String?;
-    final avatarUrl = profile?['avatar_url'] as String? ?? '👤';
-
-    return Scaffold(
-      backgroundColor: AppColors.cream,
-      body: SafeArea(
-          child: Column(
-            children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    GestureDetector(
-                      onTap: () => context.go('/home'),
-                      child: Container(
-                        width: 38, height: 38,
-                        decoration: BoxDecoration(
-                          color: AppColors.paper,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.line),
-                        ),
-                        child: const Center(child: Text('←', style: TextStyle(fontSize: 16))),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text('COMPTE', style: AppTextStyles.caption.copyWith(color: AppColors.ink3)),
-                    const SizedBox(height: 6),
-                    RichText(
-                      text: TextSpan(
-                        style: AppTextStyles.displayMedium.copyWith(fontSize: 28, letterSpacing: -0.7, height: 1.05),
-                        children: [
-                          const TextSpan(text: 'Votre '),
-                          TextSpan(
-                            text: 'profil.',
-                            style: AppTextStyles.serifItalic.copyWith(fontSize: 28, letterSpacing: -0.7),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                  ],
-                ),
-              ),
-
-              Expanded(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      // User header card
-                      Container(
-                        padding: const EdgeInsets.all(20),
-                        decoration: BoxDecoration(
-                          color: AppColors.paper,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.line),
-                        ),
-                        child: Column(
-                          children: [
-                            GestureDetector(
-                              onTap: () => _showEditProfileSheet(context, name, avatarUrl),
-                              child: Stack(
-                                children: [
-                                  Container(
-                                    width: 80,
-                                    height: 80,
-                                    decoration: BoxDecoration(
-                                      color: AppColors.ink,
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Center(
-                                      child: Text(
-                                        (name != null && name.trim().isNotEmpty)
-                                            ? name.trim()[0].toUpperCase()
-                                            : (phone.isNotEmpty ? phone[phone.length > 2 ? phone.length - 2 : 0] : '?'),
-                                        style: AppTextStyles.headlineLarge.copyWith(
-                                          color: Colors.white,
-                                          fontSize: 28,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  )
-                                      .animate()
-                                      .scale(
-                                          duration: 500.ms,
-                                          curve: Curves.elasticOut,
-                                          begin: const Offset(0.7, 0.7))
-                                      .fadeIn(),
-                                  Positioned(
-                                    bottom: 0,
-                                    right: 0,
-                                    child: Container(
-                                      padding: const EdgeInsets.all(6),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.accentBright,
-                                        shape: BoxShape.circle,
-                                        border: Border.all(color: AppColors.cream, width: 2),
-                                      ),
-                                      child: const Icon(
-                                        Icons.edit_rounded,
-                                        size: 12,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-
-                            const SizedBox(height: 16),
-
-                            if (name != null && name.trim().isNotEmpty) ...[
-                              Text(
-                                name,
-                                style: AppTextStyles.headlineMedium,
-                                textAlign: TextAlign.center,
-                              ).animate().fadeIn(delay: 150.ms),
-                              const SizedBox(height: 4),
-                              Text(
-                                phone.isNotEmpty ? phone : '+225 01 02 03 04 05',
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  color: AppColors.textSecondary,
-                                ),
-                              ).animate().fadeIn(delay: 180.ms),
-                            ] else ...[
-                              Text(
-                                phone.isNotEmpty ? phone : '+225 01 02 03 04 05',
-                                style: AppTextStyles.headlineMedium,
-                                textAlign: TextAlign.center,
-                              ).animate().fadeIn(delay: 150.ms),
-                              const SizedBox(height: 4),
-                              GestureDetector(
-                                onTap: () => _showEditProfileSheet(context, name, avatarUrl),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      'Ajouter votre nom',
-                                      style: AppTextStyles.bodyMedium.copyWith(
-                                        color: AppColors.primary,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    const Icon(
-                                      Icons.add_circle_outline_rounded,
-                                      size: 16,
-                                      color: AppColors.primary,
-                                    ),
-                                  ],
-                                ),
-                              ).animate().fadeIn(delay: 180.ms),
-                            ],
-
-                            const SizedBox(height: 8),
-
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: AppColors.primary
-                                    .withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                    color: AppColors.primary
-                                        .withValues(alpha: 0.3)),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(Icons.verified_rounded,
-                                      color: AppColors.primary, size: 14),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Membre certifié',
-                                    style: AppTextStyles.caption.copyWith(
-                                      color: AppColors.primary,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ).animate().fadeIn(delay: 200.ms),
-                          ],
-                        ),
-                      ).animate().fadeIn(duration: 400.ms).slideY(
-                          begin: 0.05, end: 0, curve: Curves.easeOut),
-
-                      const SizedBox(height: 28),
-
-                      // Options card
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppColors.paper,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: AppColors.line),
-                        ),
-                        child: Column(
-                          children: [
-                            profileAsync.maybeWhen(
-                              data: (profile) {
-                                final subaccountId =
-                                    profile?['paystack_subaccount_id']
-                                        as String?;
-                                final hasSubaccount = subaccountId != null &&
-                                    subaccountId.isNotEmpty;
-                                return _buildTile(
-                                  icon: Icons
-                                      .account_balance_wallet_outlined,
-                                  label: 'Compte de versement',
-                                  trailing: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: hasSubaccount
-                                          ? AppColors.success
-                                              .withValues(alpha: 0.1)
-                                          : AppColors.warning
-                                              .withValues(alpha: 0.1),
-                                      borderRadius:
-                                          BorderRadius.circular(8),
-                                      border: Border.all(
-                                        color: hasSubaccount
-                                            ? AppColors.success
-                                                .withValues(alpha: 0.2)
-                                            : AppColors.warning
-                                                .withValues(alpha: 0.2),
-                                      ),
-                                    ),
-                                    child: Text(
-                                      hasSubaccount
-                                          ? 'Configuré'
-                                          : 'À configurer',
-                                      style: AppTextStyles.caption.copyWith(
-                                        color: hasSubaccount
-                                            ? AppColors.success
-                                            : AppColors.warning,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 10,
-                                      ),
-                                    ),
-                                  ),
-                                  onTap: () =>
-                                      context.push('/profile/payout'),
-                                  showDivider: true,
-                                );
-                              },
-                              orElse: () => _buildTile(
-                                icon: Icons.account_balance_wallet_outlined,
-                                label: 'Compte de versement',
-                                onTap: () =>
-                                    context.push('/profile/payout'),
-                                showDivider: true,
-                              ),
-                            ),
-                            _buildTile(
-                              icon: Icons.notifications_none_rounded,
-                              label: 'Notifications',
-                              onTap: () => _showNotificationSheet(context),
-                              showDivider: true,
-                            ),
-                            _buildTile(
-                              icon: Icons.help_outline_rounded,
-                              label: 'Aide & Support',
-                              onTap: () { _openSupport(); },
-                              showDivider: true,
-                            ),
-                            _buildTile(
-                              icon: Icons.lock_outline_rounded,
-                              label: 'Confidentialité',
-                              onTap: () { _handlePrivacy(context); },
-                              showDivider: true,
-                            ),
-                            _buildTile(
-                              icon: Icons.info_outline_rounded,
-                              label: 'À propos de MasterCota',
-                              onTap: () => _showAbout(context),
-                              showDivider: false,
-                            ),
-                          ],
-                        ),
-                      ).animate(delay: 100.ms).fadeIn(duration: 400.ms),
-
-                      const SizedBox(height: 24),
-
-                      // Logout
-                      GestureDetector(
-                        onTap: () async {
-                          await ref
-                              .read(authNotifierProvider.notifier)
-                              .signOut();
-                          if (context.mounted) {
-                            context.go('/auth/phone');
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          decoration: BoxDecoration(
-                            color: AppColors.paper,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.logout_rounded,
-                                  color: AppColors.error, size: 20),
-                              const SizedBox(width: 10),
-                              Text('Se déconnecter',
-                                  style: AppTextStyles.titleMedium
-                                      .copyWith(color: AppColors.error)),
-                            ],
-                          ),
-                        ),
-                      ).animate(delay: 200.ms).fadeIn(duration: 400.ms),
-
-                      const SizedBox(height: 24),
-
-                      Text('MasterCota v1.0.0',
-                          style: AppTextStyles.caption
-                              .copyWith(color: AppColors.textTertiary)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-    );
-  }
-
   void _showEditProfileSheet(BuildContext context, String? name, String? avatar) {
     final isWide = MediaQuery.of(context).size.width > 600;
     if (isWide) {
@@ -670,55 +236,435 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
   }
 
-  Widget _buildTile({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-    required bool showDivider,
-    Widget? trailing,
-  }) {
-    return Column(
-      children: [
-        InkWell(
-          onTap: onTap,
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceElevated,
-                    borderRadius: BorderRadius.circular(10),
+  // ── Build ─────────────────────────────────────────────────
+
+  @override
+  Widget build(BuildContext context) {
+    final phone = SupabaseService.currentUser?.phone ?? '';
+    final profileAsync = ref.watch(userProfileProvider);
+    final profile = profileAsync.value;
+    final name = profile?['name'] as String?;
+    final avatarUrl = profile?['avatar_url'] as String? ?? '👤';
+
+    // Avatar initial: first letter of name, or last 2 digits of phone
+    final String avatarInitial = (name != null && name.trim().isNotEmpty)
+        ? name.trim()[0].toUpperCase()
+        : (phone.length >= 2
+            ? phone.substring(phone.length - 2)
+            : (phone.isNotEmpty ? phone : '?'));
+
+    // "Depuis [month] [year]" pill text
+    const String sinceText = 'Depuis mai 2026';
+
+    // Payout status
+    final subaccountId = profile?['paystack_subaccount_id'] as String?;
+    final hasSubaccount = subaccountId != null && subaccountId.isNotEmpty;
+
+    return Scaffold(
+      backgroundColor: AppColors.cream,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 110),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // ── Header ───────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 54, 20, 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  GestureDetector(
+                    onTap: () => context.go('/home'),
+                    child: Container(
+                      width: 38, height: 38,
+                      decoration: BoxDecoration(
+                        color: AppColors.paper,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.line),
+                      ),
+                      child: const Center(
+                        child: Text('←', style: TextStyle(fontSize: 16)),
+                      ),
+                    ),
                   ),
-                  child: Icon(icon,
-                      color: AppColors.textSecondary, size: 20),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    label,
-                    style: AppTextStyles.bodyLarge
-                        .copyWith(fontWeight: FontWeight.w500),
+                  Text('PROFIL', style: AppTextStyles.caption),
+                  GestureDetector(
+                    onTap: () => _showEditProfileSheet(context, name, avatarUrl),
+                    child: Container(
+                      width: 38, height: 38,
+                      decoration: BoxDecoration(
+                        color: AppColors.paper,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.line),
+                      ),
+                      child: const Center(
+                        child: Text('⋯', style: TextStyle(fontSize: 16)),
+                      ),
+                    ),
                   ),
-                ),
-                if (trailing != null) ...[
-                  trailing,
-                  const SizedBox(width: 8)
                 ],
-                const Icon(Icons.chevron_right_rounded,
-                    color: AppColors.textTertiary, size: 20),
-              ],
+              ),
             ),
+
+            // ── Identity ─────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+              child: Column(
+                children: [
+                  // Navy circle 84px with initial
+                  Container(
+                    width: 84, height: 84,
+                    decoration: const BoxDecoration(
+                      color: AppColors.ink,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Center(
+                      child: Text(
+                        avatarInitial,
+                        style: const TextStyle(
+                          fontFamily: 'DM Sans',
+                          fontSize: 36,
+                          fontWeight: FontWeight.w400,
+                          letterSpacing: -0.02 * 36,
+                          color: AppColors.paper,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Name
+                  Text(
+                    (name != null && name.trim().isNotEmpty)
+                        ? name
+                        : (phone.isNotEmpty ? phone : ''),
+                    style: AppTextStyles.displayMedium.copyWith(
+                      fontSize: 26,
+                      letterSpacing: -0.02 * 26,
+                      height: 1.1,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+
+                  // Phone in mono
+                  Text(
+                    phone.isNotEmpty ? phone : '',
+                    style: AppTextStyles.mono.copyWith(
+                      fontSize: 12,
+                      color: AppColors.ink3,
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Pills row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // "Vérifié" pill with gold dot
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.paper,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.line),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: const BoxDecoration(
+                                color: AppColors.accent,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              'Vérifié',
+                              style: AppTextStyles.caption.copyWith(
+                                fontSize: 11,
+                                color: AppColors.ink2,
+                                letterSpacing: 0,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // "Depuis…" pill
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: AppColors.paper,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.line),
+                        ),
+                        child: Text(
+                          sinceText,
+                          style: AppTextStyles.caption.copyWith(
+                            fontSize: 11,
+                            color: AppColors.ink2,
+                            letterSpacing: 0,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
+            // ── Mini stats ───────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: AppColors.paper,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: _StatCell(value: '—', label: 'Collecté'),
+                    ),
+                    Container(width: 1, height: 36, color: AppColors.line),
+                    Expanded(
+                      child: _StatCell(value: '—', label: 'Actives'),
+                    ),
+                    Container(width: 1, height: 36, color: AppColors.line),
+                    Expanded(
+                      child: _StatCell(value: '—', label: 'Donateurs'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // ── Settings: Compte ─────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Text('COMPTE', style: AppTextStyles.caption),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.paper,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.line),
+                    ),
+                    clipBehavior: Clip.hardEdge,
+                    child: Column(
+                      children: [
+                        _Row(
+                          label: 'Compte de versement',
+                          value: hasSubaccount ? 'Configuré' : 'À configurer',
+                          warning: !hasSubaccount,
+                          onTap: () => context.push('/profile/payout'),
+                        ),
+                        _Row(
+                          label: 'Notifications',
+                          value: 'Activées',
+                          onTap: () => _showNotificationSheet(context),
+                        ),
+                        _Row(
+                          label: 'Sécurité',
+                          value: 'Code par SMS',
+                          onTap: () {},
+                        ),
+                        _Row(
+                          label: 'Langue',
+                          value: 'Français',
+                          last: true,
+                          onTap: () {},
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Settings: Aide ───────────────────────────────
+                  const SizedBox(height: 22),
+                  Padding(
+                    padding: const EdgeInsets.only(left: 4),
+                    child: Text('AIDE', style: AppTextStyles.caption),
+                  ),
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.paper,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.line),
+                    ),
+                    clipBehavior: Clip.hardEdge,
+                    child: Column(
+                      children: [
+                        _Row(
+                          label: "Centre d'aide",
+                          onTap: () => _openSupport(),
+                        ),
+                        _Row(
+                          label: "Conditions d'utilisation",
+                          onTap: () => _handlePrivacy(context),
+                        ),
+                        _Row(
+                          label: 'Contacter le support',
+                          last: true,
+                          onTap: () => _openSupport(),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // ── Logout ───────────────────────────────────────
+                  const SizedBox(height: 22),
+                  GestureDetector(
+                    onTap: () async {
+                      await ref
+                          .read(authNotifierProvider.notifier)
+                          .signOut();
+                      if (context.mounted) {
+                        context.go('/auth/phone');
+                      }
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.line),
+                      ),
+                      child: Center(
+                        child: Text(
+                          'Se déconnecter',
+                          style: AppTextStyles.titleMedium.copyWith(
+                            color: AppColors.ink2,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // ── Version ──────────────────────────────────────
+                  const SizedBox(height: 18),
+                  Center(
+                    child: Text(
+                      'MasterCota · v1.0.0',
+                      style: AppTextStyles.mono.copyWith(
+                        fontSize: 11,
+                        color: AppColors.ink4,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── _StatCell ────────────────────────────────────────────
+
+class _StatCell extends StatelessWidget {
+  final String value;
+  final String label;
+
+  const _StatCell({required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: AppTextStyles.mono.copyWith(
+            fontSize: 20,
+            letterSpacing: -0.02 * 20,
+            color: AppColors.ink,
           ),
         ),
-        if (showDivider)
-          const Padding(
-            padding: EdgeInsets.only(left: 64, right: 20),
-            child: Divider(height: 1, color: AppColors.border),
-          ),
+        const SizedBox(height: 4),
+        Text(
+          label.toUpperCase(),
+          style: AppTextStyles.caption.copyWith(fontSize: 10),
+        ),
       ],
+    );
+  }
+}
+
+// ── _Row ─────────────────────────────────────────────────
+
+class _Row extends StatelessWidget {
+  final String label;
+  final String? value;
+  final bool last;
+  final bool warning;
+  final VoidCallback? onTap;
+
+  const _Row({
+    required this.label,
+    this.value,
+    this.last = false,
+    this.warning = false,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        decoration: BoxDecoration(
+          border: last
+              ? null
+              : Border(bottom: BorderSide(color: AppColors.line)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              label,
+              style: AppTextStyles.titleMedium
+                  .copyWith(fontWeight: FontWeight.w500),
+            ),
+            Row(
+              children: [
+                if (value != null)
+                  Text(
+                    value!,
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: warning ? AppColors.warn : AppColors.ink3,
+                    ),
+                  ),
+                const SizedBox(width: 8),
+                const Text(
+                  '›',
+                  style: TextStyle(fontSize: 10, color: AppColors.ink4),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -848,7 +794,7 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
             ],
           ),
           const SizedBox(height: 24),
-          
+
           // Nom complet Label & Input
           Text(
             'Nom complet',
@@ -883,9 +829,9 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
               ),
             ),
           ),
-          
+
           const SizedBox(height: 24),
-          
+
           // Avatar Selection Label
           Text(
             'Choisir un avatar',
@@ -935,9 +881,9 @@ class _EditProfileSheetState extends ConsumerState<_EditProfileSheet> {
               },
             ),
           ),
-          
+
           const SizedBox(height: 32),
-          
+
           // Enregistrer Button
           SizedBox(
             width: double.infinity,
@@ -1169,7 +1115,7 @@ class _NotificationSheetState extends State<_NotificationSheet> {
                 ],
               ),
             ),
-            
+
             // TabBar
             const TabBar(
               tabs: [
@@ -1181,7 +1127,7 @@ class _NotificationSheetState extends State<_NotificationSheet> {
               unselectedLabelColor: AppColors.textSecondary,
               indicatorSize: TabBarIndicatorSize.tab,
             ),
-            
+
             Expanded(
               child: TabBarView(
                 children: [
@@ -1258,7 +1204,7 @@ class _NotificationSheetState extends State<_NotificationSheet> {
                   ),
                 ),
                 const SizedBox(width: 16),
-                
+
                 // Content
                 Expanded(
                   child: Column(
