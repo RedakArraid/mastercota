@@ -586,7 +586,7 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
                           Expanded(
                             child: _MethodCard(
                               name: 'Mobile Money',
-                              sub: 'Wave · Orange · MTN · Moov',
+                              sub: 'Wave · Orange · MTN',
                               active: _selectedProvider['type'] == 'MM',
                               onTap: () {
                                 // Switch to first MM provider
@@ -875,73 +875,70 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
   }
 
   void _showProviderPicker() {
-    showModalBottomSheet<void>(
+    showDialog<void>(
       context: context,
-      backgroundColor: AppColors.paper,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      builder: (ctx) => Dialog(
+        backgroundColor: AppColors.paper,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: AppColors.line),
+        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('OPÉRATEUR', style: AppTextStyles.caption),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(ctx),
+                    child: const Icon(Icons.close_rounded,
+                        color: AppColors.ink3, size: 20),
+                  ),
+                ],
+              ),
+            ),
+            for (final provider in _providers)
+              ListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+                leading: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: Color(int.parse(provider['color']!)),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                title: Text(
+                  provider['name']!,
+                  style: AppTextStyles.bodyLarge.copyWith(fontSize: 15),
+                ),
+                subtitle: Text(
+                  provider['type'] == 'MM' ? 'Mobile Money' : 'Banque',
+                  style: AppTextStyles.caption.copyWith(fontSize: 10),
+                ),
+                trailing: _selectedProviderCode == provider['code']
+                    ? const Icon(Icons.check_circle_rounded,
+                        color: AppColors.accent, size: 20)
+                    : null,
+                onTap: () {
+                  setState(() {
+                    _selectedProviderCode = provider['code']!;
+                    _isVerified = false;
+                    _verifiedName = null;
+                  });
+                  Navigator.pop(ctx);
+                },
+              ),
+            const SizedBox(height: 12),
+          ],
+        ),
       ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 36,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.line,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Text(
-                  'CHOISIR L\'OPÉRATEUR',
-                  style: AppTextStyles.caption,
-                ),
-              ),
-              const SizedBox(height: 8),
-              for (final provider in _providers)
-                ListTile(
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 4),
-                  leading: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Color(int.parse(provider['color']!)),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  title: Text(
-                    provider['name']!,
-                    style: AppTextStyles.bodyLarge.copyWith(fontSize: 15),
-                  ),
-                  subtitle: Text(
-                    provider['type'] == 'MM' ? 'Mobile Money' : 'Banque',
-                    style: AppTextStyles.caption.copyWith(fontSize: 10),
-                  ),
-                  trailing: _selectedProviderCode == provider['code']
-                      ? const Icon(Icons.check_circle_rounded,
-                          color: AppColors.accent, size: 20)
-                      : null,
-                  onTap: () {
-                    setState(() {
-                      _selectedProviderCode = provider['code']!;
-                      _isVerified = false;
-                      _verifiedName = null;
-                    });
-                    Navigator.pop(ctx);
-                  },
-                ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        );
-      },
     );
   }
 }

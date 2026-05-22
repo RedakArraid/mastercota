@@ -80,6 +80,13 @@ class _CotisationDetailScreenState
                         contrAsync: contrAsync,
                         formatter: formatter,
                       ),
+                    if (_tabIndex == 1)
+                      _ContributorsList(
+                        contrAsync: contrAsync,
+                        formatter: formatter,
+                      ),
+                    if (_tabIndex == 2)
+                      _SettingsTab(cot: cot),
 
                     const SizedBox(height: 32),
                   ],
@@ -831,6 +838,221 @@ class _ActionBar extends StatelessWidget {
                   ),
                 ),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contributeurs tab — classement par montant décroissant
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ContributorsList extends StatelessWidget {
+  final AsyncValue<List<ContributionModel>> contrAsync;
+  final NumberFormat formatter;
+  const _ContributorsList({required this.contrAsync, required this.formatter});
+
+  @override
+  Widget build(BuildContext context) {
+    return contrAsync.when(
+      data: (list) {
+        if (list.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
+            child: Center(
+              child: Text(
+                'Aucun contributeur pour l\'instant',
+                style: AppTextStyles.bodyMedium.copyWith(color: AppColors.ink3),
+              ),
+            ),
+          );
+        }
+        final sorted = [...list]
+          ..sort((a, b) => b.amount.compareTo(a.amount));
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+          child: Column(
+            children: sorted.asMap().entries.map((entry) {
+              final rank = entry.key + 1;
+              final c = entry.value;
+              final isTop = rank == 1;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                decoration: BoxDecoration(
+                  color: isTop
+                      ? AppColors.accentSoft
+                      : AppColors.paper,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isTop ? AppColors.accentLine : AppColors.line,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // Rang
+                    SizedBox(
+                      width: 28,
+                      child: Text(
+                        rank == 1 ? '★' : '$rank',
+                        textAlign: TextAlign.center,
+                        style: AppTextStyles.mono.copyWith(
+                          fontSize: isTop ? 16 : 12,
+                          color: isTop ? AppColors.accent : AppColors.ink4,
+                          fontWeight: isTop ? FontWeight.w700 : FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    // Nom
+                    Expanded(
+                      child: Text(
+                        c.contributorName,
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    // Montant
+                    Text(
+                      '+${formatter.format(c.amount)} F',
+                      style: AppTextStyles.mono.copyWith(
+                        fontSize: 13,
+                        color: isTop ? AppColors.accentDark : AppColors.ink,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        );
+      },
+      loading: () => const Padding(
+        padding: EdgeInsets.all(32),
+        child: Center(
+          child: CircularProgressIndicator(color: AppColors.accentBright),
+        ),
+      ),
+      error: (e, _) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Text('Erreur : $e',
+            style: AppTextStyles.bodySmall.copyWith(color: AppColors.error)),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Réglages tab — affichage en lecture seule des paramètres
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _SettingsTab extends StatelessWidget {
+  final CotisationModel cot;
+  const _SettingsTab({required this.cot});
+
+  @override
+  Widget build(BuildContext context) {
+    final s = cot.settings;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.paper,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: AppColors.line),
+        ),
+        clipBehavior: Clip.hardEdge,
+        child: Column(
+          children: [
+            _SettingRow(
+              label: 'Contributions anonymes',
+              value: s.anonymousAllowed ? 'Autorisées' : 'Désactivées',
+              active: s.anonymousAllowed,
+            ),
+            _SettingRow(
+              label: 'Barre de progression',
+              value: s.showProgress ? 'Visible' : 'Masquée',
+              active: s.showProgress,
+            ),
+            _SettingRow(
+              label: 'Montant cible visible',
+              value: s.showTargetAmount ? 'Visible' : 'Masqué',
+              active: s.showTargetAmount,
+            ),
+            _SettingRow(
+              label: 'Meilleur contributeur',
+              value: s.showBestContributor ? 'Affiché' : 'Masqué',
+              active: s.showBestContributor,
+            ),
+            _SettingRow(
+              label: 'Liste des contributeurs',
+              value: s.showContributors ? 'Visible' : 'Masquée',
+              active: s.showContributors,
+            ),
+            if (s.minAmount > 0)
+              _SettingRow(
+                label: 'Contribution minimum',
+                value: '${s.minAmount.toStringAsFixed(0)} F',
+                active: true,
+                last: true,
+              )
+            else
+              const _SettingRow(
+                label: 'Contribution minimum',
+                value: 'Aucune',
+                active: false,
+                last: true,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final bool active;
+  final bool last;
+  const _SettingRow({
+    required this.label,
+    required this.value,
+    required this.active,
+    this.last = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        border: last
+            ? null
+            : const Border(bottom: BorderSide(color: AppColors.line)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: AppTextStyles.bodyMedium.copyWith(
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+          Text(
+            value,
+            style: AppTextStyles.caption.copyWith(
+              color: active ? AppColors.forest : AppColors.ink3,
+              letterSpacing: 0,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ],

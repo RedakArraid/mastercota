@@ -192,7 +192,14 @@ class HomeScreen extends ConsumerWidget {
                         child: _ActionButton(
                           label: 'Scanner',
                           primary: false,
-                          onTap: () {}, // no-op for now
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Scanner QR — bientôt disponible'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
                         ),
                       ),
                     ],

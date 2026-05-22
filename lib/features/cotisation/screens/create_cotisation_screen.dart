@@ -366,7 +366,14 @@ class _CreateCotisationScreenState
 
                         // Draft button
                         GestureDetector(
-                          onTap: () {},
+                          onTap: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Brouillons — bientôt disponible'),
+                                behavior: SnackBarBehavior.floating,
+                              ),
+                            );
+                          },
                           child: SizedBox(
                             width: 68,
                             child: Text(
@@ -753,7 +760,14 @@ class _CreateCotisationScreenState
                   SizedBox(
                     height: 50,
                     child: TextButton(
-                      onPressed: () {},
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Aperçu — bientôt disponible'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      },
                       style: TextButton.styleFrom(
                         foregroundColor: AppColors.paper,
                         padding: const EdgeInsets.symmetric(horizontal: 18),

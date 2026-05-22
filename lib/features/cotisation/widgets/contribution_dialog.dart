@@ -28,15 +28,22 @@ class ContributionDialog extends StatefulWidget {
     required String cotisationId,
     required String cotisationTitle,
   }) {
-    return showModalBottomSheet(
+    return showDialog(
       context: context,
-      isScrollControlled: true,
       useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      constraints: const BoxConstraints(maxWidth: 550),
-      builder: (context) => ContributionDialog(
-        cotisationId: cotisationId,
-        cotisationTitle: cotisationTitle,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.fromLTRB(
+          16, 16, 16,
+          16 + MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: ContributionDialog(
+            cotisationId: cotisationId,
+            cotisationTitle: cotisationTitle,
+          ),
+        ),
       ),
     );
   }
@@ -181,33 +188,17 @@ class _ContributionDialogState extends State<ContributionDialog> {
 
     return Container(
       padding: EdgeInsets.fromLTRB(24, 24, 24, 24 + bottomInset),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.only(
-          topLeft: Radius.circular(28),
-          topRight: Radius.circular(28),
-        ),
-        border: Border(
-          top: BorderSide(color: AppColors.border, width: 1.5),
-        ),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: AppColors.border, width: 1.5),
       ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Handle bar
-            Center(
-              child: Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 4),
 
             if (_checkoutUrl == null) ...[
               Text(

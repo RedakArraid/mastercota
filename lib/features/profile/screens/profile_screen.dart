@@ -47,6 +47,15 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   // ── Helpers ──────────────────────────────────────────────
 
+  void _comingSoon(BuildContext context, String label) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('$label — bientôt disponible'),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Future<void> _openSupport() async {
     final emailUri = Uri(
       scheme: 'mailto',
@@ -79,51 +88,46 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   void _showPrivacyInline(BuildContext context) {
-    showModalBottomSheet(
+    showDialog(
       context: context,
-      isScrollControlled: true,
       useRootNavigator: true,
-      backgroundColor: Colors.transparent,
-      constraints: const BoxConstraints(maxWidth: 550),
-      builder: (_) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        maxChildSize: 0.92,
-        minChildSize: 0.4,
-        builder: (_, controller) => Container(
-          decoration: const BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-            border: Border(top: BorderSide(color: AppColors.border)),
-          ),
+      builder: (_) => Dialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 600),
           child: Column(
             children: [
-              const SizedBox(height: 12),
-              Center(
-                child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-              ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(24, 20, 24, 8),
+                padding: const EdgeInsets.fromLTRB(24, 20, 16, 8),
                 child: Row(
                   children: [
                     const Icon(Icons.lock_outline_rounded,
                         color: AppColors.primary, size: 20),
                     const SizedBox(width: 10),
-                    Text('Politique de confidentialité',
-                        style: AppTextStyles.headlineMedium
-                            .copyWith(fontWeight: FontWeight.bold)),
+                    Expanded(
+                      child: Text('Politique de confidentialité',
+                          style: AppTextStyles.headlineMedium
+                              .copyWith(fontWeight: FontWeight.bold)),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded,
+                          color: AppColors.textSecondary, size: 20),
+                      onPressed: () => Navigator.pop(_),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                   ],
                 ),
               ),
+              const Divider(color: AppColors.border, height: 1),
               Expanded(
                 child: ListView(
-                  controller: controller,
-                  padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
                   children: [
                     _PrivacySection(
                       title: 'Données collectées',
@@ -172,68 +176,40 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   void _showEditProfileSheet(BuildContext context, String? name, String? avatar) {
-    final isWide = MediaQuery.of(context).size.width > 600;
-    if (isWide) {
-      showDialog(
-        context: context,
-        useRootNavigator: true,
-        builder: (dialogContext) => Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 500),
-            child: _EditProfileSheet(
-              initialName: name,
-              initialAvatar: avatar,
-              isDialog: true,
-            ),
+    showDialog(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogContext) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: EdgeInsets.fromLTRB(
+          20, 20, 20,
+          20 + MediaQuery.of(dialogContext).viewInsets.bottom,
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 500),
+          child: _EditProfileSheet(
+            initialName: name,
+            initialAvatar: avatar,
+            isDialog: true,
           ),
         ),
-      );
-    } else {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        useRootNavigator: true,
-        backgroundColor: Colors.transparent,
-        constraints: const BoxConstraints(maxWidth: 550),
-        builder: (_) => _EditProfileSheet(
-          initialName: name,
-          initialAvatar: avatar,
-          isDialog: false,
-        ),
-      );
-    }
+      ),
+    );
   }
 
   void _showNotificationSheet(BuildContext context) {
-    final isWide = MediaQuery.of(context).size.width > 600;
-    if (isWide) {
-      showDialog(
-        context: context,
-        useRootNavigator: true,
-        builder: (dialogContext) => Dialog(
-          backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 550, maxHeight: 650),
-            child: const _NotificationSheet(isDialog: true),
-          ),
-        ),
-      );
-    } else {
-      showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        useRootNavigator: true,
+    showDialog(
+      context: context,
+      useRootNavigator: true,
+      builder: (dialogContext) => Dialog(
         backgroundColor: Colors.transparent,
-        constraints: const BoxConstraints(maxWidth: 550),
-        builder: (_) => SizedBox(
-          height: MediaQuery.of(context).size.height * 0.8,
-          child: const _NotificationSheet(isDialog: false),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 520, maxHeight: 580),
+          child: const _NotificationSheet(isDialog: true),
         ),
-      );
-    }
+      ),
+    );
   }
 
   // ── Build ─────────────────────────────────────────────────
@@ -481,13 +457,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                         _Row(
                           label: 'Sécurité',
                           value: 'Code par SMS',
-                          onTap: () {},
+                          onTap: () => _comingSoon(context, 'Sécurité'),
                         ),
                         _Row(
                           label: 'Langue',
                           value: 'Français',
                           last: true,
-                          onTap: () {},
+                          onTap: () => _comingSoon(context, 'Langue'),
                         ),
                       ],
                     ),
