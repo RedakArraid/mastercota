@@ -26,9 +26,8 @@ class CotisationDetailScreen extends ConsumerWidget {
     final formatter = NumberFormat('#,###', 'fr_FR');
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: cotAsync.when(
+      backgroundColor: AppColors.cream,
+      body: cotAsync.when(
           data: (cot) {
             if (cot == null) {
               return const Center(
@@ -58,128 +57,79 @@ class CotisationDetailScreen extends ConsumerWidget {
                 Expanded(
                   child: CustomScrollView(
                     slivers: [
-                      // ── Hero AppBar ─────────────────────────────
-                      SliverAppBar(
-                        expandedHeight: 230,
-                        pinned: true,
-                        backgroundColor: AppColors.background,
-                        leading: GestureDetector(
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            if (context.canPop()) {
-                              context.pop();
-                            } else {
-                              context.go('/home');
-                            }
-                          },
-                          child: Container(
-                            margin: const EdgeInsets.all(10),
-                            decoration: BoxDecoration(
-                              color: Colors.black.withValues(alpha: 0.45),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: const Icon(
-                              Icons.arrow_back_ios_new_rounded,
-                              color: Colors.white,
-                              size: 18,
-                            ),
-                          ),
-                        ),
-                        actions: [
-                          GestureDetector(
-                            onTap: share,
-                            child: Container(
-                              margin: const EdgeInsets.fromLTRB(0, 10, 12, 10),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 0),
-                              decoration: BoxDecoration(
-                                gradient: AppColors.primaryGradient,
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primary.withValues(alpha: 0.3),
-                                    blurRadius: 10,
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.ios_share_rounded,
-                                    size: 15,
-                                    color: Colors.black,
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    'Partager',
-                                    style: AppTextStyles.caption.copyWith(
-                                      color: Colors.black,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                        flexibleSpace: FlexibleSpaceBar(
-                          background: Container(
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: colors,
-                              ),
-                            ),
-                            child: Stack(
+                      // ── Editorial header ─────────────────────────────
+                      SliverToBoxAdapter(
+                        child: SafeArea(
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // Translucent overlay to darken it slightly
-                                Positioned.fill(
-                                  child: Container(
-                                    color: Colors.black.withValues(alpha: 0.25),
-                                  ),
-                                ),
-                                SafeArea(
-                                  child: Padding(
-                                    padding:
-                                        const EdgeInsets.fromLTRB(24, 56, 24, 24),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      mainAxisAlignment: MainAxisAlignment.end,
-                                      children: [
-                                        Text(
-                                          cot.title,
-                                          style: AppTextStyles.displayMedium.copyWith(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w800,
-                                            shadows: [
-                                              const Shadow(
-                                                color: Colors.black45,
-                                                offset: Offset(0, 2),
-                                                blurRadius: 4,
-                                              ),
-                                            ],
-                                          ),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
+                                // Top bar
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () {
+                                        HapticFeedback.lightImpact();
+                                        if (context.canPop()) context.pop();
+                                        else context.go('/home');
+                                      },
+                                      child: Container(
+                                        width: 38, height: 38,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.paper,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(color: AppColors.line),
                                         ),
-                                        if (cot.description != null && cot.description!.isNotEmpty) ...[
-                                          const SizedBox(height: 8),
-                                          Text(
-                                            cot.description!,
-                                            style: AppTextStyles.bodyMedium.copyWith(
-                                              color: Colors.white.withValues(alpha: 0.9),
-                                              fontSize: 13,
-                                            ),
-                                            maxLines: 2,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ],
-                                      ],
+                                        child: const Center(child: Text('←', style: TextStyle(fontSize: 16))),
+                                      ),
                                     ),
-                                  ),
+                                    Text('DÉTAIL', style: AppTextStyles.caption.copyWith(color: AppColors.ink3)),
+                                    GestureDetector(
+                                      onTap: share,
+                                      child: Container(
+                                        width: 38, height: 38,
+                                        decoration: BoxDecoration(
+                                          color: AppColors.paper,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(color: AppColors.line),
+                                        ),
+                                        child: const Center(child: Text('↗', style: TextStyle(fontSize: 16))),
+                                      ),
+                                    ),
+                                  ],
                                 ),
+                                const SizedBox(height: 20),
+                                // Status eyebrow
+                                Text(
+                                  cot.isActive
+                                      ? 'En cours · J−${cot.daysRemaining}'
+                                      : cot.isCompleted ? 'Objectif atteint' : 'Terminé',
+                                  style: AppTextStyles.caption.copyWith(color: AppColors.ink3),
+                                ),
+                                const SizedBox(height: 10),
+                                // Title
+                                Text(
+                                  cot.title,
+                                  style: AppTextStyles.headlineLarge.copyWith(
+                                    fontSize: 36, letterSpacing: -0.02 * 36, height: 1.02,
+                                  ),
+                                  maxLines: 3,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                if (cot.description != null && cot.description!.isNotEmpty) ...[
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    cot.description!,
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      height: 1.5, color: AppColors.ink2,
+                                    ),
+                                    maxLines: 3,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ],
+                                const SizedBox(height: 20),
                               ],
                             ),
                           ),
@@ -342,7 +292,6 @@ class CotisationDetailScreen extends ConsumerWidget {
             ),
           ),
         ),
-      ),
     );
   }
 }
@@ -362,84 +311,122 @@ class _ProgressCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final daysLeft = cot.daysRemaining.clamp(0, 9999);
-    return GlassCard(
-      padding: const EdgeInsets.all(22),
-      opacity: 0.08,
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.paper,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.line),
+      ),
+      padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 3 metrics with icons
+          // Amounts row
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _Metric(
-                icon: Icons.account_balance_wallet_outlined,
-                label: 'Collecté',
-                value: formatter.format(cot.currentAmount),
-                unit: 'FCFA',
-                color: AppColors.primary,
-              ),
-              Container(width: 1, height: 60, color: AppColors.border),
-              _Metric(
-                icon: Icons.flag_outlined,
-                label: 'Objectif',
-                value: formatter.format(cot.targetAmount),
-                unit: 'FCFA',
-                color: AppColors.textSecondary,
-              ),
-              Container(width: 1, height: 60, color: AppColors.border),
-              _Metric(
-                icon: Icons.today_outlined,
-                label: 'Jours restants',
-                value: '$daysLeft',
-                unit: 'jours',
-                color: daysLeft <= 3 ? AppColors.warning : AppColors.textPrimary,
-              ),
+              Text('Collecté', style: AppTextStyles.caption),
+              Text('Objectif', style: AppTextStyles.caption),
             ],
           ),
-          const SizedBox(height: 24),
-          // Progress
+          const SizedBox(height: 6),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                '${(progress * 100).toStringAsFixed(1)}% atteint',
-                style: AppTextStyles.titleMedium.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+                '${formatter.format(cot.currentAmount)} F',
+                style: AppTextStyles.amount.copyWith(fontSize: 38, letterSpacing: -0.03 * 38),
               ),
               Text(
-                cot.isCompleted ? '🎉 Objectif atteint !' : 'En cours…',
-                style: AppTextStyles.bodySmall.copyWith(
-                  color: cot.isCompleted
-                      ? AppColors.success
-                      : AppColors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
+                '${formatter.format(cot.targetAmount)} F',
+                style: AppTextStyles.mono.copyWith(fontSize: 14, color: AppColors.ink3),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          // Smooth Animated Progress Bar
+          const SizedBox(height: 18),
+          // Bar
           ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(999),
             child: TweenAnimationBuilder<double>(
               tween: Tween(begin: 0, end: progress),
               duration: const Duration(milliseconds: 900),
               curve: Curves.easeOutCubic,
               builder: (_, v, __) => SizedBox(
-                height: 12,
+                height: 4,
                 child: LinearProgressIndicator(
                   value: v,
-                  backgroundColor: AppColors.border,
+                  backgroundColor: AppColors.paper2,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    cot.isCompleted ? AppColors.success : AppColors.primary,
+                    cot.isCompleted ? AppColors.forest : AppColors.accentBright,
                   ),
                 ),
               ),
             ),
           ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text.rich(TextSpan(
+                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ink2),
+                children: [
+                  TextSpan(
+                    text: '${(progress * 100).toStringAsFixed(0)}%',
+                    style: AppTextStyles.mono.copyWith(color: AppColors.ink, fontSize: 11, fontWeight: FontWeight.w500),
+                  ),
+                  const TextSpan(text: ' atteint'),
+                ],
+              )),
+              Text(
+                '$daysLeft j restants',
+                style: AppTextStyles.mono.copyWith(fontSize: 11, color: AppColors.ink3),
+              ),
+            ],
+          ),
+          // Mini stats
+          const SizedBox(height: 18),
+          Container(
+            padding: const EdgeInsets.only(top: 16),
+            decoration: const BoxDecoration(
+              border: Border(top: BorderSide(color: AppColors.line)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _StatMini(value: '${(cot.progressPercent * 100).toStringAsFixed(0)}%', label: 'Atteint'),
+                Container(width: 1, height: 28, color: AppColors.line),
+                _StatMini(
+                  value: formatter.format(cot.targetAmount - cot.currentAmount),
+                  label: 'Restant F',
+                ),
+                Container(width: 1, height: 28, color: AppColors.line),
+                _StatMini(value: '$daysLeft', label: 'Jours restants'),
+              ],
+            ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _StatMini extends StatelessWidget {
+  final String value;
+  final String label;
+  const _StatMini({required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(value, style: AppTextStyles.mono.copyWith(fontSize: 16, letterSpacing: -0.01 * 16)),
+        const SizedBox(height: 2),
+        Text(label, style: AppTextStyles.caption.copyWith(fontSize: 10, letterSpacing: 0)),
+      ],
     );
   }
 }
@@ -495,58 +482,42 @@ class _ShareLinkCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final link = 'mastercota.com/c/${cot.slug}';
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      opacity: 0.05,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.line, style: BorderStyle.solid),
+        borderRadius: BorderRadius.circular(14),
+      ),
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Lien de partage',
-                  style: AppTextStyles.labelLarge.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  link,
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.primary,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+            child: Text(
+              link,
+              style: AppTextStyles.mono.copyWith(fontSize: 11, color: AppColors.ink3),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 10),
           GestureDetector(
             onTap: () {
               Clipboard.setData(ClipboardData(text: 'https://$link'));
               HapticFeedback.lightImpact();
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Lien copié ! 📋'),
-                  backgroundColor: AppColors.success,
-                ),
+                const SnackBar(content: Text('Lien copié')),
               );
             },
             child: Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               decoration: BoxDecoration(
-                color: AppColors.primary.withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: AppColors.primary.withValues(alpha: 0.25),
-                ),
+                color: AppColors.ink,
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(color: AppColors.ink),
               ),
-              child: const Icon(
-                Icons.copy_all_rounded,
-                color: AppColors.primary,
-                size: 20,
+              child: Text(
+                'WhatsApp',
+                style: AppTextStyles.caption.copyWith(
+                  color: Colors.white, fontSize: 11, fontWeight: FontWeight.w500, letterSpacing: 0,
+                ),
               ),
             ),
           ),
@@ -649,23 +620,20 @@ class _ContributionsList extends StatelessWidget {
                 ),
                 child: Row(
                   children: [
-                    // Avatar with gradient
+                    // Avatar initial
                     Container(
-                      width: 44,
-                      height: 44,
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: AppColors.cardGradients[gradIdx],
-                        ),
-                        borderRadius: BorderRadius.circular(12),
+                        color: AppColors.ink,
+                        shape: BoxShape.circle,
                       ),
                       child: Center(
                         child: Text(
                           initials,
-                          style: const TextStyle(
+                          style: AppTextStyles.bodyMedium.copyWith(
                             color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),

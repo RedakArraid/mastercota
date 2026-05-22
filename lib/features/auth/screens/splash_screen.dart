@@ -15,36 +15,15 @@ class SplashScreen extends ConsumerStatefulWidget {
   ConsumerState<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends ConsumerState<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _logoAnimation;
-
+class _SplashScreenState extends ConsumerState<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 2200),
-    );
-
-    _logoAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutBack,
-    );
-
-    _controller.forward();
     _navigate();
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
   Future<void> _navigate() async {
-    await Future.delayed(const Duration(milliseconds: 2800));
+    await Future.delayed(const Duration(milliseconds: 2400));
     if (!mounted) return;
     if (SupabaseService.isAuthenticated) {
       context.go('/home');
@@ -56,126 +35,59 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: Stack(
-          children: [
-            // Soft background glows
-            Positioned(
-              top: -100,
-              left: -100,
-              child: Container(
-                width: 300,
-                height: 300,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.primary.withValues(alpha: 0.08),
-                ),
-              ).animate().fadeIn(duration: 800.ms),
-            ),
-            Positioned(
-              bottom: -50,
-              right: -50,
-              child: Container(
-                width: 250,
-                height: 250,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.accent.withValues(alpha: 0.06),
-                ),
-              ).animate().fadeIn(duration: 800.ms),
-            ),
-            
-            // Central content
-            Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  AnimatedBuilder(
-                    animation: _logoAnimation,
-                    builder: (context, child) {
-                      return Transform.scale(
-                        scale: 0.6 + (_logoAnimation.value * 0.4),
-                        child: MasterCotaLogo(
-                          size: 110,
-                          animationProgress: _logoAnimation.value,
-                        ),
-                      );
-                    },
+      backgroundColor: AppColors.cream,
+      body: Stack(
+        children: [
+          // ── Centered logo + tagline ─────────────────────────
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                MasterCotaLogo(size: 80, animationProgress: 1.0)
+                    .animate()
+                    .fadeIn(duration: 600.ms)
+                    .scale(begin: const Offset(0.85, 0.85), duration: 600.ms, curve: Curves.easeOutBack),
+
+                const SizedBox(height: 16),
+
+                Text(
+                  AppConstants.appTagline,
+                  style: AppTextStyles.bodySmall.copyWith(
+                    color: AppColors.ink3,
+                    letterSpacing: 0.02 * 13,
                   ),
-                  const SizedBox(height: 32),
-                  
-                  RichText(
-                    text: const TextSpan(
-                      style: TextStyle(
-                        fontSize: 34,
-                        fontWeight: FontWeight.w800,
-                        fontFamily: 'Plus Jakarta Sans',
-                        letterSpacing: -0.5,
-                      ),
-                      children: [
-                        TextSpan(
-                          text: 'Master',
-                          style: TextStyle(color: AppColors.textPrimary),
-                        ),
-                        TextSpan(
-                          text: 'Cota',
-                          style: TextStyle(color: AppColors.primary),
-                        ),
-                      ],
-                    ),
-                  )
-                      .animate()
-                      .fadeIn(delay: 400.ms, duration: 600.ms)
-                      .slideY(begin: 0.2, end: 0, curve: Curves.easeOutQuad)
-                      .shimmer(delay: 1500.ms, duration: 1200.ms, color: Colors.white30),
-                      
-                  const SizedBox(height: 10),
-                  
-                  Text(
-                    AppConstants.appTagline,
-                    style: AppTextStyles.bodyMedium.copyWith(
-                      color: AppColors.textSecondary.withValues(alpha: 0.8),
-                      letterSpacing: 0.2,
-                    ),
-                  )
-                      .animate()
-                      .fadeIn(delay: 700.ms, duration: 600.ms)
-                      .slideY(begin: 0.1, end: 0),
-                  
-                  const SizedBox(height: 72),
-                  
-                  // Premium loading dots
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(3, (i) {
-                      return Container(
-                        width: 7,
-                        height: 7,
-                        margin: const EdgeInsets.symmetric(horizontal: 5),
-                        decoration: BoxDecoration(
-                          gradient: AppColors.primaryGradient,
-                          shape: BoxShape.circle,
-                        ),
-                      )
-                          .animate(
-                            delay: Duration(milliseconds: 900 + (i * 180)),
-                            onPlay: (c) => c.repeat(reverse: true),
-                          )
-                          ..scaleXY(
-                            begin: 0.4,
-                            end: 1.3,
-                            duration: 650.ms,
-                            curve: Curves.easeInOut,
-                          )
-                          .fadeIn(duration: 400.ms);
-                    }),
-                  ),
-                ],
-              ),
+                ).animate().fadeIn(delay: 400.ms, duration: 500.ms),
+              ],
             ),
-          ],
-        ),
+          ),
+
+          // ── Loader dots ────────────────────────────────────
+          Positioned(
+            bottom: 80,
+            left: 0,
+            right: 0,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(3, (i) {
+                return Container(
+                  width: 6,
+                  height: 6,
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  decoration: BoxDecoration(
+                    color: i == 1 ? AppColors.accentBright : AppColors.paper2,
+                    shape: BoxShape.circle,
+                  ),
+                )
+                    .animate(
+                      delay: Duration(milliseconds: 800 + i * 180),
+                      onPlay: (c) => c.repeat(reverse: true),
+                    )
+                    .scaleXY(begin: 0.5, end: 1.3, duration: 600.ms, curve: Curves.easeInOut)
+                    .fadeIn(duration: 300.ms);
+              }),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -5,80 +5,98 @@ import 'app_colors.dart';
 class AppTextStyles {
   AppTextStyles._();
 
-  static TextStyle get displayLarge => GoogleFonts.plusJakartaSans(
+  // ── Display — Geist, letterSpacing tight ──────────────────────
+  static TextStyle get displayLarge => GoogleFonts.dmSans(
         fontSize: 32,
-        fontWeight: FontWeight.w800,
-        color: AppColors.textPrimary,
-        letterSpacing: -0.5,
+        fontWeight: FontWeight.w700,
+        color: AppColors.ink,
+        letterSpacing: -0.64,
       );
 
-  static TextStyle get displayMedium => GoogleFonts.plusJakartaSans(
+  static TextStyle get displayMedium => GoogleFonts.dmSans(
         fontSize: 26,
-        fontWeight: FontWeight.w700,
-        color: AppColors.textPrimary,
-        letterSpacing: -0.3,
+        fontWeight: FontWeight.w600,
+        color: AppColors.ink,
+        letterSpacing: -0.52,
       );
 
-  static TextStyle get headlineLarge => GoogleFonts.plusJakartaSans(
+  static TextStyle get headlineLarge => GoogleFonts.dmSans(
         fontSize: 22,
-        fontWeight: FontWeight.w700,
-        color: AppColors.textPrimary,
+        fontWeight: FontWeight.w600,
+        color: AppColors.ink,
+        letterSpacing: -0.22,
       );
 
-  static TextStyle get headlineMedium => GoogleFonts.plusJakartaSans(
+  static TextStyle get headlineMedium => GoogleFonts.dmSans(
         fontSize: 18,
         fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
+        color: AppColors.ink,
       );
 
-  static TextStyle get titleLarge => GoogleFonts.plusJakartaSans(
+  static TextStyle get titleLarge => GoogleFonts.dmSans(
         fontSize: 16,
-        fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
+        fontWeight: FontWeight.w500,
+        color: AppColors.ink,
       );
 
-  static TextStyle get titleMedium => GoogleFonts.plusJakartaSans(
+  static TextStyle get titleMedium => GoogleFonts.dmSans(
         fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
+        fontWeight: FontWeight.w500,
+        color: AppColors.ink,
       );
 
-  static TextStyle get bodyLarge => GoogleFonts.plusJakartaSans(
+  static TextStyle get bodyLarge => GoogleFonts.dmSans(
         fontSize: 16,
         fontWeight: FontWeight.w400,
-        color: AppColors.textPrimary,
+        color: AppColors.ink,
       );
 
-  static TextStyle get bodyMedium => GoogleFonts.plusJakartaSans(
+  static TextStyle get bodyMedium => GoogleFonts.dmSans(
         fontSize: 14,
         fontWeight: FontWeight.w400,
-        color: AppColors.textSecondary,
+        color: AppColors.ink2,
       );
 
-  static TextStyle get bodySmall => GoogleFonts.plusJakartaSans(
+  static TextStyle get bodySmall => GoogleFonts.dmSans(
         fontSize: 12,
         fontWeight: FontWeight.w400,
-        color: AppColors.textSecondary,
+        color: AppColors.ink2,
       );
 
-  static TextStyle get labelLarge => GoogleFonts.plusJakartaSans(
+  static TextStyle get labelLarge => GoogleFonts.dmSans(
         fontSize: 14,
-        fontWeight: FontWeight.w600,
-        color: AppColors.textPrimary,
+        fontWeight: FontWeight.w500,
+        color: AppColors.ink,
         letterSpacing: 0.1,
       );
 
-  static TextStyle get caption => GoogleFonts.plusJakartaSans(
+  // EYEBROW — small caps label
+  static TextStyle get caption => GoogleFonts.dmSans(
         fontSize: 11,
         fontWeight: FontWeight.w500,
-        color: AppColors.textTertiary,
-        letterSpacing: 0.4,
+        color: AppColors.ink3,
+        letterSpacing: 0.06 * 11,
       );
 
-  static TextStyle get amount => GoogleFonts.plusJakartaSans(
+  // MONO — financial amounts
+  static TextStyle get amount => GoogleFonts.dmMono(
         fontSize: 28,
-        fontWeight: FontWeight.w800,
-        color: AppColors.primary,
-        letterSpacing: -0.5,
+        fontWeight: FontWeight.w500,
+        color: AppColors.ink,
+        letterSpacing: -0.56,
+      );
+
+  static TextStyle get mono => GoogleFonts.dmMono(
+        fontSize: 14,
+        fontWeight: FontWeight.w400,
+        color: AppColors.ink,
+      );
+
+  // Newsreader italic accent
+  static TextStyle get serifItalic => GoogleFonts.newsreader(
+        fontSize: 16,
+        fontStyle: FontStyle.italic,
+        fontWeight: FontWeight.w400,
+        color: AppColors.accent,
       );
 }

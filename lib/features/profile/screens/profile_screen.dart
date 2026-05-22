@@ -8,7 +8,6 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
-import '../../../core/widgets/glass_card.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -276,25 +275,44 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     final avatarUrl = profile?['avatar_url'] as String? ?? '👤';
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: SafeArea(
+      backgroundColor: AppColors.cream,
+      body: SafeArea(
           child: Column(
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 16, 24, 0),
-                child: Row(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                          size: 20),
-                      onPressed: () {
-                        context.go('/home');
-                      },
-                      color: AppColors.textPrimary,
+                    GestureDetector(
+                      onTap: () => context.go('/home'),
+                      child: Container(
+                        width: 38, height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.paper,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.line),
+                        ),
+                        child: const Center(child: Text('←', style: TextStyle(fontSize: 16))),
+                      ),
                     ),
-                    Text('Profil', style: AppTextStyles.headlineLarge),
+                    const SizedBox(height: 16),
+                    Text('COMPTE', style: AppTextStyles.caption.copyWith(color: AppColors.ink3)),
+                    const SizedBox(height: 6),
+                    RichText(
+                      text: TextSpan(
+                        style: AppTextStyles.displayMedium.copyWith(fontSize: 28, letterSpacing: -0.7, height: 1.05),
+                        children: [
+                          const TextSpan(text: 'Votre '),
+                          TextSpan(
+                            text: 'profil.',
+                            style: AppTextStyles.serifItalic.copyWith(fontSize: 28, letterSpacing: -0.7),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
@@ -305,8 +323,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   child: Column(
                     children: [
                       // User header card
-                      GlassCard(
+                      Container(
                         padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: AppColors.paper,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.line),
+                        ),
                         child: Column(
                           children: [
                             GestureDetector(
@@ -314,25 +337,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                               child: Stack(
                                 children: [
                                   Container(
-                                    width: 88,
-                                    height: 88,
+                                    width: 80,
+                                    height: 80,
                                     decoration: BoxDecoration(
-                                      gradient: AppColors.primaryGradient,
-                                      borderRadius: BorderRadius.circular(28),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: AppColors.primary
-                                              .withValues(alpha: 0.3),
-                                          blurRadius: 24,
-                                          spreadRadius: 1,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
+                                      color: AppColors.ink,
+                                      shape: BoxShape.circle,
                                     ),
                                     child: Center(
                                       child: Text(
-                                        avatarUrl,
-                                        style: const TextStyle(fontSize: 38),
+                                        (name != null && name.trim().isNotEmpty)
+                                            ? name.trim()[0].toUpperCase()
+                                            : (phone.isNotEmpty ? phone[phone.length > 2 ? phone.length - 2 : 0] : '?'),
+                                        style: AppTextStyles.headlineLarge.copyWith(
+                                          color: Colors.white,
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.w700,
+                                        ),
                                       ),
                                     ),
                                   )
@@ -348,10 +368,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                     child: Container(
                                       padding: const EdgeInsets.all(6),
                                       decoration: BoxDecoration(
-                                        color: AppColors.primary,
+                                        color: AppColors.accentBright,
                                         shape: BoxShape.circle,
-                                        border: Border.all(
-                                            color: AppColors.surface, width: 2),
+                                        border: Border.all(color: AppColors.cream, width: 2),
                                       ),
                                       child: const Icon(
                                         Icons.edit_rounded,
@@ -446,8 +465,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       const SizedBox(height: 28),
 
                       // Options card
-                      GlassCard(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppColors.paper,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: AppColors.line),
+                        ),
                         child: Column(
                           children: [
                             profileAsync.maybeWhen(
@@ -546,13 +569,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                             context.go('/auth/phone');
                           }
                         },
-                        child: GlassCard(
-                          opacity: 0.03,
-                          border: Border.all(
-                              color:
-                                  AppColors.error.withValues(alpha: 0.2)),
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 16),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          decoration: BoxDecoration(
+                            color: AppColors.paper,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppColors.error.withValues(alpha: 0.2)),
+                          ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -579,7 +602,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             ],
           ),
         ),
-      ),
     );
   }
 

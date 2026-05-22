@@ -9,7 +9,6 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_text_field.dart';
-import '../../../core/widgets/glass_card.dart';
 
 class CreateCotisationScreen extends ConsumerStatefulWidget {
   const CreateCotisationScreen({super.key});
@@ -44,8 +43,8 @@ class _CreateCotisationScreenState
       firstDate: now.add(const Duration(days: 1)),
       lastDate: now.add(const Duration(days: 365)),
       builder: (ctx, child) => Theme(
-        data: ThemeData.dark().copyWith(
-          colorScheme: const ColorScheme.dark(primary: AppColors.primary),
+        data: ThemeData.light().copyWith(
+          colorScheme: const ColorScheme.light(primary: AppColors.ink, onPrimary: Colors.white),
         ),
         child: child!,
       ),
@@ -117,16 +116,9 @@ class _CreateCotisationScreenState
         child: Container(
           padding: const EdgeInsets.all(28),
           decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 40,
-                offset: const Offset(0, 12),
-              ),
-            ],
+            color: AppColors.paper,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppColors.line),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -241,31 +233,49 @@ class _CreateCotisationScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        decoration:
-            const BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: SafeArea(
+      backgroundColor: AppColors.cream,
+      body: SafeArea(
           child: Column(
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 16, 24, 0),
-                child: Row(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                          size: 20),
-                      onPressed: () {
-                        if (context.canPop()) {
-                          context.pop();
-                        } else {
-                          context.go('/home');
-                        }
-                      },
-                      color: AppColors.textPrimary,
+                    GestureDetector(
+                      onTap: () => context.canPop() ? context.pop() : context.go('/home'),
+                      child: Container(
+                        width: 38, height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.paper,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.line),
+                        ),
+                        child: const Center(child: Text('←', style: TextStyle(fontSize: 16))),
+                      ),
                     ),
-                    Text('Nouvelle cotisation',
-                        style: AppTextStyles.headlineLarge),
+                    const SizedBox(height: 20),
+                    Text('NOUVELLE COTISATION', style: AppTextStyles.caption.copyWith(color: AppColors.ink3)),
+                    const SizedBox(height: 8),
+                    RichText(
+                      text: TextSpan(
+                        style: AppTextStyles.displayMedium.copyWith(fontSize: 32, letterSpacing: -0.8, height: 1.05),
+                        children: [
+                          const TextSpan(text: 'Lancez votre\n'),
+                          TextSpan(
+                            text: 'cagnotte.',
+                            style: AppTextStyles.serifItalic.copyWith(fontSize: 32, letterSpacing: -0.8),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Créez une cagnotte transparente pour vos événements.',
+                      style: AppTextStyles.bodyMedium.copyWith(height: 1.55, color: AppColors.ink2),
+                    ),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),
@@ -273,68 +283,20 @@ class _CreateCotisationScreenState
               // Scrollable form
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Form(
                     key: _formKey,
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Hero illustration
-                        GlassCard(
-                          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-                          opacity: 0.05,
-                          child: Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primary.withValues(alpha: 0.1),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: AppColors.primary.withValues(alpha: 0.3),
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.ads_click_rounded,
-                                  size: 32,
-                                  color: AppColors.primary,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Définissez votre projet',
-                                      style: AppTextStyles.titleLarge,
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Créez une cagnotte transparente pour vos événements',
-                                      style: AppTextStyles.bodySmall.copyWith(
-                                        color: AppColors.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        )
-                            .animate()
-                            .fadeIn(duration: 400.ms)
-                            .slideY(
-                                begin: -0.05,
-                                end: 0,
-                                duration: 400.ms,
-                                curve: Curves.easeOut),
-
-                        const SizedBox(height: 24),
-
-                        // Form content wrapped in GlassCard
-                        GlassCard(
+                        // Form content
+                        Container(
                           padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: AppColors.paper,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppColors.line),
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -440,7 +402,7 @@ class _CreateCotisationScreenState
                           ),
                         ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
 
-                        const SizedBox(height: 32),
+                        const SizedBox(height: 24),
 
                         AppButton(
                           label: 'Créer ma cotisation ✨',
@@ -457,7 +419,6 @@ class _CreateCotisationScreenState
             ],
           ),
         ),
-      ),
     );
   }
 }

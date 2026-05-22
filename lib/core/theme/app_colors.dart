@@ -3,61 +3,67 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // ── Backgrounds (Premium Light Warm Grey/Blue) ────────────────
-  static const Color background = Color(0xFFF5F7FB);
-  static const Color surface = Color(0xFFFFFFFF);
-  static const Color surfaceElevated = Color(0xFFF8FAFC);
-  static const Color border = Color(0xFFE2E8F0);
-  static const Color borderLight = Color(0xFFF1F5F9);
+  // ── Core palette — navy + gold + white ──────────────────────
+  static const Color ink  = Color(0xFF143268);
+  static const Color ink2 = Color(0xFF2B4575);
+  static const Color ink3 = Color(0xFF6B7A95);
+  static const Color ink4 = Color(0xFFA8B2C4);
 
-  // ── Primary — Brand Gold (warmth, wealth, success) ───────────
-  static const Color primary = Color(0xFFEEA226);
-  static const Color primaryDark = Color(0xFFC78114);
-  static const Color primaryGlow = Color(0x22EEA226);
+  static const Color accent      = Color(0xFFDA9810);
+  static const Color accentBright = Color(0xFFF4B829);
+  static const Color accentDark   = Color(0xFFA87708);
+  static const Color accentSoft   = Color(0x14DA9810); // 8%
+  static const Color accentLine   = Color(0x33DA9810); // 20%
 
-  // ── Accent — Royal Blue (trust, stability) ───────────────────
-  static const Color accent = Color(0xFF1E5BB4);
-  static const Color accentDark = Color(0xFF123E80);
-  static const Color accentGlow = Color(0x221E5BB4);
+  static const Color cream  = Color(0xFFFFFFFF);
+  static const Color paper  = Color(0xFFFAFBFD);
+  static const Color paper2 = Color(0xFFEEF2F8);
 
-  // ── Status ────────────────────────────────────────────────
-  static const Color success = Color(0xFF00C853);
-  static const Color error = Color(0xFFD50000);
-  static const Color warning = Color(0xFFFFAB00);
+  static const Color forest     = Color(0xFF2D6A4F);
+  static const Color forestSoft = Color(0x1A2D6A4F);
+  static const Color warn       = Color(0xFFB8731A);
+  static const Color error      = Color(0xFFD50000);
 
-  // ── Text (Deep Navy for readability) ──────────────────────
-  static const Color textPrimary = Color(0xFF0A1120);
-  static const Color textSecondary = Color(0xFF475569);
-  static const Color textTertiary = Color(0xFF94A3B8);
+  static const Color line     = Color(0x1A143268); // rgba(20,50,104,0.10)
+  static const Color lineSoft = Color(0x0F143268); // rgba(20,50,104,0.06)
 
-  // ── Gradients ─────────────────────────────────────────────
+  // ── Backward-compat aliases (existing widgets compile unchanged) ─
+  static const Color background      = cream;
+  static const Color surface         = paper;
+  static const Color surfaceElevated = paper2;
+  static const Color border          = line;
+  static const Color borderLight     = paper2;
+  static const Color primary         = accentBright;
+  static const Color primaryDark     = accentDark;
+  static const Color primaryGlow     = accentSoft;
+  static const Color textPrimary     = ink;
+  static const Color textSecondary   = ink2;
+  static const Color textTertiary    = ink3;
+  static const Color success         = forest;
+  static const Color warning         = warn;
+
+  // ── Gradients ─────────────────────────────────────────────────
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFFF5B842), Color(0xFFEEA226)],
+    colors: [accentBright, accent],
   );
 
   static const LinearGradient backgroundGradient = LinearGradient(
     begin: Alignment.topCenter,
     end: Alignment.bottomCenter,
-    colors: [Color(0xFFFFFFFF), Color(0xFFF5F7FB)],
+    colors: [cream, paper],
   );
 
   static const LinearGradient accentGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [Color(0xFF2C74E0), Color(0xFF1E5BB4)],
+    colors: [accentBright, accent],
   );
 
-  // ── Card gradients (harmonized premium gradients for cotisations)
+  // ── Card gradient list (kept for backward compat, no longer used) ─
   static const List<List<Color>> cardGradients = [
-    [Color(0xFF1E3C72), Color(0xFF2A5298)], // Royal Blue
-    [Color(0xFF3A6073), Color(0xFF52788C)], // Muted Teal
-    [Color(0xFF4A00E0), Color(0xFF8E2DE2)], // Purple Indigo
-    [Color(0xFF1F4037), Color(0xFF387A65)], // Emerald Pine
-    [Color(0xFF0F2027), Color(0xFF2C5364)], // Slate Navy
-    [Color(0xFFD38312), Color(0xFFA83279)], // Gold Magenta
-    [Color(0xFF800080), Color(0xFFFF007F)], // Violet Rose
-    [Color(0xFF13223F), Color(0xFF1F355E)], // Glass Navy
+    [ink,  ink2], [ink2, ink3], [ink,  ink2], [forest, Color(0xFF387A65)],
+    [ink,  ink2], [accent, accentDark], [ink2, ink], [ink, ink2],
   ];
 }

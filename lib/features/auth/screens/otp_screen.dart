@@ -84,138 +84,156 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
   @override
   Widget build(BuildContext context) {
     final defaultTheme = PinTheme(
-      width: 50,
-      height: 58,
-      textStyle: AppTextStyles.headlineLarge.copyWith(
-        fontWeight: FontWeight.bold,
-        color: Colors.white,
+      width: 48,
+      height: 56,
+      textStyle: AppTextStyles.mono.copyWith(
+        fontSize: 28,
+        fontWeight: FontWeight.w500,
+        color: AppColors.ink,
       ),
       decoration: BoxDecoration(
-        color: AppColors.surfaceElevated,
+        color: AppColors.paper,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.line),
       ),
     );
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 20),
+      backgroundColor: AppColors.cream,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 20),
 
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                  onPressed: () => context.pop(),
-                  color: AppColors.textPrimary,
-                  padding: EdgeInsets.zero,
+              GestureDetector(
+                onTap: () => context.pop(),
+                child: Container(
+                  width: 38, height: 38,
+                  decoration: BoxDecoration(
+                    color: AppColors.paper,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.line),
+                  ),
+                  child: const Center(child: Text('←', style: TextStyle(fontSize: 16))),
                 ),
+              ),
 
-                const SizedBox(height: 32),
+              const SizedBox(height: 24),
 
-                Text('Code de vérification', style: AppTextStyles.displayMedium)
-                    .animate()
-                    .fadeIn(delay: 100.ms)
-                    .slideX(begin: -0.06),
+              Text('CONNEXION · 02', style: AppTextStyles.caption.copyWith(color: AppColors.ink3))
+                  .animate().fadeIn(delay: 50.ms),
 
-                const SizedBox(height: 12),
+              const SizedBox(height: 12),
 
-                RichText(
-                  text: TextSpan(
-                    style: AppTextStyles.bodyMedium.copyWith(height: 1.6),
-                    children: [
-                      const TextSpan(text: 'Code envoyé au '),
-                      TextSpan(
-                        text: widget.phone,
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+              RichText(
+                text: TextSpan(
+                  style: AppTextStyles.displayMedium.copyWith(
+                    fontSize: 36, letterSpacing: -0.025 * 36, height: 1.02,
                   ),
-                ).animate().fadeIn(delay: 200.ms),
-
-                const SizedBox(height: 48),
-
-                Center(
-                  child: Pinput(
-                    controller: _otpController,
-                    length: 6,
-                    defaultPinTheme: defaultTheme,
-                    focusedPinTheme: defaultTheme.copyWith(
-                      decoration: defaultTheme.decoration!.copyWith(
-                        border: Border.all(color: AppColors.primary, width: 1.5),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.15),
-                            blurRadius: 12,
-                            spreadRadius: 1,
-                          ),
-                        ],
+                  children: [
+                    const TextSpan(text: 'Code reçu ?\n'),
+                    TextSpan(
+                      text: 'Saisissez-le.',
+                      style: AppTextStyles.serifItalic.copyWith(
+                        fontSize: 36, letterSpacing: -0.025 * 36,
                       ),
                     ),
-                    submittedPinTheme: defaultTheme.copyWith(
-                      decoration: defaultTheme.decoration!.copyWith(
-                        color: AppColors.primary.withValues(alpha: 0.08),
-                        border: Border.all(color: AppColors.primary),
-                      ),
+                  ],
+                ),
+              ).animate().fadeIn(delay: 100.ms).slideX(begin: -0.06),
+
+              const SizedBox(height: 12),
+
+              Text.rich(
+                TextSpan(
+                  style: AppTextStyles.bodyMedium.copyWith(height: 1.55, color: AppColors.ink2),
+                  children: [
+                    const TextSpan(text: 'Un SMS à 6 chiffres a été envoyé au '),
+                    TextSpan(
+                      text: widget.phone,
+                      style: AppTextStyles.mono.copyWith(color: AppColors.ink, fontSize: 14),
                     ),
-                    keyboardType: TextInputType.number,
-                    animationCurve: Curves.easeInOut,
-                    animationDuration: const Duration(milliseconds: 150),
-                    onCompleted: (_) => _verify(),
+                    const TextSpan(text: '.'),
+                  ],
+                ),
+              ).animate().fadeIn(delay: 200.ms),
+
+              const SizedBox(height: 36),
+
+              Center(
+                child: Pinput(
+                  controller: _otpController,
+                  length: 6,
+                  defaultPinTheme: defaultTheme,
+                  focusedPinTheme: defaultTheme.copyWith(
+                    decoration: defaultTheme.decoration!.copyWith(
+                      border: Border.all(color: AppColors.ink, width: 1.5),
+                    ),
                   ),
-                ).animate().fadeIn(delay: 300.ms).scale(
-                      begin: const Offset(0.95, 0.95),
-                      duration: 400.ms,
-                      curve: Curves.easeOut,
+                  submittedPinTheme: defaultTheme.copyWith(
+                    decoration: defaultTheme.decoration!.copyWith(
+                      color: AppColors.paper,
+                      border: Border.all(color: AppColors.line),
                     ),
+                  ),
+                  keyboardType: TextInputType.number,
+                  animationCurve: Curves.easeInOut,
+                  animationDuration: const Duration(milliseconds: 150),
+                  onCompleted: (_) => _verify(),
+                ),
+              ).animate().fadeIn(delay: 300.ms).scale(begin: const Offset(0.95, 0.95), duration: 400.ms),
 
-                const SizedBox(height: 36),
+              const SizedBox(height: 22),
 
-                Center(
-                  child: _canResend
-                      ? TextButton(
-                          onPressed: _resend,
-                          child: Text(
-                            'Renvoyer le code',
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        )
-                      : Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.03),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            'Renvoyer dans $_resendSeconds s',
-                            style: AppTextStyles.bodyMedium.copyWith(
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                ).animate().fadeIn(delay: 400.ms),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _canResend
+                        ? 'Prêt à renvoyer'
+                        : 'Renvoyer dans ${_resendSeconds.toString().padLeft(2, '0')}s',
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ink3),
+                  ),
+                  GestureDetector(
+                    onTap: _canResend ? _resend : null,
+                    child: Text(
+                      'Changer de numéro',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        color: _canResend ? AppColors.ink : AppColors.ink4,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ).animate().fadeIn(delay: 400.ms),
 
-                const Spacer(),
+              const Spacer(),
 
-                AppButton(
-                  label: 'Vérifier',
-                  onPressed: _isLoading ? null : _verify,
-                  isLoading: _isLoading,
-                ).animate().fadeIn(delay: 450.ms),
+              GestureDetector(
+                onTap: _isLoading ? null : _verify,
+                child: Container(
+                  width: double.infinity,
+                  height: 54,
+                  decoration: BoxDecoration(
+                    color: AppColors.accentBright,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Center(
+                    child: _isLoading
+                        ? const SizedBox(width: 18, height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : Text('Vérifier →',
+                            style: AppTextStyles.bodyLarge.copyWith(
+                              color: Colors.white, fontWeight: FontWeight.w500)),
+                  ),
+                ),
+              ).animate().fadeIn(delay: 450.ms),
 
-                const SizedBox(height: 24),
-              ],
-            ),
+              const SizedBox(height: 24),
+            ],
           ),
         ),
       ),

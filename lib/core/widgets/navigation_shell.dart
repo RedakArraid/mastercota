@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
@@ -16,118 +15,68 @@ class NavigationShell extends StatelessWidget {
   });
 
   int _getSelectedIndex() {
-    final location = state.matchedLocation;
-    if (location.startsWith('/profile')) return 1;
-    return 0; // Default to Home
+    final loc = state.matchedLocation;
+    if (loc.startsWith('/profile')) return 2;
+    return 0;
   }
 
   void _onItemTapped(BuildContext context, int index) {
     HapticFeedback.lightImpact();
-    if (index == 0) {
-      context.go('/home');
-    } else if (index == 1) {
-      context.go('/profile');
+    switch (index) {
+      case 0: context.go('/home'); break;
+      case 1: context.push('/cotisation/create'); break;
+      case 2: context.go('/profile'); break;
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final selectedIndex = _getSelectedIndex();
+    final selected = _getSelectedIndex();
 
     return Scaffold(
+      backgroundColor: AppColors.cream,
       body: Stack(
         children: [
-          // Content
-          Positioned.fill(
-            child: child,
-          ),
-          
-          // Bottom Navigation Bar
+          Positioned.fill(child: child),
+
+          // ── Pill nav bar (navy, gold active) ──────────────────
           Positioned(
-            left: 20,
-            right: 20,
+            left: 16,
+            right: 16,
             bottom: 24,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(24),
-              child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                child: Container(
-                  height: 76,
-                  decoration: BoxDecoration(
-                    color: AppColors.surface.withValues(alpha: 0.85),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.08),
-                      width: 1.2,
-                    ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.3),
-                        blurRadius: 24,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
+            child: Container(
+              height: 60,
+              decoration: BoxDecoration(
+                color: AppColors.ink,
+                borderRadius: BorderRadius.circular(100),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.ink.withValues(alpha: 0.25),
+                    blurRadius: 20,
+                    offset: const Offset(0, 8),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      // Home Tab
-                      _NavBarItem(
-                        icon: Icons.dashboard_rounded,
-                        label: 'Accueil',
-                        isSelected: selectedIndex == 0,
-                        onTap: () => _onItemTapped(context, 0),
-                      ),
-                      
-                      // FAB Center Placeholder
-                      const SizedBox(width: 48),
-                      
-                      // Profile Tab
-                      _NavBarItem(
-                        icon: Icons.person_rounded,
-                        label: 'Profil',
-                        isSelected: selectedIndex == 1,
-                        onTap: () => _onItemTapped(context, 1),
-                      ),
-                    ],
-                  ),
-                ),
+                ],
               ),
-            ),
-          ),
-          
-          // Elevated Floating Action Button (FAB)
-          Positioned(
-            bottom: 42,
-            left: MediaQuery.of(context).size.width / 2 - 30,
-            child: GestureDetector(
-              onTap: () {
-                HapticFeedback.mediumImpact();
-                context.push('/cotisation/create');
-              },
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: BoxDecoration(
-                  gradient: AppColors.primaryGradient,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.45),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6),
-                    ),
-                  ],
-                  border: Border.all(
-                    color: AppColors.surface,
-                    width: 3.0,
+              padding: const EdgeInsets.all(6),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _NavItem(
+                    label: 'Accueil',
+                    isSelected: selected == 0,
+                    onTap: () => _onItemTapped(context, 0),
                   ),
-                ),
-                child: const Icon(
-                  Icons.add_rounded,
-                  color: Colors.black,
-                  size: 32,
-                ),
+                  _NavItem(
+                    label: '＋ Créer',
+                    isSelected: selected == 1,
+                    onTap: () => _onItemTapped(context, 1),
+                  ),
+                  _NavItem(
+                    label: 'Profil',
+                    isSelected: selected == 2,
+                    onTap: () => _onItemTapped(context, 2),
+                  ),
+                ],
               ),
             ),
           ),
@@ -137,14 +86,12 @@ class NavigationShell extends StatelessWidget {
   }
 }
 
-class _NavBarItem extends StatelessWidget {
-  final IconData icon;
+class _NavItem extends StatelessWidget {
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
 
-  const _NavBarItem({
-    required this.icon,
+  const _NavItem({
     required this.label,
     required this.isSelected,
     required this.onTap,
@@ -153,35 +100,25 @@ class _NavBarItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
       onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            decoration: BoxDecoration(
-              color: isSelected 
-                  ? AppColors.primary.withValues(alpha: 0.12)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(
-              icon,
-              color: isSelected ? AppColors.primary : AppColors.textSecondary,
-              size: 24,
-            ),
-          ),
-          const SizedBox(height: 3),
-          Text(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
+        height: 48,
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.accentBright : Colors.transparent,
+          borderRadius: BorderRadius.circular(100),
+        ),
+        child: Center(
+          child: Text(
             label,
-            style: AppTextStyles.caption.copyWith(
-              color: isSelected ? AppColors.primary : AppColors.textSecondary,
-              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            style: AppTextStyles.bodySmall.copyWith(
+              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.6),
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              fontSize: 13,
             ),
           ),
-        ],
+        ),
       ),
     );
   }

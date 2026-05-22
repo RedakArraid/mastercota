@@ -158,33 +158,44 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
     final profileAsync = ref.watch(userProfileProvider);
 
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(gradient: AppColors.backgroundGradient),
-        child: SafeArea(
+      backgroundColor: AppColors.cream,
+      body: SafeArea(
           child: Column(
             children: [
               // Custom Header
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 16, 24, 0),
-                child: Row(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                      onPressed: () {
-                        if (context.canPop()) {
-                          context.pop();
-                        } else {
-                          context.go('/profile');
-                        }
-                      },
-                      color: AppColors.textPrimary,
-                    ),
-                    Expanded(
-                      child: Text(
-                        'Compte de versement',
-                        style: AppTextStyles.headlineLarge.copyWith(fontSize: 22),
+                    GestureDetector(
+                      onTap: () => context.canPop() ? context.pop() : context.go('/profile'),
+                      child: Container(
+                        width: 38, height: 38,
+                        decoration: BoxDecoration(
+                          color: AppColors.paper,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.line),
+                        ),
+                        child: const Center(child: Text('←', style: TextStyle(fontSize: 16))),
                       ),
                     ),
+                    const SizedBox(height: 16),
+                    Text('PAIEMENTS', style: AppTextStyles.caption.copyWith(color: AppColors.ink3)),
+                    const SizedBox(height: 6),
+                    RichText(
+                      text: TextSpan(
+                        style: AppTextStyles.displayMedium.copyWith(fontSize: 26, letterSpacing: -0.6, height: 1.05),
+                        children: [
+                          const TextSpan(text: 'Compte de\n'),
+                          TextSpan(
+                            text: 'versement.',
+                            style: AppTextStyles.serifItalic.copyWith(fontSize: 26, letterSpacing: -0.6),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
@@ -220,7 +231,6 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
             ],
           ),
         ),
-      ),
     );
   }
 
