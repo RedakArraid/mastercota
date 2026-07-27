@@ -1,5 +1,4 @@
 import { notFound } from "next/navigation";
-import { Logo } from "@/components/logo";
 import ContributeForm from "@/components/contribute-form";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -63,16 +62,9 @@ export default async function PublicContributionPage({ params }: Props) {
   }
 
   return (
-    <div className="relative min-h-dvh">
+    <div className="relative">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgb(218_152_16_/_18%),_transparent_55%)]" />
-      <div className="relative mx-auto flex min-h-dvh max-w-lg flex-col px-4 py-8">
-        <header className="mb-10 text-center">
-          <Logo size="lg" href="/" className="inline-block" />
-          <p className="mt-2 text-sm text-muted-foreground">
-            Cotisez ensemble, facilement
-          </p>
-        </header>
-
+      <div className="relative mx-auto flex max-w-lg flex-col px-4 py-10 md:py-14">
         <section className="mb-8 space-y-4 text-center">
           <Badge variant="secondary" className="mx-auto">
             {cot.status === "active"

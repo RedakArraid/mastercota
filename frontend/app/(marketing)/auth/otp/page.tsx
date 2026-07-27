@@ -3,7 +3,6 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -67,8 +66,7 @@ function OtpForm() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-10">
-      <Logo href="/auth/phone" className="mb-10" />
+    <div className="mx-auto flex w-full max-w-md flex-col px-6 py-12 md:py-16">
       <h1 className="mb-2 text-3xl font-extrabold text-ink">Code WhatsApp</h1>
       <p className="mb-8 text-muted-foreground">
         Entrez le code envoyé au{" "}

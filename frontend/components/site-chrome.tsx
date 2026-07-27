@@ -116,7 +116,7 @@ export function SiteFooter({
       <Separator />
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-2 px-4 py-4 text-xs text-muted-foreground md:px-6">
         <span>© {new Date().getFullYear()} Mastercota</span>
-        <span>Commission plateforme 1%</span>
+        <span>Frais de service ~3 %</span>
       </div>
     </footer>
   );
