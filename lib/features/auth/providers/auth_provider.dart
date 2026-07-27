@@ -1,39 +1,26 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../../core/services/supabase_service.dart';
+import '../services/api_service.dart';
 
-// ── Auth state stream ────────────────────────────────────
-final authStateProvider = StreamProvider<AuthState>((ref) {
-  return SupabaseService.authStateChanges;
-});
+final authStateProvider = StateProvider<bool>((ref) => ApiService.isAuthenticated);
 
-final currentUserProvider = Provider<User?>((ref) {
-  return SupabaseService.currentUser;
-});
-
-// Future of the current user's profile from the public.users table
 final userProfileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  final userId = SupabaseService.currentUser?.id;
-  if (userId == null) return null;
-
-  final res = await SupabaseService.client
-      .from('users')
-      .select()
-      .eq('id', userId);
-  return res.isEmpty ? null : res.first;
+  if (!ApiService.isAuthenticated) return null;
+  try {
+    final res = await ApiService.get('/api/profile');
+    return res['user'] as Map<String, dynamic>?;
+  } catch (_) {
+    return null;
+  }
 });
 
-// ── Auth actions ─────────────────────────────────────────
 class AuthNotifier extends StateNotifier<AsyncValue<void>> {
   final Ref _ref;
   AuthNotifier(this._ref) : super(const AsyncValue.data(null));
 
-  final _client = SupabaseService.client;
-
   Future<bool> sendOtp(String phone) async {
     state = const AsyncValue.loading();
     try {
-      await _client.auth.signInWithOtp(phone: phone);
+      await ApiService.post('/api/auth/send-otp', body: {'phone': phone});
       state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
@@ -45,20 +32,15 @@ class AuthNotifier extends StateNotifier<AsyncValue<void>> {
   Future<bool> verifyOtp(String phone, String token) async {
     state = const AsyncValue.loading();
     try {
-      await _client.auth.verifyOTP(
-        phone: phone,
-        token: token,
-        type: OtpType.sms,
-      );
-      // Upsert user profile
-      final userId = _client.auth.currentUser?.id;
-      if (userId != null) {
-        await _client.from('users').upsert({
-          'id': userId,
-          'phone': phone,
-        });
-        _ref.invalidate(userProfileProvider);
-      }
+      final res = await ApiService.post('/api/auth/verify-otp', body: {
+        'phone': phone,
+        'token': token,
+      });
+      final jwt = res['token'] as String?;
+      if (jwt == null) throw Exception('Token manquant');
+      await ApiService.setToken(jwt);
+      _ref.read(authStateProvider.notifier).state = true;
+      _ref.invalidate(userProfileProvider);
       state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
@@ -68,35 +50,20 @@ class AuthNotifier extends StateNotifier<AsyncValue<void>> {
   }
 
   Future<void> signOut() async {
-    await _client.auth.signOut();
+    try {
+      await ApiService.post('/api/auth/logout');
+    } catch (_) {}
+    await ApiService.setToken(null);
+    _ref.read(authStateProvider.notifier).state = false;
     _ref.invalidate(userProfileProvider);
     state = const AsyncValue.data(null);
   }
 
   Future<void> updateProfile({String? name, String? avatarUrl}) async {
-    final userId = _client.auth.currentUser?.id;
-    if (userId == null) return;
-    
-    final phone = _client.auth.currentUser?.phone;
-    final cleanPhone = (phone != null && phone.trim().isNotEmpty) ? phone.trim() : null;
-    
-    // Check if the user profile exists first
-    final check = await _client.from('users').select('id').eq('id', userId).maybeSingle();
-    
-    if (check == null) {
-      await _client.from('users').insert({
-        'id': userId,
-        if (cleanPhone != null) 'phone': cleanPhone,
-        'name': name ?? '',
-        'avatar_url': avatarUrl ?? '👤',
-      });
-    } else {
-      await _client.from('users').update({
-        if (name != null) 'name': name,
-        if (avatarUrl != null) 'avatar_url': avatarUrl,
-      }).eq('id', userId);
-    }
-    
+    await ApiService.patch('/api/profile', body: {
+      if (name != null) 'name': name,
+      if (avatarUrl != null) 'avatar_url': avatarUrl,
+    });
     _ref.invalidate(userProfileProvider);
   }
 }

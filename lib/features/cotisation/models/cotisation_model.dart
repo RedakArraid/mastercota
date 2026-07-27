@@ -128,14 +128,19 @@ class CotisationModel {
 
   // ── Serialization ───────────────────────────────────────
   factory CotisationModel.fromJson(Map<String, dynamic> json) {
+    num parseNum(dynamic v) {
+      if (v is num) return v;
+      return num.tryParse(v?.toString() ?? '') ?? 0;
+    }
+
     return CotisationModel(
       id: json['id'] as String,
       slug: json['slug'] as String,
       title: json['title'] as String,
       description: json['description'] as String?,
       coverUrl: json['cover_url'] as String?,
-      targetAmount: (json['target_amount'] as num).toDouble(),
-      currentAmount: (json['current_amount'] as num?)?.toDouble() ?? 0.0,
+      targetAmount: parseNum(json['target_amount']).toDouble(),
+      currentAmount: parseNum(json['current_amount']).toDouble(),
       deadline: DateTime.parse(json['deadline'] as String),
       ownerId: json['owner_id'] as String,
       status: json['status'] as String,
@@ -220,12 +225,17 @@ class ContributionModel {
   bool get isPaid => status == 'paid';
 
   factory ContributionModel.fromJson(Map<String, dynamic> json) {
+    num parseNum(dynamic v) {
+      if (v is num) return v;
+      return num.tryParse(v?.toString() ?? '') ?? 0;
+    }
+
     return ContributionModel(
       id: json['id'] as String,
       cotisationId: json['cotisation_id'] as String,
       contributorName: json['contributor_name'] as String,
-      contributorPhone: json['contributor_phone'] as String,
-      amount: (json['amount'] as num).toDouble(),
+      contributorPhone: (json['contributor_phone'] as String?) ?? '',
+      amount: parseNum(json['amount']).toDouble(),
       status: json['status'] as String,
       paystackReference: json['paystack_reference'] as String?,
       paymentMethod: json['payment_method'] as String?,

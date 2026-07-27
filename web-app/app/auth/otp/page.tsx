@@ -7,7 +7,7 @@ import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { api } from "@/lib/api";
 
 function OtpForm() {
   const router = useRouter();
@@ -40,17 +40,10 @@ function OtpForm() {
     }
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.auth.verifyOtp({
-        phone,
-        token,
-        type: "sms",
+      await api("/api/auth/verify-otp", {
+        method: "POST",
+        body: JSON.stringify({ phone, token }),
       });
-      if (error) throw error;
-      const userId = data.user?.id;
-      if (userId) {
-        await supabase.from("users").upsert({ id: userId, phone });
-      }
       router.replace("/home");
       router.refresh();
     } catch (err) {
@@ -62,11 +55,12 @@ function OtpForm() {
   async function resend() {
     if (!phone || countdown > 0) return;
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOtp({ phone });
-      if (error) throw error;
+      await api("/api/auth/send-otp", {
+        method: "POST",
+        body: JSON.stringify({ phone }),
+      });
       setCountdown(60);
-      toast.success("Nouveau code envoyé");
+      toast.success("Nouveau code envoyé sur WhatsApp");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Renvoi impossible");
     }
@@ -75,7 +69,7 @@ function OtpForm() {
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-6 py-10">
       <Logo href="/auth/phone" className="mb-10" />
-      <h1 className="mb-2 text-3xl font-extrabold text-ink">Code SMS</h1>
+      <h1 className="mb-2 text-3xl font-extrabold text-ink">Code WhatsApp</h1>
       <p className="mb-8 text-muted-foreground">
         Entrez le code envoyé au{" "}
         <span className="font-medium text-foreground">{phone || "…"}</span>

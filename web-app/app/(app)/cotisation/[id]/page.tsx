@@ -16,7 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { createClient } from "@/lib/supabase/client";
+import { api } from "@/lib/api";
 import { DEFAULT_COUNTRY_CODE } from "@/lib/constants";
 import { formatAmount, progressPercent, daysRemaining } from "@/lib/format";
 import type { Cotisation, Contribution } from "@/lib/types";
@@ -34,56 +34,36 @@ export default function CotisationDetailPage() {
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
-    const supabase = createClient();
-    const [{ data: cot }, { data: contribs }] = await Promise.all([
-      supabase.from("cotisations").select("*").eq("id", id).maybeSingle(),
-      supabase
-        .from("contributions")
-        .select("*")
-        .eq("cotisation_id", id)
-        .order("created_at", { ascending: false }),
-    ]);
-    setCotisation((cot as Cotisation) ?? null);
-    setContributions((contribs as Contribution[]) ?? []);
-    setLoading(false);
+    try {
+      const [c, contrib] = await Promise.all([
+        api<{ cotisation: Cotisation }>(`/api/cotisations/${id}`),
+        api<{ contributions: Contribution[] }>(
+          `/api/cotisations/${id}/contributions`
+        ),
+      ]);
+      setCotisation(c.cotisation);
+      setContributions(contrib.contributions);
+    } catch {
+      setCotisation(null);
+    } finally {
+      setLoading(false);
+    }
   }, [id]);
 
   useEffect(() => {
     load();
-    const supabase = createClient();
-    const channel = supabase
-      .channel(`cotisation-${id}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "cotisations", filter: `id=eq.${id}` },
-        () => load()
-      )
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "contributions",
-          filter: `cotisation_id=eq.${id}`,
-        },
-        () => load()
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [id, load]);
+    const t = setInterval(load, 8000);
+    return () => clearInterval(t);
+  }, [load]);
 
-  if (loading) {
-    return <p className="text-muted-foreground">Chargement…</p>;
-  }
+  if (loading) return <p className="text-muted-foreground">Chargement…</p>;
   if (!cotisation) {
     return <p className="text-destructive">Cotisation introuvable</p>;
   }
 
   const pct = progressPercent(
-    cotisation.current_amount,
-    cotisation.target_amount
+    Number(cotisation.current_amount),
+    Number(cotisation.target_amount)
   );
   const days = daysRemaining(cotisation.deadline);
   const publicUrl =
@@ -100,7 +80,6 @@ export default function CotisationDetailPage() {
     if (navigator.share) {
       await navigator.share({
         title: cotisation!.title,
-        text: cotisation!.settings?.share_message ?? cotisation!.title,
         url: publicUrl,
       });
     } else {
@@ -109,17 +88,16 @@ export default function CotisationDetailPage() {
   }
 
   async function closeCotisation() {
-    const supabase = createClient();
-    const { error } = await supabase
-      .from("cotisations")
-      .update({ status: "closed" })
-      .eq("id", id);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      await api(`/api/cotisations/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "closed" }),
+      });
+      toast.success("Cotisation clôturée");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
     }
-    toast.success("Cotisation clôturée");
-    load();
   }
 
   async function addManual(e: React.FormEvent) {
@@ -131,19 +109,17 @@ export default function CotisationDetailPage() {
     }
     setSaving(true);
     try {
-      const supabase = createClient();
       const phone = mPhone.startsWith("+")
         ? mPhone
         : `${DEFAULT_COUNTRY_CODE}${mPhone.replace(/\D/g, "")}`;
-      const { error } = await supabase.from("contributions").insert({
-        cotisation_id: id,
-        contributor_name: mName.trim(),
-        contributor_phone: phone,
-        amount,
-        status: "paid",
-        payment_method: "manual",
+      await api(`/api/cotisations/${id}/contributions`, {
+        method: "POST",
+        body: JSON.stringify({
+          contributor_name: mName.trim(),
+          contributor_phone: phone,
+          amount,
+        }),
       });
-      if (error) throw error;
       toast.success("Contribution ajoutée");
       setManualOpen(false);
       setMName("");
@@ -159,19 +135,17 @@ export default function CotisationDetailPage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-8">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <Button variant="ghost" className="-ml-3 mb-2" onClick={() => router.push("/home")}>
-            ← Retour
-          </Button>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-3xl font-extrabold text-ink">{cotisation.title}</h1>
-            <Badge>{cotisation.status}</Badge>
-          </div>
-          {cotisation.description ? (
-            <p className="mt-2 text-muted-foreground">{cotisation.description}</p>
-          ) : null}
+      <div>
+        <Button variant="ghost" className="-ml-3 mb-2" onClick={() => router.push("/home")}>
+          ← Retour
+        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <h1 className="text-3xl font-extrabold text-ink">{cotisation.title}</h1>
+          <Badge>{cotisation.status}</Badge>
         </div>
+        {cotisation.description ? (
+          <p className="mt-2 text-muted-foreground">{cotisation.description}</p>
+        ) : null}
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-6">
@@ -179,10 +153,10 @@ export default function CotisationDetailPage() {
         <div className="flex flex-wrap justify-between gap-3 text-sm">
           <div>
             <p className="text-2xl font-bold">
-              {formatAmount(cotisation.current_amount)}
+              {formatAmount(Number(cotisation.current_amount))}
             </p>
             <p className="text-muted-foreground">
-              sur {formatAmount(cotisation.target_amount)}
+              sur {formatAmount(Number(cotisation.target_amount))}
             </p>
           </div>
           <p className="text-muted-foreground">
@@ -242,7 +216,7 @@ export default function CotisationDetailPage() {
       <section>
         <h2 className="mb-4 text-lg font-semibold">Contributions</h2>
         {contributions.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Aucune contribution pour l&apos;instant.</p>
+          <p className="text-sm text-muted-foreground">Aucune contribution.</p>
         ) : (
           <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
             {contributions.map((c) => (
@@ -256,7 +230,7 @@ export default function CotisationDetailPage() {
                     {c.status} · {c.payment_method ?? "paystack"}
                   </p>
                 </div>
-                <p className="font-semibold">{formatAmount(c.amount)}</p>
+                <p className="font-semibold">{formatAmount(Number(c.amount))}</p>
               </li>
             ))}
           </ul>

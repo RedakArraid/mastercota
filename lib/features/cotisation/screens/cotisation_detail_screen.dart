@@ -31,9 +31,9 @@ class _CotisationDetailScreenState
 
   @override
   Widget build(BuildContext context) {
-    final cotAsync = ref.watch(cotisationStreamProvider(widget.cotisationId));
+    final cotAsync = ref.watch(cotisationByIdProvider(widget.cotisationId));
     final contrAsync =
-        ref.watch(contributionsStreamProvider(widget.cotisationId));
+        ref.watch(contributionsProvider(widget.cotisationId));
     final formatter = NumberFormat('#,###', 'fr_FR');
 
     return Scaffold(

@@ -1,13 +1,8 @@
 export const APP_NAME = "Mastercota";
 export const APP_TAGLINE = "Cotisez ensemble, facilement";
 
-export const SUPABASE_URL =
-  process.env.NEXT_PUBLIC_SUPABASE_URL ??
-  "https://tomtoinewsoktnkrtbbm.supabase.co";
-
-export const SUPABASE_ANON_KEY =
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRvbXRvaW5ld3Nva3Rua3J0YmJtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzMTc2ODgsImV4cCI6MjA5NDg5MzY4OH0.Okyz8FNsW8-3TYt-M7UYBkdphtu_IdmEAREFjmgtzsk";
+export const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ?? "https://mastercota.com";
 
 export const PAYSTACK_PUBLIC_KEY =
   process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY ??

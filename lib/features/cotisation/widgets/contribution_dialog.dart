@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../core/services/supabase_service.dart';
+import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_button.dart';
@@ -141,21 +141,14 @@ class _ContributionDialogState extends State<ContributionDialog> {
     try {
       final amount = double.parse(_grossController.text.trim());
 
-      final response = await SupabaseService.client.functions.invoke(
-        'paystack-initialize',
-        body: {
-          'cotisation_id': widget.cotisationId,
-          'amount': amount,
-          'contributor_name': _nameController.text.trim(),
-          'contributor_phone': _phoneController.text.trim(),
-        },
-      );
+      final response = await ApiService.post('/api/paystack/initialize', body: {
+        'cotisation_id': widget.cotisationId,
+        'amount': amount,
+        'contributor_name': _nameController.text.trim(),
+        'contributor_phone': _phoneController.text.trim(),
+      });
 
-      if (response.status != 200) {
-        throw Exception(response.data['error'] ?? 'Erreur d\'initialisation');
-      }
-
-      final authUrl = response.data['authorization_url'] as String;
+      final authUrl = response['authorization_url'] as String;
       setState(() {
         _checkoutUrl = authUrl;
       });

@@ -1,10 +1,10 @@
 import { notFound } from "next/navigation";
 import { Logo } from "@/components/logo";
-import { ContributeForm } from "@/components/contribute-form";
+import ContributeForm from "@/components/contribute-form";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
-import { createClient } from "@/lib/supabase/server";
+import { query } from "@/lib/db";
 import { formatAmount, progressPercent, daysRemaining } from "@/lib/format";
 import type { Cotisation, Contribution } from "@/lib/types";
 import type { Metadata } from "next";
@@ -13,50 +13,51 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await params;
-  const supabase = await createClient();
-  const { data } = await supabase
-    .from("cotisations")
-    .select("title, description")
-    .eq("slug", slug)
-    .maybeSingle();
-  if (!data) return { title: "Cotisation" };
-  return {
-    title: data.title,
-    description: data.description ?? `Contribuez à ${data.title}`,
-  };
+  try {
+    const { rows } = await query<{ title: string; description: string | null }>(
+      `SELECT title, description FROM cotisations WHERE slug = $1`,
+      [slug]
+    );
+    if (!rows[0]) return { title: "Cotisation" };
+    return {
+      title: rows[0].title,
+      description: rows[0].description ?? `Contribuez à ${rows[0].title}`,
+    };
+  } catch {
+    return { title: "Cotisation" };
+  }
 }
 
 export default async function PublicContributionPage({ params }: Props) {
   const { slug } = await params;
-  const supabase = await createClient();
+  const { rows } = await query(`SELECT * FROM cotisations WHERE slug = $1`, [
+    slug,
+  ]);
+  if (!rows[0]) notFound();
 
-  const { data: cotisation } = await supabase
-    .from("cotisations")
-    .select("*")
-    .eq("slug", slug)
-    .maybeSingle();
-
-  if (!cotisation) notFound();
-
-  const cot = cotisation as Cotisation;
+  const cot = rows[0] as Cotisation;
   const settings = cot.settings ?? {};
   const showProgress = settings.show_progress !== false;
   const showTarget = settings.show_target_amount !== false;
   const showContributors = settings.show_contributors !== false;
-  const pct = progressPercent(cot.current_amount, cot.target_amount);
+  const pct = progressPercent(
+    Number(cot.current_amount),
+    Number(cot.target_amount)
+  );
   const days = daysRemaining(cot.deadline);
   const canContribute = cot.status === "active" && days >= 0;
 
   let contributions: Contribution[] = [];
   if (showContributors) {
-    const { data } = await supabase
-      .from("contributions")
-      .select("*")
-      .eq("cotisation_id", cot.id)
-      .eq("status", "paid")
-      .order("created_at", { ascending: false })
-      .limit(20);
-    contributions = (data as Contribution[]) ?? [];
+    const { rows: contribs } = await query(
+      `SELECT id, cotisation_id, contributor_name, amount, status, created_at,
+              contributor_phone, paystack_reference, payment_method
+       FROM contributions
+       WHERE cotisation_id = $1 AND status = 'paid'
+       ORDER BY created_at DESC LIMIT 20`,
+      [cot.id]
+    );
+    contributions = contribs as Contribution[];
   }
 
   return (
@@ -90,11 +91,11 @@ export default async function PublicContributionPage({ params }: Props) {
               <Progress value={pct} className="h-3" />
               <div className="flex justify-between text-sm">
                 <span className="font-semibold">
-                  {formatAmount(cot.current_amount)}
+                  {formatAmount(Number(cot.current_amount))}
                 </span>
                 {showTarget ? (
                   <span className="text-muted-foreground">
-                    objectif {formatAmount(cot.target_amount)}
+                    objectif {formatAmount(Number(cot.target_amount))}
                   </span>
                 ) : null}
               </div>
@@ -128,7 +129,7 @@ export default async function PublicContributionPage({ params }: Props) {
                   >
                     <span className="font-medium">{c.contributor_name}</span>
                     <span className="text-muted-foreground">
-                      {formatAmount(c.amount)}
+                      {formatAmount(Number(c.amount))}
                     </span>
                   </li>
                 ))}

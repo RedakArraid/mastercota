@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createClient } from "@/lib/supabase/client";
+import { api } from "@/lib/api";
 import { CURRENCY } from "@/lib/constants";
-import { generateSlug } from "@/lib/format";
+import type { Cotisation } from "@/lib/types";
 
 export default function CreateCotisationPage() {
   const router = useRouter();
@@ -22,44 +22,19 @@ export default function CreateCotisationPage() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const targetAmount = Number(target.replace(/\s/g, "").replace(",", "."));
-    if (!title.trim()) {
-      toast.error("Titre requis");
+    if (!title.trim() || !targetAmount || !deadline) {
+      toast.error("Remplissez tous les champs obligatoires");
       return;
     }
-    if (!targetAmount || targetAmount <= 0) {
-      toast.error("Objectif invalide");
-      return;
-    }
-    if (!deadline) {
-      toast.error("Date limite requise");
-      return;
-    }
-
     setLoading(true);
     try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Session expirée");
-
-      await supabase.from("users").upsert(
-        { id: user.id, phone: user.phone ?? null },
-        { onConflict: "id" }
-      );
-
-      const slug = generateSlug(title);
-      const { data, error } = await supabase
-        .from("cotisations")
-        .insert({
+      const data = await api<{ cotisation: Cotisation }>("/api/cotisations", {
+        method: "POST",
+        body: JSON.stringify({
           title: title.trim(),
           description: description.trim() || null,
           target_amount: targetAmount,
-          current_amount: 0,
           deadline,
-          owner_id: user.id,
-          slug,
-          status: "active",
           settings: {
             show_best_contributor: true,
             show_contributors: true,
@@ -68,18 +43,10 @@ export default function CreateCotisationPage() {
             anonymous_allowed: false,
             min_amount: 0,
           },
-        })
-        .select("id")
-        .single();
-
-      if (error) {
-        if (error.message.includes("duplicate")) {
-          throw new Error("Ce titre existe déjà. Essayez un autre.");
-        }
-        throw error;
-      }
+        }),
+      });
       toast.success("Cotisation créée");
-      router.push(`/cotisation/${data.id}`);
+      router.push(`/cotisation/${data.cotisation.id}`);
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Création impossible");
@@ -115,7 +82,6 @@ export default function CreateCotisationPage() {
             id="description"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Contexte pour vos contributeurs"
             rows={4}
           />
         </div>
@@ -127,7 +93,6 @@ export default function CreateCotisationPage() {
               inputMode="numeric"
               value={target}
               onChange={(e) => setTarget(e.target.value)}
-              placeholder="500000"
               required
             />
           </div>

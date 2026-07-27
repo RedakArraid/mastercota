@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createClient } from "@/lib/supabase/client";
+import { api } from "@/lib/api";
 import { PAYOUT_PROVIDERS } from "@/lib/constants";
 
 export default function PayoutSettingsPage() {
@@ -32,21 +32,18 @@ export default function PayoutSettingsPage() {
     setVerifying(true);
     setVerifiedName(null);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.functions.invoke(
-        "paystack-verify-account",
+      const data = await api<{ account_name: string }>(
+        "/api/paystack/verify-account",
         {
-          body: {
+          method: "POST",
+          body: JSON.stringify({
             account_number: account.trim(),
             bank_code: provider,
-          },
+          }),
         }
       );
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      const name = (data?.account_name as string) ?? "";
-      setVerifiedName(name);
-      if (!businessName.trim()) setBusinessName(name);
+      setVerifiedName(data.account_name);
+      if (!businessName.trim()) setBusinessName(data.account_name);
       toast.success("Compte vérifié");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Vérification échouée");
@@ -63,19 +60,14 @@ export default function PayoutSettingsPage() {
     }
     setSaving(true);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.functions.invoke(
-        "paystack-subaccount",
-        {
-          body: {
-            business_name: businessName.trim(),
-            settlement_bank: provider,
-            account_number: account.trim(),
-          },
-        }
-      );
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      await api("/api/paystack/subaccount", {
+        method: "POST",
+        body: JSON.stringify({
+          business_name: businessName.trim(),
+          settlement_bank: provider,
+          account_number: account.trim(),
+        }),
+      });
       toast.success("Compte de versement configuré");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Configuration échouée");
@@ -131,7 +123,6 @@ export default function PayoutSettingsPage() {
                 setAccount(e.target.value);
                 setVerifiedName(null);
               }}
-              placeholder="07XXXXXXXX"
               className="flex-1"
               required
             />

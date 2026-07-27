@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { api } from "@/lib/api";
 import {
   COMMISSION_RATE,
   CURRENCY,
@@ -14,7 +14,11 @@ import {
 import { formatAmount } from "@/lib/format";
 import type { Cotisation } from "@/lib/types";
 
-export function ContributeForm({ cotisation }: { cotisation: Cotisation }) {
+export default function ContributeForm({
+  cotisation,
+}: {
+  cotisation: Cotisation;
+}) {
   const settings = cotisation.settings ?? {};
   const minAmount = settings.min_amount ?? 0;
   const anonymousAllowed = settings.anonymous_allowed ?? false;
@@ -35,9 +39,8 @@ export function ContributeForm({ cotisation }: { cotisation: Cotisation }) {
       toast.error(`Minimum : ${formatAmount(minAmount)}`);
       return;
     }
-    const contributorName = anonymousAllowed && !name.trim()
-      ? "Anonyme"
-      : name.trim();
+    const contributorName =
+      anonymousAllowed && !name.trim() ? "Anonyme" : name.trim();
     if (!contributorName) {
       toast.error("Votre nom est requis");
       return;
@@ -53,23 +56,19 @@ export function ContributeForm({ cotisation }: { cotisation: Cotisation }) {
 
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { data, error } = await supabase.functions.invoke(
-        "paystack-initialize",
+      const data = await api<{ authorization_url: string }>(
+        "/api/paystack/initialize",
         {
-          body: {
+          method: "POST",
+          body: JSON.stringify({
             cotisation_id: cotisation.id,
             amount: parsed,
             contributor_name: contributorName,
             contributor_phone: fullPhone,
-          },
+          }),
         }
       );
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      const url = data?.authorization_url as string | undefined;
-      if (!url) throw new Error("URL de paiement manquante");
-      window.location.href = url;
+      window.location.href = data.authorization_url;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Paiement impossible");
       setLoading(false);
@@ -115,14 +114,12 @@ export function ContributeForm({ cotisation }: { cotisation: Cotisation }) {
           inputMode="numeric"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
-          placeholder={minAmount > 0 ? `Min. ${minAmount}` : "5000"}
           required
         />
       </div>
       {preview > 0 ? (
         <p className="text-xs text-muted-foreground">
-          Frais de service 1&nbsp;% : {formatAmount(fee)} — le reste revient à
-          l&apos;organisateur.
+          Frais de service 1&nbsp;% : {formatAmount(fee)}
         </p>
       ) : null}
       <Button type="submit" className="w-full" size="lg" disabled={loading}>

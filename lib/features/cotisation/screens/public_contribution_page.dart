@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../providers/cotisation_provider.dart';
 import '../models/cotisation_model.dart';
-import '../../../core/services/supabase_service.dart';
+import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../core/widgets/app_button.dart';
@@ -63,22 +63,14 @@ class _PublicContributionPageState
     try {
       final amount = double.parse(_amountController.text.trim());
 
-      final response = await SupabaseService.client.functions.invoke(
-        'paystack-initialize',
-        body: {
-          'cotisation_id': cotisationId,
-          'amount': amount,
-          'contributor_name': _nameController.text.trim(),
-          'contributor_phone': _phoneController.text.trim(),
-        },
-      );
+      final response = await ApiService.post('/api/paystack/initialize', body: {
+        'cotisation_id': cotisationId,
+        'amount': amount,
+        'contributor_name': _nameController.text.trim(),
+        'contributor_phone': _phoneController.text.trim(),
+      });
 
-      if (response.status != 200) {
-        throw Exception(
-            response.data['error'] ?? 'Erreur d\'initialisation du paiement');
-      }
-
-      final authUrl = response.data['authorization_url'] as String;
+      final authUrl = response['authorization_url'] as String;
       setState(() {
         _checkoutUrl = authUrl;
         _paymentInitiated = true;
@@ -127,7 +119,7 @@ class _PublicContributionPageState
 
   Widget _buildPage(CotisationModel cot) {
     final formatter = NumberFormat('#,###', 'fr_FR');
-    final contribAsync = ref.watch(publicContributionsProvider(cot.id));
+    final contribAsync = ref.watch(contributionsProvider(cot.id));
     final colors = AppColors.cardGradients[
         cot.slug.hashCode.abs() % AppColors.cardGradients.length];
     final progress = cot.progressPercent;

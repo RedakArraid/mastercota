@@ -7,7 +7,7 @@ import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createClient } from "@/lib/supabase/client";
+import { api } from "@/lib/api";
 import { DEFAULT_COUNTRY_CODE } from "@/lib/constants";
 
 export default function PhonePage() {
@@ -25,9 +25,10 @@ export default function PhonePage() {
     const phone = `${DEFAULT_COUNTRY_CODE}${digits}`;
     setLoading(true);
     try {
-      const supabase = createClient();
-      const { error } = await supabase.auth.signInWithOtp({ phone });
-      if (error) throw error;
+      await api("/api/auth/send-otp", {
+        method: "POST",
+        body: JSON.stringify({ phone }),
+      });
       sessionStorage.setItem("mc_phone", phone);
       router.push(`/auth/otp?phone=${encodeURIComponent(phone)}`);
     } catch (err) {
@@ -41,7 +42,7 @@ export default function PhonePage() {
       <Logo href="/onboarding" className="mb-10" />
       <h1 className="mb-2 text-3xl font-extrabold text-ink">Votre numéro</h1>
       <p className="mb-8 text-muted-foreground">
-        Nous vous enverrons un code SMS à 6 chiffres.
+        Nous vous enverrons un code WhatsApp à 6 chiffres via OpenWA.
       </p>
       <form onSubmit={onSubmit} className="space-y-6">
         <div className="space-y-2">
@@ -65,7 +66,7 @@ export default function PhonePage() {
           </div>
         </div>
         <Button type="submit" size="lg" className="w-full" disabled={loading}>
-          {loading ? "Envoi…" : "Recevoir le code"}
+          {loading ? "Envoi…" : "Recevoir le code WhatsApp"}
         </Button>
       </form>
     </div>

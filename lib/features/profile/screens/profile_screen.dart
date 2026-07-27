@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../auth/providers/auth_provider.dart';
-import '../../../core/services/supabase_service.dart';
+import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
@@ -28,12 +28,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   Future<void> _loadSiteConfig() async {
     try {
-      final data = await SupabaseService.client
-          .from('site_config')
-          .select('email_support, phone_whatsapp, doc_privacy_url')
-          .eq('id', 1)
-          .single();
-      if (!mounted) return;
+      final res = await ApiService.get('/api/site-config');
+      final data = res['config'] as Map<String, dynamic>?;
+      if (data == null || !mounted) return;
       setState(() {
         final email = data['email_support'] as String?;
         if (email != null && email.isNotEmpty) _supportEmail = email;
@@ -216,9 +213,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final phone = SupabaseService.currentUser?.phone ?? '';
     final profileAsync = ref.watch(userProfileProvider);
     final profile = profileAsync.value;
+    final phone = (profile?['phone'] as String?) ?? '';
     final name = profile?['name'] as String?;
     final avatarUrl = profile?['avatar_url'] as String? ?? '👤';
 

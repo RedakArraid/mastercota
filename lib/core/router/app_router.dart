@@ -11,20 +11,17 @@ import '../../features/cotisation/screens/cotisation_detail_screen.dart';
 import '../../features/cotisation/screens/public_contribution_page.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/profile/screens/payout_settings_screen.dart';
-import '../services/supabase_service.dart';
+import '../services/api_service.dart';
 import '../widgets/navigation_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: '/splash',
     redirect: (BuildContext context, GoRouterState state) {
-      final isLoggedIn = SupabaseService.isAuthenticated;
+      final isLoggedIn = ApiService.isAuthenticated;
       final location = state.matchedLocation;
 
-      // Splash always shows first
       if (location == '/splash') return null;
-
-      // Page de contribution publique — accessible sans authentification
       if (location.startsWith('/c/')) return null;
 
       final isAuthRoute = location.startsWith('/auth') ||

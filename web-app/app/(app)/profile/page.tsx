@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { createClient } from "@/lib/supabase/client";
+import { api } from "@/lib/api";
 import type { SiteConfig, UserProfile } from "@/lib/types";
 
 export default function ProfilePage() {
@@ -20,18 +20,17 @@ export default function ProfilePage() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
-      const [{ data: p }, { data: c }] = await Promise.all([
-        supabase.from("users").select("*").eq("id", user.id).maybeSingle(),
-        supabase.from("site_config").select("*").eq("id", 1).maybeSingle(),
-      ]);
-      setProfile((p as UserProfile) ?? null);
-      setConfig((c as SiteConfig) ?? null);
-      setName((p as UserProfile | null)?.name ?? "");
+      try {
+        const [p, c] = await Promise.all([
+          api<{ user: UserProfile }>("/api/profile"),
+          api<{ config: SiteConfig }>("/api/site-config"),
+        ]);
+        setProfile(p.user);
+        setConfig(c.config);
+        setName(p.user?.name ?? "");
+      } catch {
+        /* ignore */
+      }
     }
     load();
   }, []);
@@ -40,17 +39,11 @@ export default function ProfilePage() {
     e.preventDefault();
     setSaving(true);
     try {
-      const supabase = createClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Session expirée");
-      const { error } = await supabase.from("users").upsert({
-        id: user.id,
-        phone: user.phone ?? profile?.phone,
-        name: name.trim(),
+      const data = await api<{ user: UserProfile }>("/api/profile", {
+        method: "PATCH",
+        body: JSON.stringify({ name: name.trim() }),
       });
-      if (error) throw error;
+      setProfile(data.user);
       toast.success("Profil mis à jour");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
@@ -60,8 +53,7 @@ export default function ProfilePage() {
   }
 
   async function signOut() {
-    const supabase = createClient();
-    await supabase.auth.signOut();
+    await api("/api/auth/logout", { method: "POST" });
     router.replace("/auth/phone");
     router.refresh();
   }
@@ -113,16 +105,6 @@ export default function ProfilePage() {
         <div className="space-y-2 text-sm text-muted-foreground">
           <Separator />
           <p>Support : {config.email_support || "support@mastercota.com"}</p>
-          {config.doc_cgu_url ? (
-            <a href={config.doc_cgu_url} className="text-primary underline">
-              CGU
-            </a>
-          ) : null}
-          {config.doc_privacy_url ? (
-            <a href={config.doc_privacy_url} className="ml-3 text-primary underline">
-              Confidentialité
-            </a>
-          ) : null}
         </div>
       ) : null}
 

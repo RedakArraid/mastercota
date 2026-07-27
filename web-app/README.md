@@ -1,39 +1,35 @@
-# Mastercota Web (`web-app`)
+# Mastercota Web
 
-Front web Next.js 15 + shadcn/ui pour Mastercota. Même backend Supabase / Paystack / Termii que l’app Flutter.
+Next.js 15 + shadcn — API Postgres + OTP WhatsApp (OpenWA) + Paystack.
 
 ## Stack
 
-- Next.js App Router + TypeScript
-- Tailwind CSS v4 + shadcn/ui (Radix)
-- `@supabase/ssr` (auth cookies + Realtime client)
-- Plus Jakarta Sans, palette navy + or
+- PostgreSQL (conteneur `mastercota-db`)
+- Auth OTP via **OpenWA** (`POST …/messages/send-text`)
+- Sessions JWT (cookie httpOnly web / Bearer mobile)
+- Paystack (initialize, webhook, subaccount)
 
-## Démarrage
+## Démarrage local
 
 ```bash
 cd web-app
-cp .env.local.example .env.local
-# renseigner NEXT_PUBLIC_SUPABASE_URL et NEXT_PUBLIC_SUPABASE_ANON_KEY
-npm install
-npm run dev
+cp .env.example .env.local
+# renseigner DATABASE_URL, JWT_SECRET, OpenWA, Paystack
+docker compose up -d db   # ou Postgres local
+psql $DATABASE_URL -f db/schema.sql
+npm install && npm run dev
 ```
 
-Ouvre [http://localhost:3000](http://localhost:3000).
+## Variables critiques
 
-## Routes
-
-| Route | Description |
+| Variable | Rôle |
 |---|---|
-| `/onboarding` | Entrée produit |
-| `/auth/phone`, `/auth/otp` | Auth OTP SMS |
-| `/home` | Liste des cotisations |
-| `/cotisation/create`, `/cotisation/[id]` | Création + détail Realtime |
-| `/profile`, `/profile/payout` | Profil + sous-compte Paystack |
-| `/c/[slug]` | Page publique de contribution |
+| `DATABASE_URL` | Postgres |
+| `JWT_SECRET` | Signature sessions |
+| `OPENWA_*` | Envoi OTP WhatsApp |
+| `PAYSTACK_SECRET_KEY` | Paiements / webhook |
+| `OTP_DEV_CODE` | Bypass OTP en dev (ex. `123456`) |
 
-## Design tokens
+## Webhook Paystack
 
-Source de vérité partagée avec Flutter :
-- [`design-tokens.json`](./design-tokens.json)
-- copie à la racine : [`../design-tokens.json`](../design-tokens.json)
+`https://mastercota.com/api/paystack/webhook`

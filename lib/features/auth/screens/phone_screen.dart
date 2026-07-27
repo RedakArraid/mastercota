@@ -4,10 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../providers/auth_provider.dart';
 import '../../../core/constants/app_constants.dart';
-import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
@@ -56,56 +54,23 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
     }
   }
 
-  // ── DEV ONLY — connexion directe sans OTP ──────────────
+  // ── DEV ONLY — bypass OTP (nécessite OTP_DEV_CODE côté API) ──
   Future<void> _devLogin() async {
     setState(() => _isDevLoading = true);
     try {
-      try {
-        await SupabaseService.client.auth.signInWithPassword(
-          email: 'dev@mastercota.com',
-          password: 'Mastercota2025!',
-        );
-      } on AuthException catch (ae) {
-        final msg = ae.message.toLowerCase();
-        if (msg.contains('invalid') || msg.contains('not found') || ae.statusCode == '400') {
-          // L'utilisateur n'existe probablement pas, on tente de l'inscrire automatiquement
-          final res = await SupabaseService.client.auth.signUp(
-            email: 'dev@mastercota.com',
-            password: 'Mastercota2025!',
-          );
-          
-          if (res.user != null) {
-            // S'assurer que le profil public existe dans la table public.users
-            await SupabaseService.client.from('users').upsert({
-              'id': res.user!.id,
-              'name': 'Développeur MasterCota',
-            });
-            
-            // Re-tenter la connexion si la session n'est pas auto-établie
-            if (res.session == null) {
-              await SupabaseService.client.auth.signInWithPassword(
-                email: 'dev@mastercota.com',
-                password: 'Mastercota2025!',
-              );
-            }
-          } else {
-            rethrow;
-          }
-        } else {
-          rethrow;
-        }
+      final phone = _phoneController.text.trim().isEmpty
+          ? '${AppConstants.defaultCountryCode}0700000000'
+          : _fullPhone;
+      await ref.read(authNotifierProvider.notifier).sendOtp(phone);
+      final ok = await ref
+          .read(authNotifierProvider.notifier)
+          .verifyOtp(phone, '123456');
+      if (!mounted) return;
+      if (ok) {
+        context.go('/home');
+      } else {
+        throw Exception(ref.read(authNotifierProvider).error ?? 'Dev login échoué');
       }
-
-      // S'assurer que la table publique public.users a bien le profil du dev
-      final currentUser = SupabaseService.client.auth.currentUser;
-      if (currentUser != null) {
-        await SupabaseService.client.from('users').upsert({
-          'id': currentUser.id,
-          'name': 'Développeur MasterCota',
-        });
-      }
-
-      if (mounted) context.go('/home');
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

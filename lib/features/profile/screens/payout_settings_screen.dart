@@ -4,7 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:google_fonts/google_fonts.dart';
-import '../../../core/services/supabase_service.dart';
+import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../auth/providers/auth_provider.dart';
@@ -76,17 +76,11 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
     setState(() => _isVerifying = true);
     HapticFeedback.selectionClick();
     try {
-      final response = await SupabaseService.client.functions.invoke(
-        'paystack-verify-account',
-        body: {
-          'account_number': account,
-          'bank_code': _selectedProviderCode,
-        },
-      );
-      if (response.status != 200) {
-        throw Exception(response.data['error'] ?? 'Numéro invalide ou introuvable');
-      }
-      final name = response.data['account_name'] as String? ?? '';
+      final data = await ApiService.post('/api/paystack/verify-account', body: {
+        'account_number': account,
+        'bank_code': _selectedProviderCode,
+      });
+      final name = data['account_name'] as String? ?? '';
       setState(() {
         _isVerified = true;
         _verifiedName = name;
@@ -116,18 +110,11 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
     HapticFeedback.mediumImpact();
 
     try {
-      final response = await SupabaseService.client.functions.invoke(
-        'paystack-subaccount',
-        body: {
-          'business_name': _nameController.text.trim(),
-          'settlement_bank': _selectedProviderCode,
-          'account_number': _accountController.text.trim(),
-        },
-      );
-
-      if (response.status != 200) {
-        throw Exception(response.data['error'] ?? 'Erreur lors de la configuration');
-      }
+      await ApiService.post('/api/paystack/subaccount', body: {
+        'business_name': _nameController.text.trim(),
+        'settlement_bank': _selectedProviderCode,
+        'account_number': _accountController.text.trim(),
+      });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

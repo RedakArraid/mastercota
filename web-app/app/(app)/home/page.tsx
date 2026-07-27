@@ -1,23 +1,41 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
+import { cookies } from "next/headers";
 import { CotisationCard } from "@/components/cotisation-card";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@/lib/supabase/server";
+import { SESSION_COOKIE } from "@/lib/auth-token";
+import { APP_URL } from "@/lib/constants";
 import type { Cotisation } from "@/lib/types";
 
+async function fetchCotisations(): Promise<Cotisation[]> {
+  const jar = await cookies();
+  const token = jar.get(SESSION_COOKIE)?.value;
+  const res = await fetch(`${APP_URL}/api/cotisations`, {
+    headers: token ? { Cookie: `${SESSION_COOKIE}=${token}` } : {},
+    cache: "no-store",
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.cotisations as Cotisation[]) ?? [];
+}
+
 export default async function HomePage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const { data } = await supabase
-    .from("cotisations")
-    .select("*")
-    .eq("owner_id", user!.id)
-    .order("created_at", { ascending: false });
-
-  const list = (data as Cotisation[]) ?? [];
+  // Direct DB preferred for SSR reliability behind Traefik
+  const { getSessionFromCookies } = await import("@/lib/auth");
+  const { query } = await import("@/lib/db");
+  const session = await getSessionFromCookies();
+  let list: Cotisation[] = [];
+  if (session) {
+    try {
+      const { rows } = await query(
+        `SELECT * FROM cotisations WHERE owner_id = $1 ORDER BY created_at DESC`,
+        [session.id]
+      );
+      list = rows as Cotisation[];
+    } catch {
+      list = await fetchCotisations();
+    }
+  }
 
   return (
     <div className="space-y-8">
