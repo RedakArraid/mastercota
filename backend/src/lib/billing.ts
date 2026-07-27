@@ -4,6 +4,7 @@ import { paystackFetch } from "./paystack.js";
 import {
   canExtend,
   deadlineFromDuration,
+  FREE_COTISATIONS_PER_PHONE,
   FREE_DURATION_DAYS,
   MAX_DURATION_DAYS,
   quoteDuration,
