@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -14,8 +14,9 @@ import {
   isValidNational,
 } from "@/lib/countries";
 
-export default function PhonePage() {
+function PhoneForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [localPhone, setLocalPhone] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,7 +38,10 @@ export default function PhonePage() {
         body: JSON.stringify({ phone }),
       });
       sessionStorage.setItem("mc_phone", phone);
-      router.push(`/auth/otp?phone=${encodeURIComponent(phone)}`);
+      const next = searchParams.get("next");
+      const qs = new URLSearchParams({ phone });
+      if (next?.startsWith("/")) qs.set("next", next);
+      router.push(`/auth/otp?${qs.toString()}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Envoi OTP échoué");
       setLoading(false);
@@ -72,5 +76,17 @@ export default function PhonePage() {
         </Button>
       </form>
     </div>
+  );
+}
+
+export default function PhonePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-8 text-sm text-muted-foreground">Chargement…</div>
+      }
+    >
+      <PhoneForm />
+    </Suspense>
   );
 }
