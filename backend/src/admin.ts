@@ -51,21 +51,42 @@ adminRoutes.use("*", async (c, next) => {
 });
 
 adminRoutes.get("/stats", async (c) => {
-  const [users, cotisations, contributions, volume, recent] = await Promise.all([
-    query<{ n: string }>(`SELECT count(*)::text AS n FROM users`),
-    query<{ n: string; active: string }>(
+  const [
+    users,
+    cotisations,
+    contributions,
+    volume,
+    recent,
+    otp24h,
+    volumeSeries,
+    usersSeries,
+    statusBreakdown,
+    cotisationStatus,
+    topCotisations,
+  ] = await Promise.all([
+    query<{ n: string; week: string }>(
       `SELECT count(*)::text AS n,
-              count(*) FILTER (WHERE status = 'active')::text AS active
+              count(*) FILTER (WHERE created_at > now() - interval '7 days')::text AS week
+       FROM users`
+    ),
+    query<{ n: string; active: string; closed: string; completed: string }>(
+      `SELECT count(*)::text AS n,
+              count(*) FILTER (WHERE status = 'active')::text AS active,
+              count(*) FILTER (WHERE status = 'closed')::text AS closed,
+              count(*) FILTER (WHERE status = 'completed')::text AS completed
        FROM cotisations`
     ),
-    query<{ n: string; paid: string; pending: string }>(
+    query<{ n: string; paid: string; pending: string; failed: string; week: string }>(
       `SELECT count(*)::text AS n,
               count(*) FILTER (WHERE status = 'paid')::text AS paid,
-              count(*) FILTER (WHERE status = 'pending')::text AS pending
+              count(*) FILTER (WHERE status = 'pending')::text AS pending,
+              count(*) FILTER (WHERE status = 'failed')::text AS failed,
+              count(*) FILTER (WHERE status = 'paid' AND created_at > now() - interval '7 days')::text AS week
        FROM contributions`
     ),
-    query<{ total: string }>(
-      `SELECT COALESCE(sum(amount),0)::text AS total
+    query<{ total: string; week: string }>(
+      `SELECT COALESCE(sum(amount),0)::text AS total,
+              COALESCE(sum(amount) FILTER (WHERE created_at > now() - interval '7 days'),0)::text AS week
        FROM contributions WHERE status = 'paid'`
     ),
     query(
@@ -73,26 +94,98 @@ adminRoutes.get("/stats", async (c) => {
               cot.title AS cotisation_title, cot.slug
        FROM contributions c
        JOIN cotisations cot ON cot.id = c.cotisation_id
-       ORDER BY c.created_at DESC LIMIT 15`
+       ORDER BY c.created_at DESC LIMIT 12`
+    ),
+    query<{ n: string }>(
+      `SELECT count(*)::text AS n FROM otp_codes
+       WHERE created_at > now() - interval '24 hours'`
+    ),
+    query<{ day: string; volume: string; count: string }>(
+      `SELECT to_char(d.day, 'YYYY-MM-DD') AS day,
+              COALESCE(sum(c.amount) FILTER (WHERE c.status = 'paid'), 0)::text AS volume,
+              count(c.id) FILTER (WHERE c.status = 'paid')::text AS count
+       FROM generate_series(
+              (current_date - interval '13 days')::date,
+              current_date,
+              '1 day'
+            ) AS d(day)
+       LEFT JOIN contributions c
+         ON c.created_at::date = d.day
+       GROUP BY d.day
+       ORDER BY d.day`
+    ),
+    query<{ day: string; count: string }>(
+      `SELECT to_char(d.day, 'YYYY-MM-DD') AS day,
+              count(u.id)::text AS count
+       FROM generate_series(
+              (current_date - interval '13 days')::date,
+              current_date,
+              '1 day'
+            ) AS d(day)
+       LEFT JOIN users u ON u.created_at::date = d.day
+       GROUP BY d.day
+       ORDER BY d.day`
+    ),
+    query<{ status: string; n: string; volume: string }>(
+      `SELECT status,
+              count(*)::text AS n,
+              COALESCE(sum(amount),0)::text AS volume
+       FROM contributions
+       GROUP BY status`
+    ),
+    query<{ status: string; n: string }>(
+      `SELECT status, count(*)::text AS n FROM cotisations GROUP BY status`
+    ),
+    query(
+      `SELECT c.id, c.title, c.slug, c.target_amount, c.current_amount, c.status,
+              CASE WHEN c.target_amount > 0
+                THEN round((c.current_amount / c.target_amount) * 100)::text
+                ELSE '0' END AS progress
+       FROM cotisations c
+       WHERE c.status = 'active'
+       ORDER BY c.current_amount DESC
+       LIMIT 5`
     ),
   ]);
-
-  const otp24h = await query<{ n: string }>(
-    `SELECT count(*)::text AS n FROM otp_codes
-     WHERE created_at > now() - interval '24 hours'`
-  );
 
   return c.json({
     stats: {
       users: Number(users.rows[0]?.n ?? 0),
+      usersWeek: Number(users.rows[0]?.week ?? 0),
       cotisations: Number(cotisations.rows[0]?.n ?? 0),
       cotisationsActive: Number(cotisations.rows[0]?.active ?? 0),
+      cotisationsClosed: Number(cotisations.rows[0]?.closed ?? 0),
+      cotisationsCompleted: Number(cotisations.rows[0]?.completed ?? 0),
       contributions: Number(contributions.rows[0]?.n ?? 0),
       contributionsPaid: Number(contributions.rows[0]?.paid ?? 0),
       contributionsPending: Number(contributions.rows[0]?.pending ?? 0),
+      contributionsFailed: Number(contributions.rows[0]?.failed ?? 0),
+      contributionsWeek: Number(contributions.rows[0]?.week ?? 0),
       volumePaid: Number(volume.rows[0]?.total ?? 0),
+      volumeWeek: Number(volume.rows[0]?.week ?? 0),
       otpLast24h: Number(otp24h.rows[0]?.n ?? 0),
     },
+    charts: {
+      volumeByDay: volumeSeries.rows.map((r) => ({
+        day: r.day,
+        volume: Number(r.volume),
+        count: Number(r.count),
+      })),
+      usersByDay: usersSeries.rows.map((r) => ({
+        day: r.day,
+        count: Number(r.count),
+      })),
+      contributionStatus: statusBreakdown.rows.map((r) => ({
+        status: r.status,
+        count: Number(r.n),
+        volume: Number(r.volume),
+      })),
+      cotisationStatus: cotisationStatus.rows.map((r) => ({
+        status: r.status,
+        count: Number(r.n),
+      })),
+    },
+    topCotisations: topCotisations.rows,
     recentContributions: recent.rows,
   });
 });
