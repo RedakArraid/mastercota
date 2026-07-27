@@ -6,11 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { api } from "@/lib/api";
-import {
-  COMMISSION_RATE,
-  CURRENCY,
-  DEFAULT_COUNTRY_CODE,
-} from "@/lib/constants";
+import { CURRENCY, DEFAULT_COUNTRY_CODE } from "@/lib/constants";
+import { feesFromNet, SERVICE_FEE_LABEL } from "@/lib/fees";
 import { formatAmount } from "@/lib/format";
 import type { Cotisation } from "@/lib/types";
 
@@ -28,6 +25,9 @@ export default function ContributeForm({
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const preview = Number(amount.replace(/\s/g, "").replace(",", ".")) || 0;
+  const quote = feesFromNet(preview);
+
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = Number(amount.replace(/\s/g, "").replace(",", "."));
@@ -36,7 +36,7 @@ export default function ContributeForm({
       return;
     }
     if (minAmount > 0 && parsed < minAmount) {
-      toast.error(`Minimum : ${formatAmount(minAmount)}`);
+      toast.error(`Minimum dans la cotisation : ${formatAmount(minAmount)}`);
       return;
     }
     const contributorName =
@@ -56,7 +56,7 @@ export default function ContributeForm({
 
     setLoading(true);
     try {
-      const data = await api<{ authorization_url: string }>(
+      const data = await api<{ authorization_url: string; gross: number }>(
         "/api/paystack/initialize",
         {
           method: "POST",
@@ -74,9 +74,6 @@ export default function ContributeForm({
       setLoading(false);
     }
   }
-
-  const preview = Number(amount.replace(/\s/g, "").replace(",", ".")) || 0;
-  const fee = Math.round(preview * COMMISSION_RATE);
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
@@ -108,22 +105,42 @@ export default function ContributeForm({
         </div>
       </div>
       <div className="space-y-2">
-        <Label htmlFor="amount">Montant ({CURRENCY})</Label>
+        <Label htmlFor="amount">
+          Montant dans la cotisation ({CURRENCY})
+        </Label>
         <Input
           id="amount"
           inputMode="numeric"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
+          placeholder="Ex. 10000"
           required
         />
       </div>
-      {preview > 0 ? (
-        <p className="text-xs text-muted-foreground">
-          Frais de service 1&nbsp;% : {formatAmount(fee)}
-        </p>
+      {quote ? (
+        <div className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm space-y-1.5">
+          <div className="flex justify-between text-muted-foreground">
+            <span>Dans la cotisation</span>
+            <span className="font-medium text-foreground">
+              {formatAmount(quote.net)}
+            </span>
+          </div>
+          <div className="flex justify-between text-muted-foreground">
+            <span>Frais de service ({SERVICE_FEE_LABEL})</span>
+            <span>+{formatAmount(quote.fee)}</span>
+          </div>
+          <div className="flex justify-between border-t border-border pt-1.5 font-semibold text-foreground">
+            <span>Vous payez</span>
+            <span>{formatAmount(quote.gross)}</span>
+          </div>
+        </div>
       ) : null}
       <Button type="submit" className="w-full" size="lg" disabled={loading}>
-        {loading ? "Redirection…" : "Contribuer avec Paystack"}
+        {loading
+          ? "Redirection…"
+          : quote
+            ? `Payer ${formatAmount(quote.gross)}`
+            : "Contribuer avec Paystack"}
       </Button>
     </form>
   );

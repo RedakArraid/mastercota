@@ -14,6 +14,7 @@ import {
 import { sendOtpWhatsApp } from "./lib/openwa.js";
 import { paystackFetch } from "./lib/paystack.js";
 import { generateSlug } from "./lib/format.js";
+import { feesFromNet } from "./lib/fees.js";
 
 const app = new Hono();
 const COOKIE = "mc_session";
@@ -289,6 +290,13 @@ app.post("/api/paystack/initialize", async (c) => {
     if (!cotisation_id || !amount || !contributor_name || !contributor_phone) {
       return c.json({ error: "Champs requis manquants" }, 400);
     }
+    // `amount` = net souhaité dans la cagnotte ; le contributeur paie le gross.
+    let quote;
+    try {
+      quote = feesFromNet(Number(amount));
+    } catch {
+      return c.json({ error: "Montant invalide" }, 400);
+    }
     const { rows: cots } = await query<{ owner_id: string }>(
       `SELECT owner_id FROM cotisations WHERE id = $1`,
       [cotisation_id]
@@ -303,8 +311,14 @@ app.post("/api/paystack/initialize", async (c) => {
     const cleanPhone = String(contributor_phone).replace(/[^0-9]/g, "");
     const payload: Record<string, unknown> = {
       email: `${cleanPhone}@mastercota.com`,
-      amount: Math.round(Number(amount) * 100),
+      amount: Math.round(quote.gross * 100),
       reference: contributionId,
+      metadata: {
+        net_amount: quote.net,
+        fee: quote.fee,
+        gross_amount: quote.gross,
+        cotisation_id,
+      },
     };
     if (owners[0]?.paystack_subaccount_id) {
       payload.subaccount = owners[0].paystack_subaccount_id;
@@ -329,12 +343,15 @@ app.post("/api/paystack/initialize", async (c) => {
         cotisation_id,
         contributor_name,
         contributor_phone,
-        Number(amount),
+        quote.net,
       ]
     );
     return c.json({
       authorization_url: data.data.authorization_url,
       reference: contributionId,
+      net: quote.net,
+      gross: quote.gross,
+      fee: quote.fee,
     });
   } catch (e) {
     return c.json({ error: e instanceof Error ? e.message : "Erreur" }, 500);

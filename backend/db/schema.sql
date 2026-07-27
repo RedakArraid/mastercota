@@ -143,7 +143,7 @@ VALUES
     'cgu',
     'Conditions générales',
     'Les règles d''utilisation de Mastercota.',
-    E'## Conditions générales d''utilisation\n\nEn utilisant Mastercota, vous acceptez les présentes conditions.\n\n### Compte\nVous êtes responsable de la confidentialité de votre accès téléphone.\n\n### Cotisations\nVous êtes responsable du contenu et de l''usage des fonds collectés.\n\n### Commission\nMastercota prélève 1 % sur chaque contribution encaissée.',
+    E'## Conditions générales d''utilisation\n\nEn utilisant Mastercota, vous acceptez les présentes conditions.\n\n### Compte\nVous êtes responsable de la confidentialité de votre accès téléphone.\n\n### Cotisations\nVous êtes responsable du contenu et de l''usage des fonds collectés.\n\n### Frais de service\nDes frais de service d''environ 3 % (plateforme + traitement paiement) sont ajoutés au montant payé par le contributeur. Le montant choisi est crédité intégralement à la cotisation.',
     'CGU',
     'footer',
     20

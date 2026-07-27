@@ -177,7 +177,7 @@ class _CreateCotisationScreenState
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Les contributions reçues sont automatiquement versées sur votre compte après déduction des frais de service.',
+                        'Les contributeurs paient les frais de service (~3 %). Vous recevez le montant annoncé dans la cotisation.',
                         style: AppTextStyles.caption.copyWith(
                           color: AppColors.primary,
                           height: 1.4,
@@ -724,12 +724,12 @@ class _CreateCotisationScreenState
                               ),
                               children: const [
                                 TextSpan(
-                                  text: 'Frais : 2,5 % ',
+                                  text: 'Frais : ~3 % ',
                                   style: TextStyle(fontWeight: FontWeight.w500),
                                 ),
                                 TextSpan(
                                   text:
-                                      'par contribution. Aucun frais de création, aucun abonnement.',
+                                      'payés par le contributeur. Aucun frais de création, aucun abonnement.',
                                 ),
                               ],
                             ),

@@ -9,6 +9,7 @@ import '../models/cotisation_model.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
+import '../../../core/utils/fees.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_text_field.dart';
 
@@ -717,31 +718,8 @@ class _ContributorsPreview extends StatelessWidget {
 
 // ── Payment form ──────────────────────────────────────────
 
-// ── Calcul des frais ──────────────────────────────────────
-// Taux appliqué sur le montant brut (gross) envoyé à Paystack
+// ── Formulaire de contribution (pass-fee) ────────────────
 
-const double _paystackRate = 0.015;
-const double _paystackCap  = 2000.0;   // FCFA
-const double _platformRate = 0.01;
-
-double _calcPaystackFee(double gross) =>
-    (gross * _paystackRate).clamp(0, _paystackCap);
-
-double _calcPlatformFee(double gross) => gross * _platformRate;
-
-double _calcNet(double gross) =>
-    gross - _calcPaystackFee(gross) - _calcPlatformFee(gross);
-
-// Calcul inverse : trouver le montant brut à partir du net souhaité
-double _grossFromNet(double net) {
-  // Seuil du plafond Paystack : au-dessus de 133 333 FCFA brut, le plafond s'applique
-  const double threshold = _paystackCap / _paystackRate; // ~ 133 333 FCFA
-  // Cas 1 : sous le seuil → gross = net / (1 - 0.015 - 0.01)
-  final gross1 = net / (1 - _paystackRate - _platformRate);
-  if (gross1 < threshold) return gross1;
-  // Cas 2 : au-dessus du seuil → gross = (net + 2000) / (1 - 0.01)
-  return (net + _paystackCap) / (1 - _platformRate);
-}
 
 class _PaymentForm extends StatefulWidget {
   final CotisationModel cot;
@@ -773,20 +751,13 @@ class _PaymentForm extends StatefulWidget {
 }
 
 class _PaymentFormState extends State<_PaymentForm> {
-  // true = l'utilisateur saisit ce qu'il PAIE (montant brut)
-  // false = l'utilisateur saisit ce qui ARRIVE dans la cagnotte (montant net)
-  bool _modePay = true;
   final _inputController = TextEditingController();
-  double? _grossAmount;   // montant facturé au contributeur
-  double? _netAmount;     // montant qui arrive dans la cagnotte
-  double? _paystackFee;
-  double? _platformFee;
+  FeeQuote? _quote;
 
   @override
   void initState() {
     super.initState();
     _inputController.addListener(_recalculate);
-    // Sync avec la valeur initiale de amountController si preset sélectionné
     if (widget.amountController.text.isNotEmpty) {
       _inputController.text = widget.amountController.text;
     }
@@ -801,54 +772,23 @@ class _PaymentFormState extends State<_PaymentForm> {
 
   void _recalculate() {
     final raw = double.tryParse(_inputController.text.trim());
-    if (raw == null || raw <= 0) {
-      setState(() {
-        _grossAmount = null;
-        _netAmount = null;
-        _paystackFee = null;
-        _platformFee = null;
-        widget.amountController.text = '';
-      });
-      return;
-    }
-
-    final double gross2 = _modePay ? raw : _grossFromNet(raw);
-    final double pstkFee = _calcPaystackFee(gross2);
-    final double pltfFee = _calcPlatformFee(gross2);
-    final double net2 = gross2 - pstkFee - pltfFee;
-
+    final quote = raw == null ? null : Fees.fromNet(raw);
     setState(() {
-      _grossAmount = gross2;
-      _netAmount   = net2;
-      _paystackFee = pstkFee;
-      _platformFee = pltfFee;
-      widget.amountController.text = gross2.toStringAsFixed(0);
+      _quote = quote;
+      widget.amountController.text =
+          quote == null ? '' : quote.net.toString();
     });
   }
 
   void _onPresetTap(int amount) {
     widget.onPresetTap(amount);
-    setState(() => _modePay = true);
     _inputController.text = amount.toString();
-  }
-
-  void _switchMode(bool payMode) {
-    if (_modePay == payMode) return;
-    setState(() => _modePay = payMode);
-    // Bascule la valeur affichée
-    if (_grossAmount != null && _netAmount != null) {
-      _inputController.removeListener(_recalculate);
-      _inputController.text = payMode
-          ? _grossAmount!.toStringAsFixed(0)
-          : _netAmount!.toStringAsFixed(0);
-      _inputController.addListener(_recalculate);
-    }
   }
 
   @override
   Widget build(BuildContext context) {
     final formatter = NumberFormat('#,###', 'fr_FR');
-    final hasCalc = _grossAmount != null && _netAmount != null;
+    final hasCalc = _quote != null;
     final minAmount = widget.cot.settings.minAmount;
 
     return Container(
@@ -906,7 +846,7 @@ class _PaymentFormState extends State<_PaymentForm> {
               ],
             ),
 
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
             // Name field
             AppTextField(
@@ -1014,66 +954,28 @@ class _PaymentFormState extends State<_PaymentForm> {
 
             const SizedBox(height: 20),
 
-            // ── Mode toggle ──────────────────────────────
-            Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceElevated,
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: AppColors.border),
-              ),
-              child: Row(
-                children: [
-                  _ModeTab(
-                    label: 'Je veux payer',
-                    icon: Icons.payments_outlined,
-                    isActive: _modePay,
-                    onTap: () => _switchMode(true),
-                  ),
-                  _ModeTab(
-                    label: 'Mettre dans la cagnotte',
-                    icon: Icons.savings_outlined,
-                    isActive: !_modePay,
-                    onTap: () => _switchMode(false),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 20),
 
-            const SizedBox(height: 14),
-
-            // Amount field
+            // Amount field (net → cotisation)
             AppTextField(
               controller: _inputController,
-              label: _modePay
-                  ? 'Montant que je paie'
-                  : 'Montant à verser dans la cagnotte',
+              label: 'Montant dans la cotisation',
               hint: minAmount > 0
                   ? 'Min. ${formatter.format(minAmount)} FCFA'
                   : 'Ex: 10000',
               suffixText: 'FCFA',
               keyboardType: TextInputType.number,
               inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-              prefixIcon: Icon(
-                _modePay
-                    ? Icons.payments_outlined
-                    : Icons.savings_outlined,
+              prefixIcon: const Icon(
+                Icons.savings_outlined,
                 color: AppColors.textSecondary,
                 size: 20,
               ),
               validator: (_) {
-                // On valide via le amountController (montant brut)
-                final val = widget.amountController.text.trim();
-                if (val.isEmpty) return 'Veuillez saisir un montant';
-                final amt = double.tryParse(val);
-                if (amt == null || amt <= 0) return 'Montant invalide';
-                if (minAmount > 0) {
-                  final net = _modePay
-                      ? _calcNet(amt)
-                      : (_netAmount ?? 0);
-                  if (net < minAmount) {
-                    return 'Minimum dans la cagnotte : ${formatter.format(minAmount)} FCFA';
-                  }
+                final quote = _quote;
+                if (quote == null) return 'Veuillez saisir un montant';
+                if (minAmount > 0 && quote.net < minAmount) {
+                  return 'Minimum : ${formatter.format(minAmount)} FCFA';
                 }
                 return null;
               },
@@ -1081,16 +983,12 @@ class _PaymentFormState extends State<_PaymentForm> {
 
             const SizedBox(height: 12),
 
-            // ── Fee breakdown card ───────────────────────
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
               child: hasCalc
                   ? _FeeBreakdown(
-                      key: ValueKey('$_grossAmount'),
-                      grossAmount: _grossAmount!,
-                      netAmount: _netAmount!,
-                      paystackFee: _paystackFee!,
-                      platformFee: _platformFee!,
+                      key: ValueKey(_quote!.gross),
+                      quote: _quote!,
                       formatter: formatter,
                     )
                   : Container(
@@ -1107,7 +1005,7 @@ class _PaymentFormState extends State<_PaymentForm> {
                               color: AppColors.textTertiary, size: 16),
                           const SizedBox(width: 8),
                           Text(
-                            'Saisissez un montant pour voir la répartition des frais',
+                            'Saisissez un montant pour voir les frais',
                             style: AppTextStyles.caption
                                 .copyWith(color: AppColors.textTertiary),
                           ),
@@ -1150,7 +1048,9 @@ class _PaymentFormState extends State<_PaymentForm> {
 
             // Pay button
             AppButton(
-              label: 'Payer par Mobile Money / Carte',
+              label: _quote == null
+                  ? 'Payer par Mobile Money / Carte'
+                  : 'Payer ${formatter.format(_quote!.gross)} FCFA',
               icon: Icons.credit_card_rounded,
               isLoading: widget.isLoading,
               onPressed: widget.onPay,
@@ -1181,93 +1081,20 @@ class _PaymentFormState extends State<_PaymentForm> {
   }
 }
 
-// ── Mode toggle tab ────────────────────────────────────────
-
-class _ModeTab extends StatelessWidget {
-  final String label;
-  final IconData icon;
-  final bool isActive;
-  final VoidCallback onTap;
-
-  const _ModeTab({
-    required this.label,
-    required this.icon,
-    required this.isActive,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Expanded(
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeInOut,
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-          decoration: BoxDecoration(
-            color: isActive ? AppColors.primary : Colors.transparent,
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: isActive
-                ? [
-                    BoxShadow(
-                      color: AppColors.primary.withValues(alpha: 0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    )
-                  ]
-                : null,
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 14,
-                color: isActive ? Colors.black : AppColors.textSecondary,
-              ),
-              const SizedBox(width: 5),
-              Flexible(
-                child: Text(
-                  label,
-                  style: AppTextStyles.caption.copyWith(
-                    color: isActive ? Colors.black : AppColors.textSecondary,
-                    fontWeight:
-                        isActive ? FontWeight.w700 : FontWeight.w500,
-                    fontSize: 11,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 // ── Fee summary card ────────────────────────────────────────
 
 class _FeeBreakdown extends StatelessWidget {
-  final double grossAmount;
-  final double netAmount;
+  final FeeQuote quote;
   final NumberFormat formatter;
 
   const _FeeBreakdown({
     super.key,
-    required this.grossAmount,
-    required this.netAmount,
+    required this.quote,
     required this.formatter,
-    // ignored — conservés pour compatibilité ascendante si besoin
-    double paystackFee = 0,
-    double platformFee = 0,
   });
 
   @override
   Widget build(BuildContext context) {
-    final fee = grossAmount - netAmount;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
@@ -1277,15 +1104,14 @@ class _FeeBreakdown extends StatelessWidget {
       ),
       child: Column(
         children: [
-          // Ligne 1 : Vous payez
           Row(
             children: [
-              Text('Vous payez',
+              Text('Dans la cotisation',
                   style: AppTextStyles.caption
                       .copyWith(color: AppColors.textSecondary)),
               const Spacer(),
               Text(
-                '${formatter.format(grossAmount.round())} FCFA',
+                '${formatter.format(quote.net)} FCFA',
                 style: AppTextStyles.bodySmall.copyWith(
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary),
@@ -1295,12 +1121,12 @@ class _FeeBreakdown extends StatelessWidget {
           const SizedBox(height: 4),
           Row(
             children: [
-              Text('Frais de service (2,5%)',
+              Text('Frais de service (${Fees.serviceFeeLabel})',
                   style: AppTextStyles.caption
                       .copyWith(color: AppColors.textTertiary, fontSize: 11)),
               const Spacer(),
               Text(
-                '−${formatter.format(fee.round())} FCFA',
+                '+${formatter.format(quote.fee)} FCFA',
                 style: AppTextStyles.caption.copyWith(
                     color: AppColors.textTertiary, fontSize: 11),
               ),
@@ -1310,20 +1136,21 @@ class _FeeBreakdown extends StatelessWidget {
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Divider(color: AppColors.borderLight, height: 1),
           ),
-          // Ligne 2 : Dans la cagnotte
           Row(
             children: [
               Expanded(
                 child: Text(
-                  'Dans la cagnotte',
+                  'Vous payez',
                   style: AppTextStyles.bodySmall.copyWith(
-                      fontWeight: FontWeight.w800, color: AppColors.success),
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
                 ),
               ),
               Text(
-                '${formatter.format(netAmount.round())} FCFA',
-                style: AppTextStyles.titleMedium.copyWith(
-                    fontWeight: FontWeight.w800, color: AppColors.success),
+                '${formatter.format(quote.gross)} FCFA',
+                style: AppTextStyles.bodySmall.copyWith(
+                    fontWeight: FontWeight.w800, color: AppColors.primary),
               ),
             ],
           ),

@@ -19,6 +19,8 @@ class AppConstants {
   static const String defaultCountryFlag = '🇨🇮';
 
   static const double commissionRate = 0.01;
+  /// Frais de service globaux (~3 %) — voir [Fees].
+  static const double serviceRate = 0.0295;
   static const String currency = 'FCFA';
 
   static const String statusActive = 'active';
