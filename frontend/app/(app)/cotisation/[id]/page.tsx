@@ -60,6 +60,8 @@ export default function CotisationDetailPage() {
   const [mPhone, setMPhone] = useState("");
   const [mAmount, setMAmount] = useState("");
   const [mSaving, setMSaving] = useState(false);
+  const [extending, setExtending] = useState(false);
+  const [payingFee, setPayingFee] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -114,7 +116,6 @@ export default function CotisationDetailPage() {
             title: title.trim(),
             description: description.trim() || null,
             target_amount: Number(target.replace(/\s/g, "").replace(",", ".")),
-            deadline,
           }),
         }
       );
@@ -178,6 +179,59 @@ export default function CotisationDetailPage() {
       toast.success("Cotisation réouverte");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
+    }
+  }
+
+  async function resumeFeePayment() {
+    if (!cotisation?.platform_fee_reference) {
+      toast.error("Référence de paiement introuvable");
+      return;
+    }
+    setPayingFee(true);
+    try {
+      // Re-create payment by calling extend-like recreate: use create flow again via extend endpoint not available
+      // Owner re-inits by posting extend with purpose - for pending create, call billing resume
+      const data = await api<{
+        authorization_url?: string;
+        payment_required?: boolean;
+      }>(`/api/cotisations/${id}/pay-fee`, { method: "POST" });
+      if (data.authorization_url) {
+        window.location.href = data.authorization_url;
+        return;
+      }
+      toast.error("Paiement indisponible");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setPayingFee(false);
+    }
+  }
+
+  async function extendCotisation() {
+    if (
+      !confirm(
+        "Prolonger de 10 jours pour 2 000 FCFA ? (dans la limite de 60 jours au total)"
+      )
+    ) {
+      return;
+    }
+    setExtending(true);
+    try {
+      const data = await api<{
+        authorization_url?: string;
+        fee?: number;
+        error?: string;
+      }>(`/api/cotisations/${id}/extend`, { method: "POST" });
+      if (data.authorization_url) {
+        toast.message(`Frais de prolongation : ${formatAmount(data.fee ?? 2000)}`);
+        window.location.href = data.authorization_url;
+        return;
+      }
+      toast.error("Prolongation impossible");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
+    } finally {
+      setExtending(false);
     }
   }
 
@@ -288,8 +342,31 @@ export default function CotisationDetailPage() {
           {days >= 0
             ? `${days} jour${days > 1 ? "s" : ""} restant${days > 1 ? "s" : ""}`
             : "Échéance dépassée"}
+          {cotisation.duration_days
+            ? ` · durée ${cotisation.duration_days} j`
+            : ""}
+          {cotisation.is_free_tier ? " · offre gratuite" : ""}
         </p>
       </div>
+
+      {cotisation.status === "pending_fee" ? (
+        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-4 text-sm">
+          <p className="font-semibold text-ink">
+            Frais Mastercota en attente
+          </p>
+          <p className="mt-1 text-muted-foreground">
+            Réglez {formatAmount(Number(cotisation.platform_fee_amount || 0))}{" "}
+            pour activer la cotisation et partager le lien.
+          </p>
+          <Button
+            className="mt-3"
+            onClick={resumeFeePayment}
+            disabled={payingFee}
+          >
+            {payingFee ? "Redirection…" : "Payer les frais"}
+          </Button>
+        </div>
+      ) : null}
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <div className="mb-2 flex justify-between text-sm">
@@ -371,11 +448,21 @@ export default function CotisationDetailPage() {
             <Lock className="size-4" />
             Clôturer
           </Button>
-        ) : (
+        ) : cotisation.status !== "pending_fee" ? (
           <Button variant="secondary" onClick={reopenCotisation}>
             Réouvrir
           </Button>
-        )}
+        ) : null}
+        {(cotisation.status === "active" || cotisation.status === "closed") &&
+        Number(cotisation.extension_count ?? 0) < 1 ? (
+          <Button
+            variant="outline"
+            onClick={extendCotisation}
+            disabled={extending}
+          >
+            {extending ? "…" : "Prolonger +10 j (2 000 F)"}
+          </Button>
+        ) : null}
       </div>
 
       <p className="rounded-xl bg-secondary px-4 py-3 text-sm break-all text-muted-foreground">
@@ -450,11 +537,11 @@ export default function CotisationDetailPage() {
               </div>
               <div className="space-y-2">
                 <Label>Date limite</Label>
-                <Input
-                  type="date"
-                  value={deadline}
-                  onChange={(e) => setDeadline(e.target.value)}
-                />
+                <Input type="date" value={deadline} disabled readOnly />
+                <p className="text-xs text-muted-foreground">
+                  La durée se gère via l&apos;offre initiale ou une
+                  prolongation payante.
+                </p>
               </div>
             </div>
             <Button type="submit" disabled={saving}>

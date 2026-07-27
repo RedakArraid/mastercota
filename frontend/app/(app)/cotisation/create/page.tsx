@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -16,46 +16,97 @@ import {
 } from "@/components/cotisation-settings-fields";
 import { api } from "@/lib/api";
 import { CURRENCY } from "@/lib/constants";
-import type { Cotisation, UserProfile } from "@/lib/types";
+import {
+  DURATION_PRESETS,
+  FREE_DURATION_DAYS,
+  quoteDuration,
+} from "@/lib/fees";
+import { formatAmount } from "@/lib/format";
+import { cn } from "@/lib/utils";
+import type { Cotisation } from "@/lib/types";
+
+type BillingInfo = {
+  freeEligible: boolean;
+  freeDurationDays: number;
+  maxDurationDays: number;
+  presets: { days: number; fee: number; label: string }[];
+  extension: { days: number; fee: number };
+};
 
 export default function CreateCotisationPage() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [target, setTarget] = useState("");
-  const [deadline, setDeadline] = useState("");
   const [settings, setSettings] = useState<SettingsFormValue>(
     defaultSettingsForm()
   );
+  const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [useFree, setUseFree] = useState(true);
+  const [durationDays, setDurationDays] = useState(35);
   const [loading, setLoading] = useState(false);
-  const [hasPayout, setHasPayout] = useState<boolean | null>(null);
 
   useEffect(() => {
-    api<{ user: UserProfile }>("/api/profile")
-      .then((p) => setHasPayout(Boolean(p.user?.paystack_subaccount_id)))
-      .catch(() => setHasPayout(null));
+    api<BillingInfo>("/api/cotisations/billing-info")
+      .then((info) => {
+        setBilling(info);
+        if (info.freeEligible) {
+          setUseFree(true);
+          setDurationDays(info.freeDurationDays);
+        } else {
+          setUseFree(false);
+          setDurationDays(15);
+        }
+      })
+      .catch(() => setBilling(null));
   }, []);
+
+  const quote = useMemo(() => {
+    if (!billing) return null;
+    return quoteDuration({
+      durationDays,
+      freeEligible: billing.freeEligible,
+      useFree: useFree && billing.freeEligible,
+    });
+  }, [billing, durationDays, useFree]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const targetAmount = Number(target.replace(/\s/g, "").replace(",", "."));
-    if (!title.trim() || !targetAmount || !deadline) {
+    if (!title.trim() || !targetAmount || !quote) {
       toast.error("Remplissez tous les champs obligatoires");
       return;
     }
     setLoading(true);
     try {
-      const data = await api<{ cotisation: Cotisation }>("/api/cotisations", {
+      const data = await api<{
+        cotisation: Cotisation;
+        payment_required?: boolean;
+        authorization_url?: string;
+        fee?: number;
+      }>("/api/cotisations", {
         method: "POST",
         body: JSON.stringify({
           title: title.trim(),
           description: description.trim() || null,
           target_amount: targetAmount,
-          deadline,
+          duration_days: quote.durationDays,
+          use_free: quote.isFree,
           settings: settingsToPayload(settings),
         }),
       });
-      toast.success("Cotisation créée");
+      if (data.payment_required && data.authorization_url) {
+        toast.message(
+          `Paiement des frais : ${formatAmount(data.fee ?? quote.fee)}`
+        );
+        window.location.href = data.authorization_url;
+        return;
+      }
+      toast.success(
+        quote.isFree
+          ? "Cotisation gratuite créée (35 jours)"
+          : "Cotisation créée"
+      );
       router.push(`/cotisation/${data.cotisation.id}`);
       router.refresh();
     } catch (err) {
@@ -63,8 +114,6 @@ export default function CreateCotisationPage() {
       setLoading(false);
     }
   }
-
-  const minDate = new Date().toISOString().slice(0, 10);
 
   return (
     <div className="mx-auto max-w-xl space-y-8">
@@ -76,25 +125,10 @@ export default function CreateCotisationPage() {
           Créer une cotisation
         </h1>
         <p className="mt-2 text-muted-foreground">
-          Définissez l&apos;objectif, la date limite et ce que vos contributeurs
-          verront.
+          0 % sur les contributions. Vous payez uniquement les frais de
+          durée Mastercota (1re gratuite).
         </p>
       </div>
-
-      {hasPayout === false ? (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-          <p className="font-medium text-ink">
-            Configurez votre compte de versement
-          </p>
-          <p className="mt-1 text-muted-foreground">
-            Sans compte de retrait, les contributions restent sur la plateforme
-            jusqu&apos;à configuration.
-          </p>
-          <Button asChild variant="secondary" size="sm" className="mt-3">
-            <Link href="/profile/payout">Configurer le retrait</Link>
-          </Button>
-        </div>
-      ) : null}
 
       <form onSubmit={onSubmit} className="space-y-6">
         <section className="space-y-5 rounded-2xl border border-border bg-card p-6">
@@ -119,45 +153,111 @@ export default function CreateCotisationPage() {
               placeholder="Expliquez le but de la cotisation…"
             />
           </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="target">Objectif ({CURRENCY})</Label>
-              <Input
-                id="target"
-                inputMode="numeric"
-                value={target}
-                onChange={(e) => setTarget(e.target.value)}
-                placeholder="500000"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="deadline">Date limite</Label>
-              <Input
-                id="deadline"
-                type="date"
-                min={minDate}
-                value={deadline}
-                onChange={(e) => setDeadline(e.target.value)}
-                required
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="target">Objectif ({CURRENCY})</Label>
+            <Input
+              id="target"
+              inputMode="numeric"
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
+              placeholder="500000"
+              required
+            />
           </div>
         </section>
 
+        <section className="space-y-4 rounded-2xl border border-border bg-card p-6">
+          <div>
+            <h2 className="text-lg font-semibold text-ink">Durée & frais</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Max 60 jours. Prolongation possible plus tard (+10 j / 2&nbsp;000&nbsp;F).
+            </p>
+          </div>
+
+          {billing?.freeEligible ? (
+            <button
+              type="button"
+              onClick={() => {
+                setUseFree(true);
+                setDurationDays(FREE_DURATION_DAYS);
+              }}
+              className={cn(
+                "w-full rounded-2xl border px-4 py-4 text-left transition",
+                useFree
+                  ? "border-primary bg-primary/10"
+                  : "border-border hover:border-primary/40"
+              )}
+            >
+              <p className="font-semibold text-ink">1re cotisation gratuite</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {FREE_DURATION_DAYS} jours · 0 {CURRENCY} · liée à votre numéro
+              </p>
+            </button>
+          ) : (
+            <p className="rounded-xl bg-secondary/60 px-4 py-3 text-sm text-muted-foreground">
+              Votre cotisation gratuite a déjà été utilisée sur ce numéro.
+            </p>
+          )}
+
+          <div className="grid gap-3 sm:grid-cols-3">
+            {(billing?.presets ?? DURATION_PRESETS).map((p) => {
+              const selected = !useFree && durationDays === p.days;
+              return (
+                <button
+                  key={p.days}
+                  type="button"
+                  onClick={() => {
+                    setUseFree(false);
+                    setDurationDays(p.days);
+                  }}
+                  className={cn(
+                    "rounded-2xl border px-3 py-4 text-left transition",
+                    selected
+                      ? "border-primary bg-primary/10"
+                      : "border-border hover:border-primary/40"
+                  )}
+                >
+                  <p className="font-semibold text-ink">{p.days} jours</p>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {formatAmount(p.fee)}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          {quote ? (
+            <div className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Offre</span>
+                <span className="font-medium text-foreground">{quote.label}</span>
+              </div>
+              <div className="mt-1 flex justify-between font-semibold">
+                <span>À régler</span>
+                <span>
+                  {quote.fee === 0 ? "Gratuit" : formatAmount(quote.fee)}
+                </span>
+              </div>
+            </div>
+          ) : null}
+        </section>
+
         <section className="rounded-2xl border border-border bg-card p-6">
-          <h2 className="mb-2 text-lg font-semibold text-ink">
-            Page publique
-          </h2>
+          <h2 className="mb-2 text-lg font-semibold text-ink">Page publique</h2>
           <p className="mb-4 text-sm text-muted-foreground">
-            Contrôlez ce que voient les personnes qui contribuent via votre
-            lien.
+            Contrôlez ce que voient les personnes qui contribuent via votre lien.
           </p>
           <CotisationSettingsFields value={settings} onChange={setSettings} />
         </section>
 
-        <Button type="submit" size="lg" className="w-full" disabled={loading}>
-          {loading ? "Création…" : "Créer la cotisation"}
+        <Button type="submit" size="lg" className="w-full" disabled={loading || !quote}>
+          {loading
+            ? "…"
+            : quote?.isFree
+              ? "Créer gratuitement"
+              : quote
+                ? `Continuer · ${formatAmount(quote.fee)}`
+                : "Créer la cotisation"}
         </Button>
       </form>
     </div>

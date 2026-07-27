@@ -15,6 +15,19 @@ import { sendOtpWhatsApp, isOpenWaActive } from "./lib/openwa.js";
 import { paystackFetch } from "./lib/paystack.js";
 import { generateSlug } from "./lib/format.js";
 import { feesFromNet } from "./lib/fees.js";
+import {
+  FREE_DURATION_DAYS,
+  MAX_DURATION_DAYS,
+  activatePlatformPayment,
+  deadlineFromDuration,
+  freeEligibleForPhone,
+  getOwnerPhone,
+  initializePlatformFeePaystack,
+  markFreeUsed,
+  quoteDuration,
+  canExtend,
+  EXTENSION_DAYS,
+} from "./lib/billing.js";
 import { adminRoutes } from "./admin.js";
 
 const app = new Hono();
@@ -204,6 +217,22 @@ async function requireUser(c: Parameters<typeof getCookie>[0]) {
   return token ? verifyToken(token) : null;
 }
 
+async function autoCloseExpiredCotisations() {
+  try {
+    await query(
+      `UPDATE cotisations
+       SET status = 'closed'
+       WHERE status = 'active'
+         AND deadline < CURRENT_DATE`
+    );
+  } catch (e) {
+    console.error("[auto-close]", e);
+  }
+}
+
+setInterval(autoCloseExpiredCotisations, 15 * 60 * 1000);
+autoCloseExpiredCotisations();
+
 // ── Cotisations ─────────────────────────────────────────
 app.get("/api/cotisations", async (c) => {
   const session = await requireUser(c);
@@ -219,16 +248,58 @@ app.post("/api/cotisations", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
   const body = await c.req.json();
-  const { title, description, target_amount, deadline, cover_url, settings } =
-    body;
-  if (!title || !target_amount || !deadline) {
-    return c.json({ error: "title, target_amount, deadline requis" }, 400);
+  const {
+    title,
+    description,
+    target_amount,
+    cover_url,
+    settings,
+    duration_days,
+    use_free,
+  } = body;
+  if (!title || !target_amount || duration_days == null) {
+    return c.json(
+      { error: "title, target_amount et duration_days requis" },
+      400
+    );
   }
   try {
+    const phone = await getOwnerPhone(session.id);
+    if (!phone) return c.json({ error: "Profil introuvable" }, 400);
+    const freeEligible = await freeEligibleForPhone(phone);
+    const quote = quoteDuration({
+      durationDays: Number(duration_days),
+      freeEligible,
+      useFree: Boolean(use_free),
+    });
+    if (!quote) {
+      return c.json(
+        {
+          error: `Durée invalide (1–${MAX_DURATION_DAYS} jours)`,
+        },
+        400
+      );
+    }
+    if (use_free && !quote.isFree) {
+      return c.json(
+        {
+          error: `La cotisation gratuite est limitée à ${FREE_DURATION_DAYS} jours, ou déjà utilisée`,
+        },
+        400
+      );
+    }
+
+    const deadline = deadlineFromDuration(quote.durationDays);
+    const startsAt = new Date().toISOString().slice(0, 10);
+    const isFree = quote.isFree;
+    const status = isFree ? "active" : "pending_fee";
+    const feeStatus = isFree ? "free" : "pending";
+
     const { rows } = await query(
       `INSERT INTO cotisations
-        (title, description, target_amount, deadline, owner_id, cover_url, slug, settings)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb) RETURNING *`,
+        (title, description, target_amount, deadline, owner_id, cover_url, slug, settings,
+         duration_days, starts_at, platform_fee_amount, platform_fee_status, is_free_tier, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [
         title.trim(),
         description?.trim() || null,
@@ -238,9 +309,38 @@ app.post("/api/cotisations", async (c) => {
         cover_url || null,
         generateSlug(String(title)),
         JSON.stringify(settings ?? {}),
+        quote.durationDays,
+        startsAt,
+        quote.fee,
+        feeStatus,
+        isFree,
+        status,
       ]
     );
-    return c.json({ cotisation: rows[0] });
+    const cotisation = rows[0];
+
+    if (isFree) {
+      await markFreeUsed(phone);
+      return c.json({ cotisation, payment_required: false });
+    }
+
+    const payment = await initializePlatformFeePaystack({
+      userId: session.id,
+      phone,
+      cotisationId: cotisation.id,
+      purpose: "create",
+      amount: quote.fee,
+      durationDays: quote.durationDays,
+      callbackPath: `/cotisation/${cotisation.id}/frais`,
+      metadata: {},
+    });
+    return c.json({
+      cotisation,
+      payment_required: true,
+      authorization_url: payment.authorization_url,
+      reference: payment.reference,
+      fee: quote.fee,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Erreur";
     return c.json(
@@ -254,7 +354,57 @@ app.post("/api/cotisations", async (c) => {
   }
 });
 
+app.get("/api/cotisations/billing-quote", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const durationDays = Number(c.req.query("duration_days"));
+  const useFree = c.req.query("use_free") === "1" || c.req.query("use_free") === "true";
+  const phone = await getOwnerPhone(session.id);
+  if (!phone) return c.json({ error: "Profil introuvable" }, 400);
+  const freeEligible = await freeEligibleForPhone(phone);
+  const quote = quoteDuration({
+    durationDays,
+    freeEligible,
+    useFree,
+  });
+  if (!quote) {
+    return c.json({ error: `Durée invalide (1–${MAX_DURATION_DAYS} jours)` }, 400);
+  }
+  return c.json({
+    quote,
+    freeEligible,
+    freeDurationDays: FREE_DURATION_DAYS,
+    maxDurationDays: MAX_DURATION_DAYS,
+    presets: [
+      { days: 15, fee: 2000 },
+      { days: 35, fee: 4000 },
+      { days: 60, fee: 10_000 },
+    ],
+    extension: { days: 10, fee: 2000 },
+  });
+});
+
+app.get("/api/cotisations/billing-info", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const phone = await getOwnerPhone(session.id);
+  if (!phone) return c.json({ error: "Profil introuvable" }, 400);
+  const freeEligible = await freeEligibleForPhone(phone);
+  return c.json({
+    freeEligible,
+    freeDurationDays: FREE_DURATION_DAYS,
+    maxDurationDays: MAX_DURATION_DAYS,
+    presets: [
+      { days: 15, fee: 2000, label: "15 jours" },
+      { days: 35, fee: 4000, label: "35 jours" },
+      { days: 60, fee: 10_000, label: "60 jours" },
+    ],
+    extension: { days: 10, fee: 2000 },
+  });
+});
+
 app.get("/api/cotisations/by-slug/:slug", async (c) => {
+  await autoCloseExpiredCotisations();
   const { rows } = await query(`SELECT * FROM cotisations WHERE slug = $1`, [
     c.req.param("slug"),
   ]);
@@ -263,6 +413,7 @@ app.get("/api/cotisations/by-slug/:slug", async (c) => {
 });
 
 app.get("/api/cotisations/:id", async (c) => {
+  await autoCloseExpiredCotisations();
   const { rows } = await query(`SELECT * FROM cotisations WHERE id = $1`, [
     c.req.param("id"),
   ]);
@@ -280,16 +431,16 @@ app.patch("/api/cotisations/:id", async (c) => {
   );
   if (!owned[0]) return c.json({ error: "Forbidden" }, 403);
   const body = await c.req.json();
+  // La deadline ne se modifie que via prolongation payante
   const { rows } = await query(
     `UPDATE cotisations SET
        title = COALESCE($1, title),
        description = COALESCE($2, description),
        target_amount = COALESCE($3, target_amount),
-       deadline = COALESCE($4, deadline),
-       cover_url = COALESCE($5, cover_url),
-       status = COALESCE($6, status),
-       settings = COALESCE($7::jsonb, settings)
-     WHERE id = $8
+       cover_url = COALESCE($4, cover_url),
+       status = COALESCE($5, status),
+       settings = COALESCE($6::jsonb, settings)
+     WHERE id = $7
      RETURNING *`,
     [
       body.title?.trim() ?? null,
@@ -297,7 +448,6 @@ app.patch("/api/cotisations/:id", async (c) => {
         ? body.description?.trim() || null
         : null,
       body.target_amount != null ? Number(body.target_amount) : null,
-      body.deadline ?? null,
       body.cover_url !== undefined ? body.cover_url || null : null,
       body.status ?? null,
       body.settings != null ? JSON.stringify(body.settings) : null,
@@ -359,7 +509,6 @@ app.post("/api/paystack/initialize", async (c) => {
     if (!cotisation_id || !amount || !contributor_name || !contributor_phone) {
       return c.json({ error: "Champs requis manquants" }, 400);
     }
-    // `amount` = net souhaité dans la cagnotte ; le contributeur paie le gross.
     let quote;
     try {
       quote = feesFromNet(Number(amount));
@@ -369,8 +518,14 @@ app.post("/api/paystack/initialize", async (c) => {
     const { rows: cots } = await query<{
       owner_id: string;
       slug: string;
-    }>(`SELECT owner_id, slug FROM cotisations WHERE id = $1`, [cotisation_id]);
+      status: string;
+    }>(`SELECT owner_id, slug, status FROM cotisations WHERE id = $1`, [
+      cotisation_id,
+    ]);
     if (!cots[0]) return c.json({ error: "Cotisation introuvable" }, 404);
+    if (cots[0].status !== "active") {
+      return c.json({ error: "Cette cotisation n'accepte plus de paiements" }, 400);
+    }
     const { rows: owners } = await query<{
       paystack_subaccount_id: string | null;
     }>(`SELECT paystack_subaccount_id FROM users WHERE id = $1`, [
@@ -389,6 +544,7 @@ app.post("/api/paystack/initialize", async (c) => {
       reference: contributionId,
       callback_url: `${appUrl}/c/${cots[0].slug}/retour?ref=${contributionId}`,
       metadata: {
+        type: "contribution",
         net_amount: quote.net,
         fee: quote.fee,
         gross_amount: quote.gross,
@@ -445,13 +601,143 @@ app.post("/api/paystack/webhook", async (c) => {
   if (hash !== signature) return c.json({ error: "Invalid signature" }, 401);
   const event = JSON.parse(bodyText);
   if (event.event === "charge.success" && event.data?.status === "success") {
-    await query(
-      `UPDATE contributions SET status = 'paid', payment_method = $1
-       WHERE paystack_reference = $2 AND status <> 'paid'`,
-      [event.data.channel || "mobile_money", event.data.reference]
-    );
+    const reference = event.data.reference as string;
+    const metaType = event.data.metadata?.type;
+    if (metaType === "platform_fee") {
+      await activatePlatformPayment(reference);
+    } else {
+      await query(
+        `UPDATE contributions SET status = 'paid', payment_method = $1
+         WHERE paystack_reference = $2 AND status <> 'paid'`,
+        [event.data.channel || "mobile_money", reference]
+      );
+    }
   }
   return c.json({ received: true });
+});
+
+app.get("/api/platform-payments/verify/:reference", async (c) => {
+  const reference = c.req.param("reference");
+  const { ok, data } = await paystackFetch(
+    `/transaction/verify/${encodeURIComponent(reference)}`
+  );
+  if (!ok) {
+    return c.json({ error: data.message || "Vérification impossible" }, 400);
+  }
+  const status = data.data?.status as string | undefined;
+  if (status === "success") {
+    const result = await activatePlatformPayment(reference);
+    if (!result.ok) return c.json({ error: result.error }, 404);
+  }
+  const { rows } = await query(
+    `SELECT pp.*, c.slug, c.title, c.status AS cotisation_status
+     FROM platform_payments pp
+     LEFT JOIN cotisations c ON c.id = pp.cotisation_id
+     WHERE pp.paystack_reference = $1`,
+    [reference]
+  );
+  return c.json({
+    paystack_status: status,
+    payment: rows[0] ?? null,
+  });
+});
+
+app.post("/api/cotisations/:id/extend", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const id = c.req.param("id");
+  const { rows: owned } = await query<{
+    id: string;
+    deadline: string;
+    starts_at: string;
+    extension_count: number;
+    status: string;
+  }>(
+    `SELECT id, deadline, starts_at, extension_count, status
+     FROM cotisations WHERE id = $1 AND owner_id = $2`,
+    [id, session.id]
+  );
+  if (!owned[0]) return c.json({ error: "Forbidden" }, 403);
+  if (owned[0].status === "pending_fee") {
+    return c.json({ error: "Payez d'abord les frais de création" }, 400);
+  }
+  const ext = canExtend({
+    startsAt: owned[0].starts_at,
+    deadline: owned[0].deadline,
+    extensionCount: Number(owned[0].extension_count),
+  });
+  if (!ext.ok) return c.json({ error: ext.error }, 400);
+  const phone = await getOwnerPhone(session.id);
+  if (!phone) return c.json({ error: "Profil introuvable" }, 400);
+  try {
+    const payment = await initializePlatformFeePaystack({
+      userId: session.id,
+      phone,
+      cotisationId: id,
+      purpose: "extend",
+      amount: ext.fee,
+      durationDays: EXTENSION_DAYS,
+      callbackPath: `/cotisation/${id}/frais`,
+      metadata: { new_deadline: ext.newDeadline },
+    });
+    return c.json({
+      payment_required: true,
+      authorization_url: payment.authorization_url,
+      reference: payment.reference,
+      fee: ext.fee,
+      extension_days: EXTENSION_DAYS,
+      new_deadline: ext.newDeadline,
+    });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "Erreur" }, 400);
+  }
+});
+
+app.post("/api/cotisations/:id/pay-fee", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const id = c.req.param("id");
+  const { rows: owned } = await query<{
+    id: string;
+    status: string;
+    platform_fee_amount: string;
+    platform_fee_status: string;
+    duration_days: number | null;
+  }>(
+    `SELECT id, status, platform_fee_amount, platform_fee_status, duration_days
+     FROM cotisations WHERE id = $1 AND owner_id = $2`,
+    [id, session.id]
+  );
+  if (!owned[0]) return c.json({ error: "Forbidden" }, 403);
+  if (
+    owned[0].status !== "pending_fee" &&
+    owned[0].platform_fee_status !== "pending"
+  ) {
+    return c.json({ error: "Aucun frais en attente" }, 400);
+  }
+  const fee = Number(owned[0].platform_fee_amount);
+  if (!fee || fee <= 0) return c.json({ error: "Montant frais invalide" }, 400);
+  const phone = await getOwnerPhone(session.id);
+  if (!phone) return c.json({ error: "Profil introuvable" }, 400);
+  try {
+    const payment = await initializePlatformFeePaystack({
+      userId: session.id,
+      phone,
+      cotisationId: id,
+      purpose: "create",
+      amount: fee,
+      durationDays: owned[0].duration_days ?? undefined,
+      callbackPath: `/cotisation/${id}/frais`,
+    });
+    return c.json({
+      payment_required: true,
+      authorization_url: payment.authorization_url,
+      reference: payment.reference,
+      fee,
+    });
+  } catch (e) {
+    return c.json({ error: e instanceof Error ? e.message : "Erreur" }, 400);
+  }
 });
 
 app.get("/api/paystack/verify/:reference", async (c) => {

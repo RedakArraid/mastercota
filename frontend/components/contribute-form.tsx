@@ -14,7 +14,6 @@ import {
   getCountryByIso,
   isValidNational,
 } from "@/lib/countries";
-import { feesFromNet, SERVICE_FEE_LABEL } from "@/lib/fees";
 import { formatAmount } from "@/lib/format";
 import type { Cotisation } from "@/lib/types";
 
@@ -35,7 +34,6 @@ export default function ContributeForm({
   const country = getCountryByIso(countryIso);
 
   const preview = Number(amount.replace(/\s/g, "").replace(",", ".")) || 0;
-  const quote = feesFromNet(preview);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,7 +62,7 @@ export default function ContributeForm({
 
     setLoading(true);
     try {
-      const data = await api<{ authorization_url: string; gross: number }>(
+      const data = await api<{ authorization_url: string }>(
         "/api/paystack/initialize",
         {
           method: "POST",
@@ -108,9 +106,7 @@ export default function ContributeForm({
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="amount">
-          Montant dans la cotisation ({CURRENCY})
-        </Label>
+        <Label htmlFor="amount">Montant ({CURRENCY})</Label>
         <Input
           id="amount"
           inputMode="numeric"
@@ -119,30 +115,24 @@ export default function ContributeForm({
           placeholder="Ex. 10000"
           required
         />
+        <p className="text-xs text-muted-foreground">
+          Aucun frais Mastercota sur votre contribution — vous payez exactement
+          ce montant.
+        </p>
       </div>
-      {quote ? (
-        <div className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm space-y-1.5">
-          <div className="flex justify-between text-muted-foreground">
-            <span>Dans la cotisation</span>
-            <span className="font-medium text-foreground">
-              {formatAmount(quote.net)}
-            </span>
-          </div>
-          <div className="flex justify-between text-muted-foreground">
-            <span>Frais de service ({SERVICE_FEE_LABEL})</span>
-            <span>+{formatAmount(quote.fee)}</span>
-          </div>
-          <div className="flex justify-between border-t border-border pt-1.5 font-semibold text-foreground">
+      {preview > 0 ? (
+        <div className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm">
+          <div className="flex justify-between font-semibold">
             <span>Vous payez</span>
-            <span>{formatAmount(quote.gross)}</span>
+            <span>{formatAmount(preview)}</span>
           </div>
         </div>
       ) : null}
       <Button type="submit" className="w-full" size="lg" disabled={loading}>
         {loading
           ? "Redirection…"
-          : quote
-            ? `Payer ${formatAmount(quote.gross)}`
+          : preview > 0
+            ? `Payer ${formatAmount(preview)}`
             : "Contribuer"}
       </Button>
     </form>

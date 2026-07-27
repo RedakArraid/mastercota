@@ -6,6 +6,8 @@ export function statusLabel(status: string): string {
       return "Clôturée";
     case "completed":
       return "Objectif atteint";
+    case "pending_fee":
+      return "En attente de paiement";
     case "pending":
       return "En attente";
     case "paid":

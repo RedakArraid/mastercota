@@ -18,9 +18,16 @@ export type Cotisation = {
   current_amount: number;
   deadline: string;
   owner_id: string;
-  status: "active" | "closed" | "completed" | string;
+  status: "pending_fee" | "active" | "closed" | "completed" | string;
   settings: CotisationSettings | null;
   created_at: string;
+  duration_days?: number | null;
+  starts_at?: string;
+  platform_fee_amount?: number;
+  platform_fee_status?: string;
+  platform_fee_reference?: string | null;
+  is_free_tier?: boolean;
+  extension_count?: number;
 };
 
 export type Contribution = {

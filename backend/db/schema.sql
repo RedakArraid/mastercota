@@ -34,8 +34,16 @@ CREATE TABLE IF NOT EXISTS cotisations (
   deadline       date NOT NULL,
   owner_id       uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   status         text NOT NULL DEFAULT 'active'
-                   CHECK (status IN ('active', 'closed', 'completed')),
+                   CHECK (status IN ('pending_fee', 'active', 'closed', 'completed')),
   settings       jsonb NOT NULL DEFAULT '{}'::jsonb,
+  duration_days  int,
+  starts_at      date NOT NULL DEFAULT CURRENT_DATE,
+  platform_fee_amount numeric NOT NULL DEFAULT 0,
+  platform_fee_status text NOT NULL DEFAULT 'none'
+                   CHECK (platform_fee_status IN ('none', 'free', 'pending', 'paid', 'waived')),
+  platform_fee_reference text,
+  is_free_tier   boolean NOT NULL DEFAULT false,
+  extension_count int NOT NULL DEFAULT 0,
   created_at     timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS cotisations_owner_idx ON cotisations(owner_id);
@@ -188,4 +196,27 @@ CREATE TABLE IF NOT EXISTS openwa_settings (
 );
 
 INSERT INTO openwa_settings (id) VALUES ('default') ON CONFLICT DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS phone_entitlements (
+  phone                  text PRIMARY KEY,
+  free_cotisations_used  int NOT NULL DEFAULT 0,
+  updated_at             timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS platform_payments (
+  id                  uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id             uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  cotisation_id       uuid REFERENCES cotisations(id) ON DELETE SET NULL,
+  purpose             text NOT NULL CHECK (purpose IN ('create', 'extend')),
+  amount              numeric NOT NULL CHECK (amount > 0),
+  duration_days       int,
+  status              text NOT NULL DEFAULT 'pending'
+                        CHECK (status IN ('pending', 'paid', 'failed')),
+  paystack_reference  text UNIQUE,
+  metadata            jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  paid_at             timestamptz
+);
+CREATE INDEX IF NOT EXISTS platform_payments_user_idx ON platform_payments(user_id);
+CREATE INDEX IF NOT EXISTS platform_payments_cotisation_idx ON platform_payments(cotisation_id);
 
