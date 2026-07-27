@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_colors.dart';
 
-/// Bouton primaire/secondaire — densité & rayon alignés shadcn (web-app).
+/// Bouton primaire/secondaire — densité & rayon alignés shadcn (frontend).
 class AppButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;

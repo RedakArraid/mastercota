@@ -1,72 +1,78 @@
 # Mastercota
 
 > Plateforme de cotisations communautaires pour l'Afrique francophone.  
-> **Flutter · Next.js · PostgreSQL · OpenWA · Paystack**
+> **Flutter · Next.js · Hono · PostgreSQL · OpenWA · Paystack**
 
 ---
 
-## Stack technique
+## Structure
+
+```
+mastercota/
+  frontend/     # Next.js 15 + shadcn (UI web)
+  backend/      # API Hono (auth, cotisations, Paystack, CMS)
+  ios/          # Flutter iOS
+  android/      # Flutter Android
+  lib/          # Code Dart partagé Flutter
+  design-tokens.json
+  docker-compose.yml
+```
+
+---
+
+## Stack
 
 | Couche | Technologie |
 |---|---|
-| Mobile | Flutter 3.x (iOS & Android) |
-| Web / API | Next.js 15 + shadcn (`web-app/`) |
-| Base | PostgreSQL |
+| Mobile | Flutter 3.x (`ios/` + `android/` + `lib/`) |
+| Frontend | Next.js 15 + shadcn (`frontend/`) |
+| Backend | Hono + PostgreSQL (`backend/`) |
 | OTP | OpenWA (WhatsApp) |
 | Paiement | Paystack |
-| État (mobile) | Riverpod |
-| Navigation (mobile) | GoRouter |
 
 ---
 
-## Installation rapide
+## Dev local
 
 ### Prérequis
 
-- Flutter 3.x
-- Node 22+
-- PostgreSQL 16+
-- Instance [OpenWA](https://openwa.soubadigital.com) (session WhatsApp + API key)
-- Compte [Paystack](https://paystack.com)
+- Flutter 3.x, Node 22+, PostgreSQL 16+
+- Instance OpenWA + compte Paystack
 
-### 1. Cloner et installer
+### 1. Backend
 
 ```bash
-git clone <repo>
-cd mastercota
+cp backend/.env.example backend/.env
+# renseigner DATABASE_URL, JWT_SECRET, Paystack, OpenWA
+psql "$DATABASE_URL" -f backend/db/schema.sql
+psql "$DATABASE_URL" -f backend/db/migrate-pages.sql
+cd backend && npm install && npm run dev   # :4000
+```
+
+### 2. Frontend
+
+```bash
+cp frontend/.env.example frontend/.env.local
+# BACKEND_URL=http://127.0.0.1:4000
+cd frontend && npm install && npm run dev   # :3000
+```
+
+Le frontend proxy `/api/*` vers le backend (`next.config.ts`).
+
+### 3. Mobile
+
+```bash
 flutter pub get
-cd web-app && npm install && cd ..
+flutter run -d ios   # API_BASE_URL=https://mastercota.com par défaut
 ```
 
-### 2. Configurer l'API (`web-app/.env`)
+---
 
-Voir [`web-app/.env.example`](web-app/.env.example) :
-
-- `DATABASE_URL`, `JWT_SECRET`
-- `OPENWA_BASE_URL`, `OPENWA_API_KEY`, `OPENWA_SESSION_ID`
-- `PAYSTACK_SECRET_KEY`, `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY`
-
-### 3. Schéma Postgres
-
-```bash
-psql "$DATABASE_URL" -f web-app/db/schema.sql
-```
-
-### 4. Lancer
-
-```bash
-# API + web
-cd web-app && npm run dev
-
-# Mobile (pointe vers API_BASE_URL, défaut https://mastercota.com)
-flutter run -d ios
-```
-
-### Production VPS
+## Production (VPS)
 
 ```bash
 cd /root/mastercota
-# renseigner .env (Postgres, JWT, OpenWA, Paystack)
+cp .env.example .env   # Postgres, JWT, OpenWA, Paystack
 docker compose up -d --build
 ```
 
@@ -74,27 +80,18 @@ Webhook Paystack : `https://mastercota.com/api/paystack/webhook`
 
 ---
 
-## Structure
+## Auth OTP (OpenWA)
 
 ```
-lib/                 # App Flutter
-web-app/             # Next.js UI + API routes
-web-app/db/schema.sql
-design-tokens.json
+App → POST /api/auth/send-otp → OpenWA WhatsApp
+App → POST /api/auth/verify-otp → JWT (cookie mc_session / Bearer)
 ```
 
-### Auth OTP (OpenWA)
+## Paiement
 
 ```
-App → POST /api/auth/send-otp → OpenWA send-text (WhatsApp)
-App → POST /api/auth/verify-otp → JWT session
-```
-
-### Paiement
-
-```
-Contributeur → POST /api/paystack/initialize → Paystack Checkout
-Webhook → POST /api/paystack/webhook → contribution paid + trigger amount
+Contributeur → POST /api/paystack/initialize → Checkout
+Webhook → POST /api/paystack/webhook → contribution paid
 ```
 
 ---
@@ -102,14 +99,6 @@ Webhook → POST /api/paystack/webhook → contribution paid + trigger amount
 ## Modèle économique
 
 Frais de service **1%** sur chaque contribution.
-
----
-
-## Roadmap
-
-- [x] MVP cotisations + page publique + Paystack
-- [x] Auth OTP WhatsApp (OpenWA) + Postgres
-- [ ] V2 — Tontines, QR code, export PDF
 
 ## Licence
 

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Palette Mastercota — alignée sur `web-app/design-tokens.json` (shadcn).
+/// Palette Mastercota — alignée sur `design-tokens.json` (shadcn / frontend).
 /// Radius cible : 12 (0.75rem). Typo : Plus Jakarta Sans.
 class AppColors {
   AppColors._();
