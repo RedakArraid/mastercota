@@ -42,7 +42,7 @@ export default function OnboardingPage() {
           <Link href="/auth/phone">Commencer</Link>
         </Button>
         <p className="text-center text-xs text-muted-foreground">
-          Connexion WhatsApp — Côte d&apos;Ivoire (+225)
+          Connexion WhatsApp — plusieurs pays (défaut Côte d&apos;Ivoire +225)
         </p>
       </div>
     </div>

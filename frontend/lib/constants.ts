@@ -9,6 +9,7 @@ export const PAYSTACK_PUBLIC_KEY =
   "pk_test_7ad05dc9dd5951f4463b8fbccea934e102ead21a";
 
 export const DEFAULT_COUNTRY_CODE = "+225";
+export { DEFAULT_COUNTRY_ISO, PAYSTACK_COUNTRIES } from "@/lib/countries";
 /** @deprecated utiliser SERVICE_RATE / feesFromNet */
 export const COMMISSION_RATE = 0.01;
 export const CURRENCY = "FCFA";

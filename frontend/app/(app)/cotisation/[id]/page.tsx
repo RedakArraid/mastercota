@@ -17,7 +17,13 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { api } from "@/lib/api";
-import { DEFAULT_COUNTRY_CODE } from "@/lib/constants";
+import { PhoneInput } from "@/components/phone-input";
+import {
+  buildE164,
+  DEFAULT_COUNTRY_ISO,
+  getCountryByIso,
+  isValidNational,
+} from "@/lib/countries";
 import { formatAmount, progressPercent, daysRemaining } from "@/lib/format";
 import type { Cotisation, Contribution } from "@/lib/types";
 
@@ -29,6 +35,7 @@ export default function CotisationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [manualOpen, setManualOpen] = useState(false);
   const [mName, setMName] = useState("");
+  const [mCountryIso, setMCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [mPhone, setMPhone] = useState("");
   const [mAmount, setMAmount] = useState("");
   const [saving, setSaving] = useState(false);
@@ -107,11 +114,16 @@ export default function CotisationDetailPage() {
       toast.error("Nom et montant requis");
       return;
     }
+    const country = getCountryByIso(mCountryIso);
+    if (!isValidNational(country, mPhone)) {
+      toast.error(
+        `Numéro invalide — ${country.nationalLength} chiffres (${country.name})`
+      );
+      return;
+    }
     setSaving(true);
     try {
-      const phone = mPhone.startsWith("+")
-        ? mPhone
-        : `${DEFAULT_COUNTRY_CODE}${mPhone.replace(/\D/g, "")}`;
+      const phone = buildE164(country, mPhone);
       await api(`/api/cotisations/${id}/contributions`, {
         method: "POST",
         body: JSON.stringify({
@@ -124,6 +136,7 @@ export default function CotisationDetailPage() {
       setManualOpen(false);
       setMName("");
       setMPhone("");
+      setMCountryIso(DEFAULT_COUNTRY_ISO);
       setMAmount("");
       load();
     } catch (err) {
@@ -189,7 +202,15 @@ export default function CotisationDetailPage() {
               </div>
               <div className="space-y-2">
                 <Label>Téléphone</Label>
-                <Input value={mPhone} onChange={(e) => setMPhone(e.target.value)} required />
+                <PhoneInput
+                  countryIso={mCountryIso}
+                  onCountryChange={(iso) => {
+                    setMCountryIso(iso);
+                    setMPhone("");
+                  }}
+                  national={mPhone}
+                  onNationalChange={setMPhone}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Montant</Label>

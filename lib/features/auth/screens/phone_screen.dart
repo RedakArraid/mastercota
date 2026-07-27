@@ -5,7 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../providers/auth_provider.dart';
-import '../../../core/constants/app_constants.dart';
+import '../../../core/constants/countries.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
 
@@ -21,9 +21,9 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
   bool _isDevLoading = false;
+  CountryDial _country = PaystackCountries.defaultCountry;
 
-  String get _fullPhone =>
-      '${AppConstants.defaultCountryCode}${_phoneController.text.trim()}';
+  String get _fullPhone => _country.e164(_phoneController.text.trim());
 
   @override
   void dispose() {
@@ -54,12 +54,11 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
     }
   }
 
-  // ── DEV ONLY — bypass OTP (nécessite OTP_DEV_CODE côté API) ──
   Future<void> _devLogin() async {
     setState(() => _isDevLoading = true);
     try {
       final phone = _phoneController.text.trim().isEmpty
-          ? '${AppConstants.defaultCountryCode}0700000000'
+          ? PaystackCountries.defaultCountry.e164('0700000000')
           : _fullPhone;
       await ref.read(authNotifierProvider.notifier).sendOtp(phone);
       final ok = await ref
@@ -69,7 +68,8 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
       if (ok) {
         context.go('/home');
       } else {
-        throw Exception(ref.read(authNotifierProvider).error ?? 'Dev login échoué');
+        throw Exception(
+            ref.read(authNotifierProvider).error ?? 'Dev login échoué');
       }
     } catch (e) {
       if (mounted) {
@@ -85,80 +85,131 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
     }
   }
 
+  Future<void> _pickCountry() async {
+    final selected = await showModalBottomSheet<CountryDial>(
+      context: context,
+      backgroundColor: AppColors.paper,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Text('Pays / indicatif', style: AppTextStyles.titleMedium),
+              const SizedBox(height: 8),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: PaystackCountries.all.length,
+                  itemBuilder: (_, i) {
+                    final c = PaystackCountries.all[i];
+                    final active = c.iso == _country.iso;
+                    return ListTile(
+                      leading:
+                          Text(c.flag, style: const TextStyle(fontSize: 22)),
+                      title: Text(c.name),
+                      subtitle: Text(c.dial),
+                      trailing: active
+                          ? const Icon(Icons.check_rounded,
+                              color: AppColors.primary)
+                          : null,
+                      onTap: () => Navigator.pop(ctx, c),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (selected != null && mounted) {
+      setState(() {
+        _country = selected;
+        _phoneController.clear();
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.cream,
       body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 28),
-            child: Form(
-              key: _formKey,
-              child: SizedBox(
-                height: MediaQuery.of(context).size.height - MediaQuery.of(context).padding.top - MediaQuery.of(context).padding.bottom - 20,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 20),
-
-                    // Back button
-                    GestureDetector(
-                      onTap: () => context.pop(),
-                      child: Container(
-                        width: 38, height: 38,
-                        decoration: BoxDecoration(
-                          color: AppColors.paper,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: AppColors.line),
-                        ),
-                        child: const Center(child: Text('←', style: TextStyle(fontSize: 16))),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Form(
+            key: _formKey,
+            child: SizedBox(
+              height: MediaQuery.of(context).size.height -
+                  MediaQuery.of(context).padding.top -
+                  MediaQuery.of(context).padding.bottom -
+                  20,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 20),
+                  GestureDetector(
+                    onTap: () => context.pop(),
+                    child: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: AppColors.paper,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.line),
                       ),
+                      child: const Center(
+                          child: Text('←', style: TextStyle(fontSize: 16))),
                     ),
-
-                    const SizedBox(height: 24),
-
-                    Text(
-                      'CONNEXION · 01',
-                      style: AppTextStyles.caption.copyWith(color: AppColors.ink3),
-                    ).animate().fadeIn(delay: 50.ms),
-
-                    const SizedBox(height: 12),
-
-                    RichText(
-                      text: TextSpan(
-                        style: AppTextStyles.displayMedium.copyWith(
-                          fontSize: 36, letterSpacing: -0.025 * 36, height: 1.02,
-                        ),
-                        children: [
-                          const TextSpan(text: 'Votre numéro\n'),
-                          TextSpan(
-                            text: 'de téléphone.',
-                            style: AppTextStyles.serifItalic.copyWith(
-                              fontSize: 36, letterSpacing: -0.025 * 36,
-                            ),
-                          ),
-                        ],
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'CONNEXION · 01',
+                    style:
+                        AppTextStyles.caption.copyWith(color: AppColors.ink3),
+                  ).animate().fadeIn(delay: 50.ms),
+                  const SizedBox(height: 12),
+                  RichText(
+                    text: TextSpan(
+                      style: AppTextStyles.displayMedium.copyWith(
+                        fontSize: 36,
+                        letterSpacing: -0.025 * 36,
+                        height: 1.02,
                       ),
-                    ).animate().fadeIn(delay: 100.ms).slideX(begin: -0.05, end: 0, curve: Curves.easeOutCubic),
-
-                    const SizedBox(height: 12),
-
-                    Text(
-                      'On vous envoie un code par SMS. Aucun mot de passe à retenir.',
-                      style: AppTextStyles.bodyMedium.copyWith(height: 1.55, color: AppColors.ink2),
-                    ).animate().fadeIn(delay: 200.ms),
-
-                    const SizedBox(height: 40),
-
-                    // Phone input — underline style
-                    Text('NUMÉRO', style: AppTextStyles.caption),
-                    const SizedBox(height: 10),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        // Country chip
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        const TextSpan(text: 'Votre numéro\n'),
+                        TextSpan(
+                          text: 'de téléphone.',
+                          style: AppTextStyles.serifItalic.copyWith(
+                            fontSize: 36,
+                            letterSpacing: -0.025 * 36,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ).animate().fadeIn(delay: 100.ms).slideX(
+                      begin: -0.05, end: 0, curve: Curves.easeOutCubic),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Choisissez votre pays (défaut Côte d\'Ivoire), puis votre numéro. Un code WhatsApp vous sera envoyé.',
+                    style: AppTextStyles.bodyMedium
+                        .copyWith(height: 1.55, color: AppColors.ink2),
+                  ).animate().fadeIn(delay: 200.ms),
+                  const SizedBox(height: 40),
+                  Text('NUMÉRO', style: AppTextStyles.caption),
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      GestureDetector(
+                        onTap: _pickCountry,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
                             color: AppColors.paper,
                             border: Border.all(color: AppColors.line),
@@ -167,132 +218,152 @@ class _PhoneScreenState extends ConsumerState<PhoneScreen> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Text('🇨🇮', style: TextStyle(fontSize: 18)),
+                              Text(_country.flag,
+                                  style: const TextStyle(fontSize: 18)),
                               const SizedBox(width: 6),
-                              Text(AppConstants.defaultCountryCode,
-                                  style: AppTextStyles.mono.copyWith(fontSize: 14)),
+                              Text(_country.dial,
+                                  style: AppTextStyles.mono
+                                      .copyWith(fontSize: 14)),
                               const SizedBox(width: 4),
-                              const Text('▼', style: TextStyle(fontSize: 9, color: AppColors.ink3)),
+                              const Text('▼',
+                                  style: TextStyle(
+                                      fontSize: 9, color: AppColors.ink3)),
                             ],
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextFormField(
-                            controller: _phoneController,
-                            keyboardType: TextInputType.phone,
-                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                            style: AppTextStyles.mono.copyWith(fontSize: 22, fontWeight: FontWeight.w500),
-                            autofocus: true,
-                            decoration: InputDecoration(
-                              hintText: '07 07 07 07 07',
-                              hintStyle: AppTextStyles.mono.copyWith(fontSize: 22, color: AppColors.ink4),
-                              border: const UnderlineInputBorder(
-                                borderSide: BorderSide(color: AppColors.ink),
-                              ),
-                              enabledBorder: const UnderlineInputBorder(
-                                borderSide: BorderSide(color: AppColors.ink),
-                              ),
-                              focusedBorder: const UnderlineInputBorder(
-                                borderSide: BorderSide(color: AppColors.ink, width: 1.5),
-                              ),
-                              filled: false,
-                              contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: TextFormField(
+                          controller: _phoneController,
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(
+                                _country.nationalLength),
+                          ],
+                          style: AppTextStyles.mono.copyWith(
+                              fontSize: 22, fontWeight: FontWeight.w500),
+                          autofocus: true,
+                          decoration: InputDecoration(
+                            hintText: _country.placeholder,
+                            hintStyle: AppTextStyles.mono
+                                .copyWith(fontSize: 22, color: AppColors.ink4),
+                            border: const UnderlineInputBorder(
+                              borderSide: BorderSide(color: AppColors.ink),
                             ),
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty) return 'Entrez votre numéro';
-                              if (v.trim().length != 10) return 'Numéro invalide (10 chiffres)';
-                              return null;
-                            },
+                            enabledBorder: const UnderlineInputBorder(
+                              borderSide: BorderSide(color: AppColors.ink),
+                            ),
+                            focusedBorder: const UnderlineInputBorder(
+                              borderSide:
+                                  BorderSide(color: AppColors.ink, width: 1.5),
+                            ),
+                            filled: false,
+                            contentPadding:
+                                const EdgeInsets.symmetric(vertical: 8),
                           ),
-                        ),
-                      ],
-                    ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1, end: 0),
-
-                    const SizedBox(height: 12),
-
-                    Text(
-                      'En continuant, vous acceptez nos CGU et notre politique de confidentialité.',
-                      style: AppTextStyles.caption.copyWith(color: AppColors.ink3),
-                    ),
-
-                    const Spacer(),
-
-                    GestureDetector(
-                      onTap: _isLoading ? null : _sendOtp,
-                      child: Container(
-                        width: double.infinity,
-                        height: 54,
-                        decoration: BoxDecoration(
-                          color: AppColors.accentBright,
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: Center(
-                          child: _isLoading
-                              ? const SizedBox(width: 18, height: 18,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : Text('Recevoir le code →',
-                                  style: AppTextStyles.bodyLarge.copyWith(
-                                    color: Colors.white, fontWeight: FontWeight.w500)),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) {
+                              return 'Entrez votre numéro';
+                            }
+                            if (!_country.isValidNational(v)) {
+                              return 'Numéro invalide (${_country.nationalLength} chiffres)';
+                            }
+                            return null;
+                          },
                         ),
                       ),
-                    ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1, end: 0),
-
-                    const SizedBox(height: 16),
-
-                    // ── Bouton dev (debug mode only) ────────
-                    if (kDebugMode) ...[
-                      GestureDetector(
-                        onTap: _isDevLoading ? null : _devLogin,
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: AppColors.primary.withValues(alpha: 0.3),
-                            ),
+                    ],
+                  ).animate().fadeIn(delay: 300.ms).slideY(begin: 0.1, end: 0),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${_country.flag} ${_country.name}',
+                    style:
+                        AppTextStyles.caption.copyWith(color: AppColors.ink3),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'En continuant, vous acceptez nos CGU et notre politique de confidentialité.',
+                    style:
+                        AppTextStyles.caption.copyWith(color: AppColors.ink3),
+                  ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: _isLoading ? null : _sendOtp,
+                    child: Container(
+                      width: double.infinity,
+                      height: 54,
+                      decoration: BoxDecoration(
+                        color: AppColors.accentBright,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Center(
+                        child: _isLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white))
+                            : Text('Recevoir le code →',
+                                style: AppTextStyles.bodyLarge.copyWith(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w500)),
+                      ),
+                    ),
+                  ).animate().fadeIn(delay: 400.ms).slideY(begin: 0.1, end: 0),
+                  const SizedBox(height: 16),
+                  if (kDebugMode) ...[
+                    GestureDetector(
+                      onTap: _isDevLoading ? null : _devLogin,
+                      child: Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: AppColors.primary.withValues(alpha: 0.3),
                           ),
-                          child: _isDevLoading
-                              ? const Center(
-                                  child: SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
+                        ),
+                        child: _isDevLoading
+                            ? const Center(
+                                child: SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.primary,
+                                  ),
+                                ),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  const Text('🛠️',
+                                      style: TextStyle(fontSize: 14)),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Mode Dev — Connexion rapide',
+                                    style: AppTextStyles.caption.copyWith(
                                       color: AppColors.primary,
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w600,
                                     ),
                                   ),
-                                )
-                              : Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    const Text('🛠️',
-                                        style: TextStyle(fontSize: 14)),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      'Mode Dev — Connexion rapide',
-                                      style: AppTextStyles.caption.copyWith(
-                                        color: AppColors.primary,
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                        ),
-                      ).animate().fadeIn(delay: 450.ms),
-                      const SizedBox(height: 16),
-                    ],
-
-                    const SizedBox(height: 10),
+                                ],
+                              ),
+                      ),
+                    ).animate().fadeIn(delay: 450.ms),
+                    const SizedBox(height: 16),
                   ],
-                ),
+                  const SizedBox(height: 10),
+                ],
               ),
             ),
           ),
         ),
+      ),
     );
   }
 }

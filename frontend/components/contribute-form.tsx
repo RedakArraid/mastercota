@@ -5,8 +5,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/phone-input";
 import { api } from "@/lib/api";
-import { CURRENCY, DEFAULT_COUNTRY_CODE } from "@/lib/constants";
+import { CURRENCY } from "@/lib/constants";
+import {
+  buildE164,
+  DEFAULT_COUNTRY_ISO,
+  getCountryByIso,
+  isValidNational,
+} from "@/lib/countries";
 import { feesFromNet, SERVICE_FEE_LABEL } from "@/lib/fees";
 import { formatAmount } from "@/lib/format";
 import type { Cotisation } from "@/lib/types";
@@ -21,9 +28,11 @@ export default function ContributeForm({
   const anonymousAllowed = settings.anonymous_allowed ?? false;
 
   const [name, setName] = useState("");
+  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [phone, setPhone] = useState("");
   const [amount, setAmount] = useState("");
   const [loading, setLoading] = useState(false);
+  const country = getCountryByIso(countryIso);
 
   const preview = Number(amount.replace(/\s/g, "").replace(",", ".")) || 0;
   const quote = feesFromNet(preview);
@@ -45,14 +54,13 @@ export default function ContributeForm({
       toast.error("Votre nom est requis");
       return;
     }
-    const digits = phone.replace(/\D/g, "");
-    if (digits.length < 8) {
-      toast.error("Numéro de téléphone invalide");
+    if (!isValidNational(country, phone)) {
+      toast.error(
+        `Numéro invalide — ${country.nationalLength} chiffres pour ${country.name}`
+      );
       return;
     }
-    const fullPhone = phone.startsWith("+")
-      ? phone
-      : `${DEFAULT_COUNTRY_CODE}${digits}`;
+    const fullPhone = buildE164(country, phone);
 
     setLoading(true);
     try {
@@ -89,20 +97,15 @@ export default function ContributeForm({
       </div>
       <div className="space-y-2">
         <Label htmlFor="phone">Téléphone</Label>
-        <div className="flex gap-2">
-          <div className="flex h-9 items-center rounded-lg border border-input bg-secondary px-3 text-sm text-muted-foreground">
-            🇨🇮 {DEFAULT_COUNTRY_CODE}
-          </div>
-          <Input
-            id="phone"
-            inputMode="tel"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="07 XX XX XX XX"
-            required
-            className="flex-1"
-          />
-        </div>
+        <PhoneInput
+          countryIso={countryIso}
+          onCountryChange={(iso) => {
+            setCountryIso(iso);
+            setPhone("");
+          }}
+          national={phone}
+          onNationalChange={setPhone}
+        />
       </div>
       <div className="space-y-2">
         <Label htmlFor="amount">

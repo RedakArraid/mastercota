@@ -4,24 +4,32 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PhoneInput } from "@/components/phone-input";
 import { api } from "@/lib/api";
-import { DEFAULT_COUNTRY_CODE } from "@/lib/constants";
+import {
+  buildE164,
+  DEFAULT_COUNTRY_ISO,
+  getCountryByIso,
+  isValidNational,
+} from "@/lib/countries";
 
 export default function PhonePage() {
   const router = useRouter();
+  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [localPhone, setLocalPhone] = useState("");
   const [loading, setLoading] = useState(false);
+  const country = getCountryByIso(countryIso);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const digits = localPhone.replace(/\D/g, "");
-    if (digits.length !== 10) {
-      toast.error("Entrez un numéro à 10 chiffres");
+    if (!isValidNational(country, localPhone)) {
+      toast.error(
+        `Entrez un numéro à ${country.nationalLength} chiffres (${country.name})`
+      );
       return;
     }
-    const phone = `${DEFAULT_COUNTRY_CODE}${digits}`;
+    const phone = buildE164(country, localPhone);
     setLoading(true);
     try {
       await api("/api/auth/send-otp", {
@@ -40,28 +48,24 @@ export default function PhonePage() {
     <div className="mx-auto flex w-full max-w-md flex-col px-6 py-12 md:py-16">
       <h1 className="mb-2 text-3xl font-extrabold text-ink">Votre numéro</h1>
       <p className="mb-8 text-muted-foreground">
-        Nous vous enverrons un code WhatsApp à 6 chiffres via OpenWA.
+        Choisissez votre pays, puis entrez votre numéro. Nous vous enverrons un
+        code WhatsApp à 6 chiffres.
       </p>
       <form onSubmit={onSubmit} className="space-y-6">
         <div className="space-y-2">
           <Label htmlFor="phone">Téléphone</Label>
-          <div className="flex gap-2">
-            <div className="flex h-9 items-center rounded-lg border border-input bg-secondary px-3 text-sm">
-              🇨🇮 {DEFAULT_COUNTRY_CODE}
-            </div>
-            <Input
-              id="phone"
-              inputMode="numeric"
-              maxLength={10}
-              value={localPhone}
-              onChange={(e) =>
-                setLocalPhone(e.target.value.replace(/\D/g, "").slice(0, 10))
-              }
-              placeholder="0700000000"
-              className="flex-1 tracking-wider"
-              required
-            />
-          </div>
+          <PhoneInput
+            countryIso={countryIso}
+            onCountryChange={(iso) => {
+              setCountryIso(iso);
+              setLocalPhone("");
+            }}
+            national={localPhone}
+            onNationalChange={setLocalPhone}
+          />
+          <p className="text-xs text-muted-foreground">
+            {country.flag} {country.name} — indicatif {country.dial}
+          </p>
         </div>
         <Button type="submit" size="lg" className="w-full" disabled={loading}>
           {loading ? "Envoi…" : "Recevoir le code WhatsApp"}
