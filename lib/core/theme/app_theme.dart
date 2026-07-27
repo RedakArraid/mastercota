@@ -3,23 +3,29 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
+/// Theme Flutter aligné sur le design system web (shadcn / design-tokens.json).
 class AppTheme {
   AppTheme._();
 
   static ThemeData get light => ThemeData(
         brightness: Brightness.light,
-        scaffoldBackgroundColor: AppColors.cream,
-        primaryColor: AppColors.ink,
+        scaffoldBackgroundColor: AppColors.paper,
+        primaryColor: AppColors.accent,
         colorScheme: const ColorScheme.light(
-          primary: AppColors.ink,
-          secondary: AppColors.accentBright,
-          surface: AppColors.paper,
+          primary: AppColors.accent,
+          secondary: AppColors.ink,
+          surface: AppColors.cream,
           error: AppColors.error,
-          onPrimary: Colors.white,
+          onPrimary: AppColors.ink,
           onSecondary: Colors.white,
           onSurface: AppColors.ink,
         ),
-        textTheme: GoogleFonts.dmSansTextTheme(ThemeData.light().textTheme),
+        textTheme:
+            GoogleFonts.plusJakartaSansTextTheme(ThemeData.light().textTheme)
+                .apply(
+          bodyColor: AppColors.ink,
+          displayColor: AppColors.ink,
+        ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -30,46 +36,52 @@ class AppTheme {
           iconTheme: IconThemeData(color: AppColors.ink),
         ),
         inputDecorationTheme: InputDecorationTheme(
-          filled: false,
-          border: const UnderlineInputBorder(
-            borderSide: BorderSide(color: AppColors.line),
+          filled: true,
+          fillColor: AppColors.cream,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppColors.radius),
+            borderSide: const BorderSide(color: AppColors.line),
           ),
-          enabledBorder: const UnderlineInputBorder(
-            borderSide: BorderSide(color: AppColors.line),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppColors.radius),
+            borderSide: const BorderSide(color: AppColors.line),
           ),
-          focusedBorder: const UnderlineInputBorder(
-            borderSide: BorderSide(color: AppColors.ink, width: 1.5),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppColors.radius),
+            borderSide: const BorderSide(color: AppColors.accent, width: 1.5),
           ),
-          errorBorder: const UnderlineInputBorder(
-            borderSide: BorderSide(color: AppColors.error),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppColors.radius),
+            borderSide: const BorderSide(color: AppColors.error),
           ),
-          focusedErrorBorder: const UnderlineInputBorder(
-            borderSide: BorderSide(color: AppColors.error, width: 1.5),
+          focusedErrorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(AppColors.radius),
+            borderSide: const BorderSide(color: AppColors.error, width: 1.5),
           ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 0, vertical: 12),
           hintStyle: const TextStyle(color: AppColors.ink4),
         ),
         elevatedButtonTheme: ElevatedButtonThemeData(
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.accentBright,
-            foregroundColor: Colors.white,
+            backgroundColor: AppColors.accent,
+            foregroundColor: AppColors.ink,
             elevation: 0,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(AppColors.radius),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-            textStyle: GoogleFonts.dmSans(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            textStyle: GoogleFonts.plusJakartaSans(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
         cardTheme: CardThemeData(
-          color: AppColors.paper,
+          color: AppColors.cream,
           elevation: 0,
-          shadowColor: Colors.transparent,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(AppColors.radiusLg),
             side: const BorderSide(color: AppColors.line),
           ),
         ),
@@ -79,18 +91,17 @@ class AppTheme {
         ),
         snackBarTheme: SnackBarThemeData(
           backgroundColor: AppColors.ink,
-          contentTextStyle: GoogleFonts.dmSans(
+          contentTextStyle: GoogleFonts.plusJakartaSans(
             color: Colors.white,
             fontSize: 14,
           ),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(AppColors.radius),
           ),
           behavior: SnackBarBehavior.floating,
         ),
         useMaterial3: true,
       );
 
-  // Dark theme mirrors light (design is light-only)
   static ThemeData get dark => light;
 }

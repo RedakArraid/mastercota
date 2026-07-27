@@ -1,0 +1,150 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-gold: var(--gold);
+  --color-gold-bright: var(--gold-bright);
+  --color-paper: var(--paper);
+  --color-success: var(--success);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* Mastercota brand — navy + gold (from Flutter AppColors) */
+:root {
+  --ink: #143268;
+  --ink-2: #2b4575;
+  --ink-3: #6b7a95;
+  --ink-4: #a8b2c4;
+  --gold: #da9810;
+  --gold-bright: #f4b829;
+  --gold-dark: #a87708;
+  --paper: #fafbfd;
+  --paper-2: #eef2f8;
+  --cream: #ffffff;
+  --success: #2d6a4f;
+  --warn: #b8731a;
+
+  --background: #fafbfd;
+  --foreground: #143268;
+  --card: #ffffff;
+  --card-foreground: #143268;
+  --popover: #ffffff;
+  --popover-foreground: #143268;
+  --primary: #da9810;
+  --primary-foreground: #143268;
+  --secondary: #eef2f8;
+  --secondary-foreground: #143268;
+  --muted: #eef2f8;
+  --muted-foreground: #6b7a95;
+  --accent: #fff6e0;
+  --accent-foreground: #143268;
+  --destructive: #d50000;
+  --border: rgb(20 50 104 / 12%);
+  --input: rgb(20 50 104 / 14%);
+  --ring: #da9810;
+  --chart-1: #da9810;
+  --chart-2: #143268;
+  --chart-3: #2d6a4f;
+  --chart-4: #2b4575;
+  --chart-5: #f4b829;
+  --radius: 0.75rem;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #143268;
+  --sidebar-primary: #da9810;
+  --sidebar-primary-foreground: #143268;
+  --sidebar-accent: #eef2f8;
+  --sidebar-accent-foreground: #143268;
+  --sidebar-border: rgb(20 50 104 / 12%);
+  --sidebar-ring: #da9810;
+}
+
+.dark {
+  --background: #0b1220;
+  --foreground: #f5f7fb;
+  --card: #121a2b;
+  --card-foreground: #f5f7fb;
+  --popover: #121a2b;
+  --popover-foreground: #f5f7fb;
+  --primary: #f4b829;
+  --primary-foreground: #143268;
+  --secondary: #1a2438;
+  --secondary-foreground: #f5f7fb;
+  --muted: #1a2438;
+  --muted-foreground: #a8b2c4;
+  --accent: #1f2a40;
+  --accent-foreground: #f5f7fb;
+  --destructive: #ff4d4d;
+  --border: rgb(255 255 255 / 10%);
+  --input: rgb(255 255 255 / 12%);
+  --ring: #f4b829;
+  --sidebar: #121a2b;
+  --sidebar-foreground: #f5f7fb;
+  --sidebar-primary: #f4b829;
+  --sidebar-primary-foreground: #143268;
+  --sidebar-accent: #1a2438;
+  --sidebar-accent-foreground: #f5f7fb;
+  --sidebar-border: rgb(255 255 255 / 10%);
+  --sidebar-ring: #f4b829;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    background-image:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgb(218 152 16 / 12%), transparent),
+      radial-gradient(ellipse 60% 40% at 100% 0%, rgb(20 50 104 / 8%), transparent);
+    min-height: 100dvh;
+  }
+  html {
+    @apply font-sans;
+  }
+}

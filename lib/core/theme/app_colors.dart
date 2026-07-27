@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+/// Palette Mastercota — alignée sur `web-app/design-tokens.json` (shadcn).
+/// Radius cible : 12 (0.75rem). Typo : Plus Jakarta Sans.
 class AppColors {
   AppColors._();
 
@@ -24,8 +26,12 @@ class AppColors {
   static const Color warn       = Color(0xFFB8731A);
   static const Color error      = Color(0xFFD50000);
 
-  static const Color line     = Color(0x1A143268); // rgba(20,50,104,0.10)
-  static const Color lineSoft = Color(0x0F143268); // rgba(20,50,104,0.06)
+  static const Color line     = Color(0x1F143268); // ~12% — match web --border
+  static const Color lineSoft = Color(0x0F143268); // 6%
+
+  /// Radius shadcn (0.75rem ≈ 12 logical pixels)
+  static const double radius = 12;
+  static const double radiusLg = 16;
 
   // ── Backward-compat aliases (existing widgets compile unchanged) ─
   static const Color background      = cream;

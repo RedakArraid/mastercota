@@ -1,0 +1,28 @@
+{
+  "name": "mastercota",
+  "colors": {
+    "ink": "#143268",
+    "ink2": "#2B4575",
+    "ink3": "#6B7A95",
+    "ink4": "#A8B2C4",
+    "accent": "#DA9810",
+    "accentBright": "#F4B829",
+    "accentDark": "#A87708",
+    "cream": "#FFFFFF",
+    "paper": "#FAFBFD",
+    "paper2": "#EEF2F8",
+    "forest": "#2D6A4F",
+    "warn": "#B8731A",
+    "error": "#D50000",
+    "line": "rgba(20,50,104,0.10)"
+  },
+  "typography": {
+    "fontFamily": "Plus Jakarta Sans",
+    "radius": "0.75rem"
+  },
+  "business": {
+    "commissionRate": 0.01,
+    "currency": "FCFA",
+    "defaultCountryCode": "+225"
+  }
+}

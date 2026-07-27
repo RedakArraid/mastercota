@@ -10,12 +10,13 @@
 | Couche | Technologie |
 |---|---|
 | Mobile | Flutter 3.44+ (iOS & Android) |
+| Web | Next.js 15 + shadcn/ui (`web-app/`) |
 | Backend | Supabase (Auth OTP, PostgreSQL, Realtime) |
 | Paiement | Paystack (subaccounts + webhooks) |
 | SMS OTP | Termii (via Supabase Auth Hook) |
 | Email | Hostinger (SMTP) |
-| État | Riverpod 2.5+ |
-| Navigation | GoRouter 14.2+ |
+| État (mobile) | Riverpod 2.5+ |
+| Navigation (mobile) | GoRouter 14.2+ |
 
 ---
 
@@ -35,7 +36,12 @@
 git clone <repo>
 cd mastercota
 flutter pub get
+
+# App web (Next.js + shadcn)
+cd web-app && npm install && cd ..
 ```
+
+Voir aussi [`web-app/README.md`](web-app/README.md).
 
 ### 2. Configurer Supabase
 
@@ -138,29 +144,45 @@ flutter run -d android
 
 # Voir tous les devices
 flutter devices
+
+# Web Next.js (shadcn)
+cd web-app
+cp .env.local.example .env.local   # puis renseigner les clés
+npm run dev
 ```
+
+Design tokens partagés (web → Flutter) : [`web-app/design-tokens.json`](web-app/design-tokens.json).
 
 ---
 
 ## Structure du projet
 
 ```
+lib/                 # App Flutter (mobile)
+web-app/             # App web Next.js + shadcn
+supabase/            # Schéma SQL + Edge Functions
+design-tokens.json   # Tokens partagés web ↔ Flutter
+```
+
+### Flutter (`lib/`)
+
+```
 lib/
 ├── main.dart                          # Entry point — Supabase init, Riverpod
-├── app.dart                           # MaterialApp.router + dark theme
+├── app.dart                           # MaterialApp.router + theme
 │
 ├── core/
 │   ├── constants/app_constants.dart   # URLs, clés, constantes métier
 │   ├── theme/
-│   │   ├── app_colors.dart            # Palette complète + gradients
+│   │   ├── app_colors.dart            # Palette alignée design-tokens.json
 │   │   ├── app_text_styles.dart       # Typographie Plus Jakarta Sans
-│   │   └── app_theme.dart             # ThemeData dark Material3
+│   │   └── app_theme.dart             # ThemeData Material3 (style shadcn)
 │   ├── router/app_router.dart         # GoRouter + redirect guards auth
 │   ├── services/supabase_service.dart # Client Supabase singleton
 │   └── widgets/
 │       ├── app_button.dart            # Bouton primaire/secondaire + loading
 │       ├── app_text_field.dart        # Champ texte réutilisable
-│       ├── glass_card.dart            # Carte glassmorphism
+│       ├── glass_card.dart            # Carte surface (bordure shadcn)
 │       ├── mastercota_logo.dart       # Logo animé
 │       └── navigation_shell.dart     # Shell de navigation partagé
 │

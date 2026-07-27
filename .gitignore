@@ -47,7 +47,14 @@ app.*.map.json
 # Secrets & env — NE JAMAIS COMMITER
 .env
 .env.*
+!.env.local.example
+!**/.env.local.example
 *.secret
 secrets.json
 google-services.json
 GoogleService-Info.plist
+
+# Next.js (web-app)
+web-app/node_modules/
+web-app/.next/
+web-app/out/
