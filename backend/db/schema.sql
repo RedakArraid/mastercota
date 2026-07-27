@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_url  text,
   paystack_subaccount_id text,
   wave_phone  text,
+  wave_pay_link text,
   role        text NOT NULL DEFAULT 'user'
                 CHECK (role IN ('user', 'admin')),
   created_at  timestamptz NOT NULL DEFAULT now()

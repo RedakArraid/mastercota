@@ -3,6 +3,9 @@
 ALTER TABLE users
   ADD COLUMN IF NOT EXISTS wave_phone text;
 
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS wave_pay_link text;
+
 ALTER TABLE contributions
   ADD COLUMN IF NOT EXISTS note text;
 

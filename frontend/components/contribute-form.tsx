@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Check, Copy, ExternalLink } from "lucide-react";
+import { Check, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,7 +18,7 @@ import {
 import { formatAmount } from "@/lib/format";
 import {
   formatWaveDisplay,
-  waveAppOpenUrls,
+  launchWavePayment,
   wavePaymentInstructions,
 } from "@/lib/wave";
 import type { Cotisation } from "@/lib/types";
@@ -34,6 +34,8 @@ export default function ContributeForm({
   const minAmount = settings.min_amount ?? 0;
   const anonymousAllowed = settings.anonymous_allowed ?? false;
   const wavePhone = cotisation.owner_wave_phone;
+  const wavePayLink = cotisation.owner_wave_pay_link;
+  const hasWave = Boolean(wavePhone || wavePayLink);
 
   const [name, setName] = useState("");
   const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);
@@ -41,43 +43,60 @@ export default function ContributeForm({
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
+  const [launching, setLaunching] = useState(false);
   const [step, setStep] = useState<Step>("form");
   const [contributionId, setContributionId] = useState<string | null>(null);
+  const [launchMode, setLaunchMode] = useState<"link" | "p2p" | null>(null);
   const country = getCountryByIso(countryIso);
 
   const preview = Number(amount.replace(/\s/g, "").replace(",", ".")) || 0;
 
   const instructions = useMemo(() => {
-    if (!wavePhone || preview <= 0) return null;
+    if (!wavePhone || preview <= 0) {
+      if (wavePayLink && preview > 0) {
+        return wavePaymentInstructions({
+          wavePhone: wavePhone || "",
+          amount: preview,
+          cotisationTitle: cotisation.title,
+          wavePayLink,
+        });
+      }
+      return null;
+    }
     return wavePaymentInstructions({
       wavePhone,
       amount: preview,
       cotisationTitle: cotisation.title,
+      wavePayLink,
     });
-  }, [wavePhone, preview, cotisation.title]);
+  }, [wavePhone, wavePayLink, preview, cotisation.title]);
 
-  async function copy(text: string, label: string) {
+  async function openWaveAuto() {
+    if (preview <= 0) return;
+    setLaunching(true);
     try {
-      await navigator.clipboard.writeText(text);
-      toast.success(`${label} copié`);
-    } catch {
-      toast.error("Copie impossible");
+      const result = await launchWavePayment({
+        amount: preview,
+        wavePhone,
+        wavePayLink,
+      });
+      setLaunchMode(result.mode);
+      if (result.mode === "link") {
+        toast.success("Ouverture de Wave avec le montant…");
+      } else {
+        toast.message("Numéro copié — collez-le dans Wave, puis le montant");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Impossible d’ouvrir Wave");
+    } finally {
+      setLaunching(false);
     }
-  }
-
-  function openWave() {
-    const urls = waveAppOpenUrls();
-    // Essaye d’ouvrir l’app ; fallback navigateur
-    window.location.href = urls[0];
-    setTimeout(() => {
-      window.open(urls[urls.length - 1], "_blank", "noopener,noreferrer");
-    }, 800);
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!wavePhone) {
-      toast.error("L’organisateur n’a pas encore indiqué son numéro Wave");
+    if (!hasWave) {
+      toast.error("L’organisateur n’a pas encore configuré Wave");
       return;
     }
     const parsed = Number(amount.replace(/\s/g, "").replace(",", "."));
@@ -103,8 +122,15 @@ export default function ContributeForm({
     }
     setLoading(true);
     try {
-      // Passe à l’écran paiement Wave sans encore créer la ligne
       setStep("pay");
+      // Lancement automatique dès l’étape paiement
+      await launchWavePayment({
+        amount: parsed,
+        wavePhone,
+        wavePayLink,
+      }).then((r) => setLaunchMode(r.mode));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Ouverture Wave impossible");
     } finally {
       setLoading(false);
     }
@@ -140,13 +166,12 @@ export default function ContributeForm({
     }
   }
 
-  if (!wavePhone) {
+  if (!hasWave) {
     return (
       <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm">
         <p className="font-medium text-ink">Paiement temporairement indisponible</p>
         <p className="mt-1 text-muted-foreground">
-          L’organisateur doit encore configurer son numéro Wave pour recevoir
-          les contributions en direct.
+          L’organisateur doit configurer son lien ou numéro Wave.
         </p>
       </div>
     );
@@ -164,8 +189,8 @@ export default function ContributeForm({
           <span className="font-semibold text-foreground">
             {formatAmount(preview)}
           </span>{" "}
-          est en attente de confirmation par l’organisateur. L’argent est déjà
-          sur son Wave — Mastercota sert uniquement au suivi.
+          est en attente de confirmation. L’argent est déjà chez
+          l’organisateur via Wave.
         </p>
         {contributionId ? (
           <p className="font-mono text-[11px] text-muted-foreground">
@@ -176,68 +201,43 @@ export default function ContributeForm({
     );
   }
 
-  if (step === "pay" && instructions) {
+  if (step === "pay") {
     return (
       <div className="space-y-5 rounded-2xl border border-border bg-card p-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-            Étape 2 · Wave
+            Paiement Wave
           </p>
           <h2 className="mt-1 text-xl font-bold text-ink">
-            Envoyez {instructions.amountLabel}
+            {formatAmount(preview)}
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ouvrez Wave et envoyez exactement ce montant au numéro de
-            l’organisateur. L’argent arrive tout de suite chez lui.
+            {launchMode === "link"
+              ? "Wave s’ouvre avec le montant déjà saisi. Validez le paiement dans l’app, puis revenez ici."
+              : "Le numéro a été copié et Wave s’ouvre. Collez le numéro, puis le montant (copié ensuite), et envoyez."}
           </p>
         </div>
 
-        <div className="space-y-3 rounded-xl bg-secondary/50 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-xs text-muted-foreground">Numéro Wave</p>
-              <p className="text-lg font-bold tracking-wide text-ink">
-                {instructions.wavePhoneDisplay}
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() =>
-                copy(instructions.wavePhoneDigits, "Numéro")
-              }
-            >
-              <Copy className="size-4" />
-              Copier
-            </Button>
+        {wavePhone ? (
+          <div className="rounded-xl bg-secondary/50 px-4 py-3 text-sm">
+            <p className="text-xs text-muted-foreground">Destinataire</p>
+            <p className="font-bold text-ink">{formatWaveDisplay(wavePhone)}</p>
           </div>
-          <div className="flex items-center justify-between gap-2 border-t border-border pt-3">
-            <div>
-              <p className="text-xs text-muted-foreground">Montant</p>
-              <p className="text-lg font-bold text-ink">
-                {instructions.amountLabel}
-              </p>
-            </div>
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => copy(String(instructions.amount), "Montant")}
-            >
-              <Copy className="size-4" />
-              Copier
-            </Button>
-          </div>
-        </div>
+        ) : null}
 
-        <Button type="button" size="lg" className="w-full" onClick={openWave}>
+        <Button
+          type="button"
+          size="lg"
+          className="w-full"
+          onClick={openWaveAuto}
+          disabled={launching}
+        >
           <ExternalLink className="size-4" />
-          Ouvrir Wave
+          {launching ? "Ouverture…" : "Rouvrir Wave automatiquement"}
         </Button>
 
         <div className="space-y-2">
-          <Label htmlFor="note">Référence / note (optionnel)</Label>
+          <Label htmlFor="note">Note (optionnel)</Label>
           <Input
             id="note"
             value={note}
@@ -263,6 +263,14 @@ export default function ContributeForm({
         >
           Modifier le montant
         </Button>
+
+        {instructions && !wavePayLink ? (
+          <p className="text-center text-xs text-muted-foreground">
+            Astuce orga : ajoutez votre{" "}
+            <span className="font-medium">lien de paiement Wave</span> pour un
+            envoi 100&nbsp;% prérempli.
+          </p>
+        ) : null}
       </div>
     );
   }
@@ -270,13 +278,11 @@ export default function ContributeForm({
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm">
-        <p className="font-medium text-ink">Paiement Wave en direct</p>
+        <p className="font-medium text-ink">Paiement Wave automatique</p>
         <p className="mt-1 text-muted-foreground">
-          0&nbsp;% de frais Mastercota. Versement au{" "}
-          <span className="font-medium text-foreground">
-            {formatWaveDisplay(wavePhone)}
-          </span>
-          .
+          {wavePayLink
+            ? "Un clic ouvre Wave avec le montant déjà rempli. 0 % de frais Mastercota."
+            : "Un clic copie le numéro et ouvre Wave. 0 % de frais Mastercota."}
         </p>
       </div>
       <div className="space-y-2">
@@ -321,7 +327,7 @@ export default function ContributeForm({
         </div>
       ) : null}
       <Button type="submit" className="w-full" size="lg" disabled={loading}>
-        Continuer vers Wave
+        {loading ? "Ouverture Wave…" : "Payer avec Wave"}
       </Button>
     </form>
   );

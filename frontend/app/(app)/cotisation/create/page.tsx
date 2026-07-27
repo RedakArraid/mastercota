@@ -48,8 +48,12 @@ export default function CreateCotisationPage() {
   const [hasWave, setHasWave] = useState<boolean | null>(null);
 
   useEffect(() => {
-    api<{ user: { wave_phone?: string | null } }>("/api/profile")
-      .then((p) => setHasWave(Boolean(p.user?.wave_phone)))
+    api<{ user: { wave_phone?: string | null; wave_pay_link?: string | null } }>(
+      "/api/profile"
+    )
+      .then((p) =>
+        setHasWave(Boolean(p.user?.wave_phone || p.user?.wave_pay_link))
+      )
       .catch(() => setHasWave(null));
     api<BillingInfo>("/api/cotisations/billing-info")
       .then((info) => {
@@ -136,13 +140,13 @@ export default function CreateCotisationPage() {
 
       {hasWave === false ? (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-          <p className="font-medium text-ink">Configurez votre numéro Wave</p>
+          <p className="font-medium text-ink">Configurez Wave</p>
           <p className="mt-1 text-muted-foreground">
-            Sans numéro Wave, les contributeurs ne pourront pas vous envoyer
-            l&apos;argent en direct.
+            Ajoutez votre lien de paiement Wave pour un envoi automatique avec
+            montant prérempli.
           </p>
           <Button asChild variant="secondary" size="sm" className="mt-3">
-            <Link href="/profile/payout">Ajouter mon Wave</Link>
+            <Link href="/profile/payout">Configurer Wave</Link>
           </Button>
         </div>
       ) : null}

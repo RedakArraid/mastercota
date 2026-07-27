@@ -29,6 +29,7 @@ export type Cotisation = {
   is_free_tier?: boolean;
   extension_count?: number;
   owner_wave_phone?: string | null;
+  owner_wave_pay_link?: string | null;
   owner_name?: string | null;
 };
 
@@ -58,6 +59,7 @@ export type UserProfile = {
   avatar_url: string | null;
   paystack_subaccount_id: string | null;
   wave_phone?: string | null;
+  wave_pay_link?: string | null;
   role?: string;
   created_at: string;
 };

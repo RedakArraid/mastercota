@@ -394,11 +394,14 @@ export default function CotisationDetailPage() {
         </div>
       ) : null}
 
-      {!cotisation.owner_wave_phone && cotisation.status !== "pending_fee" ? (
+      {!cotisation.owner_wave_phone &&
+      !cotisation.owner_wave_pay_link &&
+      cotisation.status !== "pending_fee" ? (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-          <p className="font-medium text-ink">Numéro Wave requis</p>
+          <p className="font-medium text-ink">Wave requis</p>
           <p className="mt-1 text-muted-foreground">
-            Sans numéro Wave, personne ne peut contribuer via le lien public.
+            Ajoutez votre lien de paiement Wave pour activer le paiement
+            automatique.
           </p>
           <Button asChild size="sm" variant="secondary" className="mt-3">
             <Link href="/profile/payout">Configurer Wave</Link>

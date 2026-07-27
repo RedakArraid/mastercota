@@ -28,7 +28,7 @@ import {
   canExtend,
   EXTENSION_DAYS,
 } from "./lib/billing.js";
-import { normalizeWavePhone } from "./lib/wave.js";
+import { normalizeWavePhone, normalizeWavePayLink } from "./lib/wave.js";
 import { adminRoutes } from "./admin.js";
 
 const app = new Hono();
@@ -409,6 +409,7 @@ app.get("/api/cotisations/by-slug/:slug", async (c) => {
   const { rows } = await query(
     `SELECT c.*,
             u.wave_phone AS owner_wave_phone,
+            u.wave_pay_link AS owner_wave_pay_link,
             u.name AS owner_name
      FROM cotisations c
      JOIN users u ON u.id = c.owner_id
@@ -424,6 +425,7 @@ app.get("/api/cotisations/:id", async (c) => {
   const { rows } = await query(
     `SELECT c.*,
             u.wave_phone AS owner_wave_phone,
+            u.wave_pay_link AS owner_wave_pay_link,
             u.name AS owner_name
      FROM cotisations c
      JOIN users u ON u.id = c.owner_id
@@ -539,10 +541,12 @@ app.post("/api/cotisations/:id/contributions", async (c) => {
     title: string;
     owner_id: string;
     owner_wave_phone: string | null;
+    owner_wave_pay_link: string | null;
     settings: { min_amount?: number };
   }>(
     `SELECT c.id, c.status, c.title, c.owner_id, c.settings,
-            u.wave_phone AS owner_wave_phone
+            u.wave_phone AS owner_wave_phone,
+            u.wave_pay_link AS owner_wave_pay_link
      FROM cotisations c
      JOIN users u ON u.id = c.owner_id
      WHERE c.id = $1`,
@@ -552,11 +556,11 @@ app.post("/api/cotisations/:id/contributions", async (c) => {
   if (cots[0].status !== "active") {
     return c.json({ error: "Cette cotisation n'accepte plus de contributions" }, 400);
   }
-  if (!cots[0].owner_wave_phone) {
+  if (!cots[0].owner_wave_phone && !cots[0].owner_wave_pay_link) {
     return c.json(
       {
         error:
-          "L'organisateur n'a pas encore configuré son numéro Wave",
+          "L'organisateur n'a pas encore configuré Wave (lien ou numéro)",
       },
       400
     );
@@ -587,6 +591,7 @@ app.post("/api/cotisations/:id/contributions", async (c) => {
     contribution: rows[0],
     wave: {
       phone: cots[0].owner_wave_phone,
+      pay_link: cots[0].owner_wave_pay_link,
       amount: parsedAmount,
       title: cots[0].title,
     },
@@ -999,17 +1004,37 @@ app.patch("/api/profile", async (c) => {
       }
     }
   }
+  let wavePayLink: string | null | undefined = undefined;
+  if (body.wave_pay_link !== undefined) {
+    if (body.wave_pay_link === null || body.wave_pay_link === "") {
+      wavePayLink = null;
+    } else {
+      wavePayLink = normalizeWavePayLink(String(body.wave_pay_link));
+      if (!wavePayLink) {
+        return c.json(
+          {
+            error:
+              "Lien Wave invalide — collez un lien pay.wave.com/m/…",
+          },
+          400
+        );
+      }
+    }
+  }
   const { rows } = await query(
     `UPDATE users SET
        name = COALESCE($1, name),
        avatar_url = COALESCE($2, avatar_url),
-       wave_phone = CASE WHEN $3::boolean THEN $4 ELSE wave_phone END
-     WHERE id = $5 RETURNING *`,
+       wave_phone = CASE WHEN $3::boolean THEN $4 ELSE wave_phone END,
+       wave_pay_link = CASE WHEN $5::boolean THEN $6 ELSE wave_pay_link END
+     WHERE id = $7 RETURNING *`,
     [
       body.name ?? null,
       body.avatar_url ?? null,
       wavePhone !== undefined,
       wavePhone ?? null,
+      wavePayLink !== undefined,
+      wavePayLink ?? null,
       session.id,
     ]
   );

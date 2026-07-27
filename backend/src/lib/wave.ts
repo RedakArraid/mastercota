@@ -14,3 +14,18 @@ export function normalizeWavePhone(phone: string): string | null {
   if (d.length === 9) return `+225${d}`;
   return `+${d}`;
 }
+
+export function normalizeWavePayLink(raw: string): string | null {
+  const t = String(raw || "").trim();
+  if (!t) return null;
+  try {
+    const url = new URL(t.startsWith("http") ? t : `https://${t}`);
+    if (!url.hostname.endsWith("wave.com")) return null;
+    if (!url.pathname.includes("/m/")) return null;
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
