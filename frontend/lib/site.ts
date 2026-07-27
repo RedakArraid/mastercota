@@ -152,24 +152,42 @@ export function mdToHtml(md: string): string {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
 
+  const inline = (t: string) =>
+    t
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(
+        /`([^`]+)`/g,
+        '<code>$1</code>'
+      )
+      .replace(
+        /\[([^\]]+)\]\((https?:[^)]+)\)/g,
+        '<a href="$2" rel="noreferrer" target="_blank">$1</a>'
+      );
+
   return escaped
     .split(/\n\n+/)
     .map((block) => {
       const t = block.trim();
       if (t.startsWith("### ")) {
-        return `<h3 class="mt-8 text-lg font-semibold text-ink">${t.slice(4)}</h3>`;
+        return `<h3>${inline(t.slice(4))}</h3>`;
       }
       if (t.startsWith("## ")) {
-        return `<h2 class="mt-10 text-2xl font-bold text-ink">${t.slice(3)}</h2>`;
+        return `<h2>${inline(t.slice(3))}</h2>`;
       }
       if (t.startsWith("# ")) {
-        return `<h1 class="text-3xl font-extrabold text-ink">${t.slice(2)}</h1>`;
+        return `<h1>${inline(t.slice(2))}</h1>`;
       }
-      const withCode = t.replace(
-        /`([^`]+)`/g,
-        '<code class="rounded bg-secondary px-1.5 py-0.5 text-sm">$1</code>'
-      );
-      return `<p class="mt-4 text-muted-foreground leading-relaxed">${withCode.replace(/\n/g, "<br/>")}</p>`;
+      if (/^(- |\* |\d+\. )/.test(t)) {
+        const items = t.split("\n").map((line) => {
+          const item = line.replace(/^(- |\* |\d+\. )/, "").trim();
+          return `<li>${inline(item)}</li>`;
+        });
+        const ordered = /^\d+\. /.test(t);
+        return ordered
+          ? `<ol>${items.join("")}</ol>`
+          : `<ul>${items.join("")}</ul>`;
+      }
+      return `<p>${inline(t).replace(/\n/g, "<br/>")}</p>`;
     })
     .join("\n");
 }

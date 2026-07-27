@@ -17,6 +17,7 @@ export default function ProfilePage() {
   const [config, setConfig] = useState<SiteConfig | null>(null);
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -29,7 +30,7 @@ export default function ProfilePage() {
         setConfig(c.config);
         setName(p.user?.name ?? "");
       } catch {
-        /* ignore */
+        setLoadError(true);
       }
     }
     load();
@@ -58,6 +59,15 @@ export default function ProfilePage() {
     router.refresh();
   }
 
+  if (loadError) {
+    return (
+      <div className="mx-auto max-w-xl space-y-4 py-16 text-center">
+        <p className="text-muted-foreground">Impossible de charger le profil.</p>
+        <Button onClick={() => window.location.reload()}>Réessayer</Button>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-xl space-y-8">
       <div>
@@ -65,6 +75,9 @@ export default function ProfilePage() {
           Compte
         </p>
         <h1 className="mt-1 text-3xl font-extrabold text-ink">Profil</h1>
+        <p className="mt-2 text-muted-foreground">
+          Gérez votre identité et vos paramètres de versement.
+        </p>
       </div>
 
       <form
@@ -73,7 +86,10 @@ export default function ProfilePage() {
       >
         <div className="space-y-2">
           <Label>Téléphone</Label>
-          <Input value={profile?.phone ?? ""} disabled />
+          <Input value={profile?.phone ?? "…"} disabled />
+          <p className="text-xs text-muted-foreground">
+            Identifiant WhatsApp — non modifiable.
+          </p>
         </div>
         <div className="space-y-2">
           <Label htmlFor="name">Nom affiché</Label>
@@ -90,21 +106,51 @@ export default function ProfilePage() {
       </form>
 
       <div className="rounded-2xl border border-border bg-card p-6">
-        <h2 className="mb-2 font-semibold">Compte de retrait</h2>
-        <p className="mb-4 text-sm text-muted-foreground">
+        <h2 className="mb-2 font-semibold">Compte de versement</h2>
+        <p className="mb-1 text-sm text-muted-foreground">
           {profile?.paystack_subaccount_id
-            ? "Compte de versement configuré."
+            ? "Vos contributions seront versées automatiquement (frais de service ~3 % payés par le contributeur)."
             : "Configurez Wave, MTN, Orange ou une banque pour recevoir les fonds."}
         </p>
+        {profile?.paystack_subaccount_id ? (
+          <p className="mb-4 font-mono text-xs text-muted-foreground break-all">
+            ID : {profile.paystack_subaccount_id}
+          </p>
+        ) : (
+          <div className="mb-4" />
+        )}
         <Button asChild variant="secondary">
-          <Link href="/profile/payout">Paramètres de retrait</Link>
+          <Link href="/profile/payout">
+            {profile?.paystack_subaccount_id
+              ? "Modifier le compte"
+              : "Configurer le retrait"}
+          </Link>
         </Button>
       </div>
 
       {config ? (
-        <div className="space-y-2 text-sm text-muted-foreground">
+        <div className="space-y-3 text-sm text-muted-foreground">
           <Separator />
-          <p>Support : {config.email_support || "support@mastercota.com"}</p>
+          <p>
+            Support :{" "}
+            <a
+              className="text-foreground hover:text-primary"
+              href={`mailto:${config.email_support || "support@mastercota.com"}`}
+            >
+              {config.email_support || "support@mastercota.com"}
+            </a>
+          </p>
+          <div className="flex flex-wrap gap-3">
+            <Link href="/p/cgu" className="hover:text-primary">
+              CGU
+            </Link>
+            <Link href="/p/confidentialite" className="hover:text-primary">
+              Confidentialité
+            </Link>
+            <Link href="/p/mentions-legales" className="hover:text-primary">
+              Mentions légales
+            </Link>
+          </div>
         </div>
       ) : null}
 

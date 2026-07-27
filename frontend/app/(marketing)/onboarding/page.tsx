@@ -5,15 +5,15 @@ import { APP_TAGLINE } from "@/lib/constants";
 const slides = [
   {
     title: "Créez votre cotisation",
-    body: "Fixez un objectif, une échéance, et partagez un lien unique.",
+    body: "Fixez un objectif, une échéance, et personnalisez ce que vos proches verront.",
   },
   {
     title: "Recevez via Mobile Money",
-    body: "Wave, MTN, Orange — les contributions arrivent automatiquement.",
+    body: "Wave, MTN, Orange ou carte — les contributions arrivent automatiquement.",
   },
   {
     title: "Suivez la progression",
-    body: "Dashboard live pour vous et vos contributeurs.",
+    body: "Tableau de bord en direct pour vous et vos contributeurs.",
   },
 ];
 
@@ -24,6 +24,10 @@ export default function OnboardingPage() {
         Mastercota
       </p>
       <h1 className="mt-3 text-3xl font-extrabold text-ink">{APP_TAGLINE}</h1>
+      <p className="mt-3 text-muted-foreground">
+        En trois étapes, lancez une caisse communautaire et collectez en toute
+        simplicité.
+      </p>
 
       <div className="mt-12 space-y-8">
         {slides.map((slide, i) => (
@@ -43,6 +47,11 @@ export default function OnboardingPage() {
         </Button>
         <p className="text-center text-xs text-muted-foreground">
           Connexion WhatsApp — plusieurs pays (défaut Côte d&apos;Ivoire +225)
+        </p>
+        <p className="text-center text-xs">
+          <Link href="/" className="text-muted-foreground hover:text-primary">
+            Retour à l&apos;accueil
+          </Link>
         </p>
       </div>
     </div>

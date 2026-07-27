@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,14 +16,26 @@ import {
 } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { PAYOUT_PROVIDERS } from "@/lib/constants";
+import type { UserProfile } from "@/lib/types";
 
 export default function PayoutSettingsPage() {
+  const router = useRouter();
   const [provider, setProvider] = useState<string>(PAYOUT_PROVIDERS[0].code);
   const [account, setAccount] = useState("");
   const [businessName, setBusinessName] = useState("");
   const [verifiedName, setVerifiedName] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [existingId, setExistingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ user: UserProfile }>("/api/profile")
+      .then((p) => {
+        setExistingId(p.user?.paystack_subaccount_id ?? null);
+        if (p.user?.name) setBusinessName(p.user.name);
+      })
+      .catch(() => undefined);
+  }, []);
 
   async function verify() {
     if (!account.trim()) {
@@ -60,15 +73,21 @@ export default function PayoutSettingsPage() {
     }
     setSaving(true);
     try {
-      await api("/api/paystack/subaccount", {
-        method: "POST",
-        body: JSON.stringify({
-          business_name: businessName.trim(),
-          settlement_bank: provider,
-          account_number: account.trim(),
-        }),
-      });
+      const data = await api<{ subaccount_code: string }>(
+        "/api/paystack/subaccount",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            business_name: businessName.trim(),
+            settlement_bank: provider,
+            account_number: account.trim(),
+          }),
+        }
+      );
+      setExistingId(data.subaccount_code);
       toast.success("Compte de versement configuré");
+      router.push("/profile");
+      router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Configuration échouée");
     } finally {
@@ -84,9 +103,23 @@ export default function PayoutSettingsPage() {
         </Button>
         <h1 className="text-3xl font-extrabold text-ink">Retrait</h1>
         <p className="mt-2 text-muted-foreground">
-          Mobile Money ou banque pour recevoir les contributions (moins 1&nbsp;%).
+          Mobile Money ou banque pour recevoir automatiquement les contributions.
+          Les frais de service (~3&nbsp;%) sont payés par le contributeur.
         </p>
       </div>
+
+      {existingId ? (
+        <div className="rounded-2xl border border-border bg-secondary/40 px-4 py-3 text-sm">
+          <p className="font-medium text-ink">Compte déjà configuré</p>
+          <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+            {existingId}
+          </p>
+          <p className="mt-2 text-muted-foreground">
+            Vous pouvez enregistrer un nouveau compte ci-dessous pour le
+            remplacer.
+          </p>
+        </div>
+      ) : null}
 
       <form
         onSubmit={submit}
@@ -149,7 +182,11 @@ export default function PayoutSettingsPage() {
           />
         </div>
         <Button type="submit" size="lg" className="w-full" disabled={saving}>
-          {saving ? "Enregistrement…" : "Enregistrer le sous-compte"}
+          {saving
+            ? "Enregistrement…"
+            : existingId
+              ? "Remplacer le compte"
+              : "Enregistrer le compte"}
         </Button>
       </form>
     </div>

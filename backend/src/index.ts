@@ -221,21 +221,31 @@ app.patch("/api/cotisations/:id", async (c) => {
   );
   if (!owned[0]) return c.json({ error: "Forbidden" }, 403);
   const body = await c.req.json();
-  if (body.status) {
-    const { rows } = await query(
-      `UPDATE cotisations SET status = $1 WHERE id = $2 RETURNING *`,
-      [body.status, id]
-    );
-    return c.json({ cotisation: rows[0] });
-  }
-  if (body.settings) {
-    const { rows } = await query(
-      `UPDATE cotisations SET settings = $1::jsonb WHERE id = $2 RETURNING *`,
-      [JSON.stringify(body.settings), id]
-    );
-    return c.json({ cotisation: rows[0] });
-  }
-  return c.json({ error: "Rien à mettre à jour" }, 400);
+  const { rows } = await query(
+    `UPDATE cotisations SET
+       title = COALESCE($1, title),
+       description = COALESCE($2, description),
+       target_amount = COALESCE($3, target_amount),
+       deadline = COALESCE($4, deadline),
+       cover_url = COALESCE($5, cover_url),
+       status = COALESCE($6, status),
+       settings = COALESCE($7::jsonb, settings)
+     WHERE id = $8
+     RETURNING *`,
+    [
+      body.title?.trim() ?? null,
+      body.description !== undefined
+        ? body.description?.trim() || null
+        : null,
+      body.target_amount != null ? Number(body.target_amount) : null,
+      body.deadline ?? null,
+      body.cover_url !== undefined ? body.cover_url || null : null,
+      body.status ?? null,
+      body.settings != null ? JSON.stringify(body.settings) : null,
+      id,
+    ]
+  );
+  return c.json({ cotisation: rows[0] });
 });
 
 app.get("/api/cotisations/:id/contributions", async (c) => {
@@ -297,10 +307,10 @@ app.post("/api/paystack/initialize", async (c) => {
     } catch {
       return c.json({ error: "Montant invalide" }, 400);
     }
-    const { rows: cots } = await query<{ owner_id: string }>(
-      `SELECT owner_id FROM cotisations WHERE id = $1`,
-      [cotisation_id]
-    );
+    const { rows: cots } = await query<{
+      owner_id: string;
+      slug: string;
+    }>(`SELECT owner_id, slug FROM cotisations WHERE id = $1`, [cotisation_id]);
     if (!cots[0]) return c.json({ error: "Cotisation introuvable" }, 404);
     const { rows: owners } = await query<{
       paystack_subaccount_id: string | null;
@@ -309,15 +319,22 @@ app.post("/api/paystack/initialize", async (c) => {
     ]);
     const contributionId = randomUUID();
     const cleanPhone = String(contributor_phone).replace(/[^0-9]/g, "");
+    const appUrl = (
+      process.env.APP_URL ||
+      process.env.NEXT_PUBLIC_APP_URL ||
+      "https://mastercota.com"
+    ).replace(/\/$/, "");
     const payload: Record<string, unknown> = {
       email: `${cleanPhone}@mastercota.com`,
       amount: Math.round(quote.gross * 100),
       reference: contributionId,
+      callback_url: `${appUrl}/c/${cots[0].slug}/retour?ref=${contributionId}`,
       metadata: {
         net_amount: quote.net,
         fee: quote.fee,
         gross_amount: quote.gross,
         cotisation_id,
+        slug: cots[0].slug,
       },
     };
     if (owners[0]?.paystack_subaccount_id) {
@@ -376,6 +393,36 @@ app.post("/api/paystack/webhook", async (c) => {
     );
   }
   return c.json({ received: true });
+});
+
+app.get("/api/paystack/verify/:reference", async (c) => {
+  const reference = c.req.param("reference");
+  const { ok, data } = await paystackFetch(
+    `/transaction/verify/${encodeURIComponent(reference)}`
+  );
+  if (!ok) {
+    return c.json({ error: data.message || "Vérification impossible" }, 400);
+  }
+  const status = data.data?.status as string | undefined;
+  if (status === "success") {
+    await query(
+      `UPDATE contributions SET status = 'paid',
+         payment_method = COALESCE($1, payment_method)
+       WHERE paystack_reference = $2 AND status <> 'paid'`,
+      [data.data?.channel || "mobile_money", reference]
+    );
+  }
+  const { rows } = await query(
+    `SELECT c.*, cot.slug, cot.title AS cotisation_title
+     FROM contributions c
+     JOIN cotisations cot ON cot.id = c.cotisation_id
+     WHERE c.paystack_reference = $1`,
+    [reference]
+  );
+  return c.json({
+    paystack_status: status,
+    contribution: rows[0] ?? null,
+  });
 });
 
 app.post("/api/paystack/verify-account", async (c) => {

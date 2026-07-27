@@ -6,15 +6,28 @@ export default async function LandingPage() {
   const { config } = await getSiteChrome();
   const landing: LandingContent = config.landing ?? {
     hero_title: "Cotisez ensemble, facilement",
-    hero_subtitle: "Créez, partagez, collectez.",
-    cta_primary: "Commencer",
-    cta_secondary: "En savoir plus",
-    features: [],
+    hero_subtitle:
+      "Créez une cotisation, partagez un lien, recevez via Mobile Money. Pensé pour l'Afrique.",
+    cta_primary: "Créer une cotisation",
+    cta_secondary: "Comment ça marche",
+    features: [
+      {
+        title: "Lien public",
+        body: "Partagez votre page sur WhatsApp. Contribution sans compte.",
+      },
+      {
+        title: "Mobile Money",
+        body: "Wave, MTN, Orange et carte — confirmation automatique.",
+      },
+      {
+        title: "Suivi en direct",
+        body: "Progression et contributeurs mis à jour en continu.",
+      },
+    ],
   };
 
   return (
     <div>
-      {/* Hero — une composition, marque dominante */}
       <section className="relative overflow-hidden">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgb(218_152_16_/_22%),transparent),radial-gradient(ellipse_50%_40%_at_100%_0%,rgb(20_50_104_/_12%),transparent)]" />
         <div className="relative mx-auto flex min-h-[78dvh] max-w-6xl flex-col justify-center px-4 py-20 md:px-6 md:py-28">
@@ -39,26 +52,59 @@ export default async function LandingPage() {
       </section>
 
       <section className="border-t border-border bg-card/50">
-        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-20 md:grid-cols-3 md:px-6">
-          {(landing.features ?? []).map((f) => (
-            <div key={f.title} className="space-y-2">
-              <h2 className="text-xl font-bold text-ink">{f.title}</h2>
-              <p className="text-sm leading-relaxed text-muted-foreground">
-                {f.body}
-              </p>
+        <div className="mx-auto max-w-6xl px-4 py-16 md:px-6">
+          <h2 className="max-w-xl text-2xl font-extrabold text-ink md:text-3xl">
+            Tout ce qu&apos;il faut pour une cotisation réussie
+          </h2>
+          <div className="mt-12 grid gap-10 md:grid-cols-3">
+            {(landing.features ?? []).map((f, i) => (
+              <div key={f.title} className="space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+                  0{i + 1}
+                </p>
+                <h3 className="text-xl font-bold text-ink">{f.title}</h3>
+                <p className="text-sm leading-relaxed text-muted-foreground">
+                  {f.body}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-t border-border">
+        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-16 md:grid-cols-3 md:px-6">
+          {[
+            {
+              title: "1. Créez",
+              body: "Objectif, date limite et réglages de la page publique en quelques minutes.",
+            },
+            {
+              title: "2. Partagez",
+              body: "Un lien unique à envoyer sur WhatsApp, SMS ou réseaux sociaux.",
+            },
+            {
+              title: "3. Recevez",
+              body: "Les fonds arrivent sur votre Mobile Money ou compte bancaire.",
+            },
+          ].map((s) => (
+            <div key={s.title} className="space-y-2">
+              <h3 className="text-lg font-bold text-ink">{s.title}</h3>
+              <p className="text-sm text-muted-foreground">{s.body}</p>
             </div>
           ))}
         </div>
       </section>
 
-      <section className="border-t border-border">
+      <section className="border-t border-border bg-[linear-gradient(135deg,rgb(20_50_104_/_08%),rgb(218_152_16_/_12%))]">
         <div className="mx-auto flex max-w-6xl flex-col items-start justify-between gap-6 px-4 py-16 md:flex-row md:items-center md:px-6">
           <div>
             <h2 className="text-2xl font-extrabold text-ink md:text-3xl">
               Prêt à lancer votre caisse ?
             </h2>
             <p className="mt-2 text-muted-foreground">
-              Connexion par WhatsApp, configuration en moins de 2 minutes.
+              Connexion WhatsApp, configuration en moins de 2 minutes. Frais
+              ~3&nbsp;% payés par le contributeur.
             </p>
           </div>
           <Button asChild size="lg">

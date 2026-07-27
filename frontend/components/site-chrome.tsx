@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -8,33 +11,49 @@ export function SiteHeader({
 }: {
   links: { href: string; label: string }[];
 }) {
+  const pathname = usePathname();
+  const isAuth = pathname.startsWith("/auth");
+
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-background/85 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 md:px-6">
         <div className="flex items-center gap-8">
           <Logo href="/" size="sm" />
-          <nav className="hidden items-center gap-6 md:flex">
-            {links.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-              >
-                {l.label}
-              </Link>
-            ))}
-          </nav>
+          {!isAuth ? (
+            <nav className="hidden items-center gap-6 md:flex">
+              {links.map((l) => (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {l.label}
+                </Link>
+              ))}
+            </nav>
+          ) : null}
         </div>
-        <div className="flex items-center gap-2">
-          <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
-            <Link href="/auth/phone">Connexion</Link>
+        {!isAuth ? (
+          <div className="flex items-center gap-2">
+            <Button
+              asChild
+              variant="ghost"
+              size="sm"
+              className="hidden sm:inline-flex"
+            >
+              <Link href="/auth/phone">Connexion</Link>
+            </Button>
+            <Button asChild size="sm">
+              <Link href="/auth/phone">Commencer</Link>
+            </Button>
+          </div>
+        ) : (
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/">Accueil</Link>
           </Button>
-          <Button asChild size="sm">
-            <Link href="/auth/phone">Commencer</Link>
-          </Button>
-        </div>
+        )}
       </div>
-      {links.length > 0 ? (
+      {!isAuth && links.length > 0 ? (
         <div className="flex gap-4 overflow-x-auto border-t border-border/60 px-4 py-2 md:hidden">
           {links.map((l) => (
             <Link
@@ -93,7 +112,10 @@ export function SiteFooter({
           <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
             {supportEmail ? (
               <li>
-                <a href={`mailto:${supportEmail}`} className="hover:text-primary">
+                <a
+                  href={`mailto:${supportEmail}`}
+                  className="hover:text-primary"
+                >
                   {supportEmail}
                 </a>
               </li>

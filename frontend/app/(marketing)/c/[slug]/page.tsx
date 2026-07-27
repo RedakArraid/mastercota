@@ -42,6 +42,7 @@ export default async function PublicContributionPage({ params }: Props) {
   const showProgress = settings.show_progress !== false;
   const showTarget = settings.show_target_amount !== false;
   const showContributors = settings.show_contributors !== false;
+  const showBest = settings.show_best_contributor !== false;
   const pct = progressPercent(
     Number(cot.current_amount),
     Number(cot.target_amount)
@@ -50,16 +51,36 @@ export default async function PublicContributionPage({ params }: Props) {
   const canContribute = cot.status === "active" && days >= 0;
 
   let contributions: Contribution[] = [];
-  if (showContributors) {
+  if (showContributors || showBest) {
     try {
       const data = await backendFetch<{ contributions: Contribution[] }>(
         `/api/cotisations/${cot.id}/contributions`
       );
-      contributions = data.contributions ?? [];
+      contributions = (data.contributions ?? []).filter(
+        (c) => c.status === "paid"
+      );
     } catch {
       contributions = [];
     }
   }
+
+  const best =
+    showBest && contributions.length > 0
+      ? contributions.reduce((a, b) =>
+          Number(a.amount) >= Number(b.amount) ? a : b
+        )
+      : null;
+
+  const statusText =
+    cot.status === "active"
+      ? days >= 0
+        ? `${days} j restants`
+        : "Expirée"
+      : cot.status === "closed"
+        ? "Clôturée"
+        : cot.status === "completed"
+          ? "Objectif atteint"
+          : cot.status;
 
   return (
     <div className="relative">
@@ -67,11 +88,7 @@ export default async function PublicContributionPage({ params }: Props) {
       <div className="relative mx-auto flex max-w-lg flex-col px-4 py-10 md:py-14">
         <section className="mb-8 space-y-4 text-center">
           <Badge variant="secondary" className="mx-auto">
-            {cot.status === "active"
-              ? days >= 0
-                ? `${days} j restants`
-                : "Expirée"
-              : cot.status}
+            {statusText}
           </Badge>
           <h1 className="text-balance text-3xl font-extrabold tracking-tight text-ink md:text-4xl">
             {cot.title}
@@ -94,6 +111,14 @@ export default async function PublicContributionPage({ params }: Props) {
                 ) : null}
               </div>
             </div>
+          ) : null}
+
+          {best ? (
+            <p className="rounded-xl bg-secondary/70 px-4 py-2 text-sm">
+              Meilleur contributeur :{" "}
+              <span className="font-semibold">{best.contributor_name}</span> —{" "}
+              {formatAmount(Number(best.amount))}
+            </p>
           ) : null}
         </section>
 

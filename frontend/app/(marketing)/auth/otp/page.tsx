@@ -39,11 +39,18 @@ function OtpForm() {
     }
     setLoading(true);
     try {
-      await api("/api/auth/verify-otp", {
-        method: "POST",
-        body: JSON.stringify({ phone, token }),
-      });
-      router.replace("/home");
+      const data = await api<{ user?: { name?: string | null } }>(
+        "/api/auth/verify-otp",
+        {
+          method: "POST",
+          body: JSON.stringify({ phone, token }),
+        }
+      );
+      if (!data.user?.name) {
+        router.replace("/profile");
+      } else {
+        router.replace("/home");
+      }
       router.refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Code invalide");

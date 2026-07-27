@@ -148,3 +148,61 @@
     @apply font-sans;
   }
 }
+
+/* CMS / markdown */
+.prose-mastercota {
+  color: var(--muted-foreground);
+  line-height: 1.7;
+}
+.prose-mastercota h1 {
+  margin-top: 0;
+  font-size: 1.875rem;
+  font-weight: 800;
+  color: var(--ink);
+}
+.prose-mastercota h2 {
+  margin-top: 2.5rem;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+.prose-mastercota h3 {
+  margin-top: 2rem;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.prose-mastercota p {
+  margin-top: 1rem;
+}
+.prose-mastercota ul,
+.prose-mastercota ol {
+  margin-top: 1rem;
+  padding-left: 1.25rem;
+}
+.prose-mastercota ul {
+  list-style: disc;
+}
+.prose-mastercota ol {
+  list-style: decimal;
+}
+.prose-mastercota li {
+  margin-top: 0.35rem;
+}
+.prose-mastercota a {
+  color: var(--primary);
+  text-underline-offset: 2px;
+}
+.prose-mastercota a:hover {
+  text-decoration: underline;
+}
+.prose-mastercota code {
+  border-radius: 0.375rem;
+  background: var(--secondary);
+  padding: 0.125rem 0.375rem;
+  font-size: 0.875rem;
+}
+.prose-mastercota strong {
+  color: var(--ink);
+  font-weight: 700;
+}
