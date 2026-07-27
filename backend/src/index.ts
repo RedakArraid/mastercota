@@ -28,6 +28,7 @@ import {
   canExtend,
   EXTENSION_DAYS,
 } from "./lib/billing.js";
+import { normalizeWavePhone } from "./lib/wave.js";
 import { adminRoutes } from "./admin.js";
 
 const app = new Hono();
@@ -405,18 +406,30 @@ app.get("/api/cotisations/billing-info", async (c) => {
 
 app.get("/api/cotisations/by-slug/:slug", async (c) => {
   await autoCloseExpiredCotisations();
-  const { rows } = await query(`SELECT * FROM cotisations WHERE slug = $1`, [
-    c.req.param("slug"),
-  ]);
+  const { rows } = await query(
+    `SELECT c.*,
+            u.wave_phone AS owner_wave_phone,
+            u.name AS owner_name
+     FROM cotisations c
+     JOIN users u ON u.id = c.owner_id
+     WHERE c.slug = $1`,
+    [c.req.param("slug")]
+  );
   if (!rows[0]) return c.json({ error: "Introuvable" }, 404);
   return c.json({ cotisation: rows[0] });
 });
 
 app.get("/api/cotisations/:id", async (c) => {
   await autoCloseExpiredCotisations();
-  const { rows } = await query(`SELECT * FROM cotisations WHERE id = $1`, [
-    c.req.param("id"),
-  ]);
+  const { rows } = await query(
+    `SELECT c.*,
+            u.wave_phone AS owner_wave_phone,
+            u.name AS owner_name
+     FROM cotisations c
+     JOIN users u ON u.id = c.owner_id
+     WHERE c.id = $1`,
+    [c.req.param("id")]
+  );
   if (!rows[0]) return c.json({ error: "Introuvable" }, 404);
   return c.json({ cotisation: rows[0] });
 });
@@ -479,24 +492,169 @@ app.get("/api/cotisations/:id/contributions", async (c) => {
 });
 
 app.post("/api/cotisations/:id/contributions", async (c) => {
-  const session = await requireUser(c);
-  if (!session) return c.json({ error: "Unauthorized" }, 401);
   const id = c.req.param("id");
-  const { rows: owned } = await query(
-    `SELECT id FROM cotisations WHERE id = $1 AND owner_id = $2`,
-    [id, session.id]
-  );
-  if (!owned[0]) return c.json({ error: "Forbidden" }, 403);
   const body = await c.req.json();
-  const { contributor_name, contributor_phone, amount } = body;
+  const {
+    contributor_name,
+    contributor_phone,
+    amount,
+    note,
+    payment_method,
+  } = body;
+
+  // Contribution manuelle (orga connecté)
+  const session = await requireUser(c);
+  if (payment_method === "manual") {
+    if (!session) return c.json({ error: "Unauthorized" }, 401);
+    const { rows: owned } = await query(
+      `SELECT id FROM cotisations WHERE id = $1 AND owner_id = $2`,
+      [id, session.id]
+    );
+    if (!owned[0]) return c.json({ error: "Forbidden" }, 403);
+    if (!contributor_name || !contributor_phone || !amount) {
+      return c.json({ error: "Champs requis manquants" }, 400);
+    }
+    const { rows } = await query(
+      `INSERT INTO contributions
+        (cotisation_id, contributor_name, contributor_phone, amount, status, payment_method, note)
+       VALUES ($1,$2,$3,$4,'paid','manual',$5) RETURNING *`,
+      [
+        id,
+        contributor_name.trim(),
+        contributor_phone.trim(),
+        Number(amount),
+        note?.trim() || null,
+      ]
+    );
+    return c.json({ contribution: rows[0] });
+  }
+
+  // Wave P2P public : en attente de confirmation orga
   if (!contributor_name || !contributor_phone || !amount) {
     return c.json({ error: "Champs requis manquants" }, 400);
   }
+  const { rows: cots } = await query<{
+    id: string;
+    status: string;
+    title: string;
+    owner_id: string;
+    owner_wave_phone: string | null;
+    settings: { min_amount?: number };
+  }>(
+    `SELECT c.id, c.status, c.title, c.owner_id, c.settings,
+            u.wave_phone AS owner_wave_phone
+     FROM cotisations c
+     JOIN users u ON u.id = c.owner_id
+     WHERE c.id = $1`,
+    [id]
+  );
+  if (!cots[0]) return c.json({ error: "Cotisation introuvable" }, 404);
+  if (cots[0].status !== "active") {
+    return c.json({ error: "Cette cotisation n'accepte plus de contributions" }, 400);
+  }
+  if (!cots[0].owner_wave_phone) {
+    return c.json(
+      {
+        error:
+          "L'organisateur n'a pas encore configuré son numéro Wave",
+      },
+      400
+    );
+  }
+  const parsedAmount = Math.round(Number(amount));
+  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+    return c.json({ error: "Montant invalide" }, 400);
+  }
+  const minAmount = Number(cots[0].settings?.min_amount ?? 0) || 0;
+  if (minAmount > 0 && parsedAmount < minAmount) {
+    return c.json({ error: `Montant minimum : ${minAmount} FCFA` }, 400);
+  }
+
   const { rows } = await query(
     `INSERT INTO contributions
-      (cotisation_id, contributor_name, contributor_phone, amount, status, payment_method)
-     VALUES ($1,$2,$3,$4,'paid','manual') RETURNING *`,
-    [id, contributor_name.trim(), contributor_phone.trim(), Number(amount)]
+      (cotisation_id, contributor_name, contributor_phone, amount, status, payment_method, note)
+     VALUES ($1,$2,$3,$4,'awaiting_confirmation','wave_p2p',$5) RETURNING *`,
+    [
+      id,
+      String(contributor_name).trim(),
+      String(contributor_phone).trim(),
+      parsedAmount,
+      note?.trim() || null,
+    ]
+  );
+
+  return c.json({
+    contribution: rows[0],
+    wave: {
+      phone: cots[0].owner_wave_phone,
+      amount: parsedAmount,
+      title: cots[0].title,
+    },
+  });
+});
+
+app.post("/api/contributions/:id/confirm", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const id = c.req.param("id");
+  const { rows: found } = await query<{
+    id: string;
+    status: string;
+    owner_id: string;
+  }>(
+    `SELECT c.id, c.status, cot.owner_id
+     FROM contributions c
+     JOIN cotisations cot ON cot.id = c.cotisation_id
+     WHERE c.id = $1`,
+    [id]
+  );
+  if (!found[0]) return c.json({ error: "Introuvable" }, 404);
+  if (found[0].owner_id !== session.id) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+  if (found[0].status === "paid") {
+    const { rows } = await query(`SELECT * FROM contributions WHERE id = $1`, [
+      id,
+    ]);
+    return c.json({ contribution: rows[0] });
+  }
+  if (found[0].status !== "awaiting_confirmation" && found[0].status !== "pending") {
+    return c.json({ error: "Cette contribution ne peut plus être confirmée" }, 400);
+  }
+  const { rows } = await query(
+    `UPDATE contributions SET status = 'paid', payment_method = COALESCE(payment_method, 'wave_p2p')
+     WHERE id = $1 RETURNING *`,
+    [id]
+  );
+  return c.json({ contribution: rows[0] });
+});
+
+app.post("/api/contributions/:id/reject", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const id = c.req.param("id");
+  const { rows: found } = await query<{
+    id: string;
+    status: string;
+    owner_id: string;
+  }>(
+    `SELECT c.id, c.status, cot.owner_id
+     FROM contributions c
+     JOIN cotisations cot ON cot.id = c.cotisation_id
+     WHERE c.id = $1`,
+    [id]
+  );
+  if (!found[0]) return c.json({ error: "Introuvable" }, 404);
+  if (found[0].owner_id !== session.id) {
+    return c.json({ error: "Forbidden" }, 403);
+  }
+  if (found[0].status === "paid") {
+    return c.json({ error: "Impossible de refuser une contribution déjà confirmée" }, 400);
+  }
+  const { rows } = await query(
+    `UPDATE contributions SET status = 'rejected'
+     WHERE id = $1 RETURNING *`,
+    [id]
   );
   return c.json({ contribution: rows[0] });
 });
@@ -830,12 +988,30 @@ app.patch("/api/profile", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
   const body = await c.req.json();
+  let wavePhone: string | null | undefined = undefined;
+  if (body.wave_phone !== undefined) {
+    if (body.wave_phone === null || body.wave_phone === "") {
+      wavePhone = null;
+    } else {
+      wavePhone = normalizeWavePhone(String(body.wave_phone));
+      if (!wavePhone) {
+        return c.json({ error: "Numéro Wave invalide" }, 400);
+      }
+    }
+  }
   const { rows } = await query(
     `UPDATE users SET
        name = COALESCE($1, name),
-       avatar_url = COALESCE($2, avatar_url)
-     WHERE id = $3 RETURNING *`,
-    [body.name ?? null, body.avatar_url ?? null, session.id]
+       avatar_url = COALESCE($2, avatar_url),
+       wave_phone = CASE WHEN $3::boolean THEN $4 ELSE wave_phone END
+     WHERE id = $5 RETURNING *`,
+    [
+      body.name ?? null,
+      body.avatar_url ?? null,
+      wavePhone !== undefined,
+      wavePhone ?? null,
+      session.id,
+    ]
   );
   return c.json({ user: rows[0] });
 });

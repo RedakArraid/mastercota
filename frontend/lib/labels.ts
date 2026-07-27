@@ -8,10 +8,14 @@ export function statusLabel(status: string): string {
       return "Objectif atteint";
     case "pending_fee":
       return "En attente de paiement";
+    case "awaiting_confirmation":
+      return "À confirmer";
+    case "rejected":
+      return "Refusée";
     case "pending":
       return "En attente";
     case "paid":
-      return "Payée";
+      return "Confirmée";
     case "failed":
       return "Échouée";
     default:
@@ -25,6 +29,7 @@ export function paymentMethodLabel(method: string | null | undefined): string {
   if (m.includes("mobile") || m === "mobile_money") return "Mobile Money";
   if (m.includes("card")) return "Carte";
   if (m.includes("bank")) return "Banque";
+  if (m.includes("wave")) return "Wave (direct)";
   if (m.includes("manual")) return "Manuel";
   return method;
 }

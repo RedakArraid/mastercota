@@ -45,8 +45,12 @@ export default function CreateCotisationPage() {
   const [useFree, setUseFree] = useState(true);
   const [durationDays, setDurationDays] = useState(35);
   const [loading, setLoading] = useState(false);
+  const [hasWave, setHasWave] = useState<boolean | null>(null);
 
   useEffect(() => {
+    api<{ user: { wave_phone?: string | null } }>("/api/profile")
+      .then((p) => setHasWave(Boolean(p.user?.wave_phone)))
+      .catch(() => setHasWave(null));
     api<BillingInfo>("/api/cotisations/billing-info")
       .then((info) => {
         setBilling(info);
@@ -129,6 +133,19 @@ export default function CreateCotisationPage() {
           durée Mastercota (1re gratuite).
         </p>
       </div>
+
+      {hasWave === false ? (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          <p className="font-medium text-ink">Configurez votre numéro Wave</p>
+          <p className="mt-1 text-muted-foreground">
+            Sans numéro Wave, les contributeurs ne pourront pas vous envoyer
+            l&apos;argent en direct.
+          </p>
+          <Button asChild variant="secondary" size="sm" className="mt-3">
+            <Link href="/profile/payout">Ajouter mon Wave</Link>
+          </Button>
+        </div>
+      ) : null}
 
       <form onSubmit={onSubmit} className="space-y-6">
         <section className="space-y-5 rounded-2xl border border-border bg-card p-6">

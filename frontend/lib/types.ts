@@ -28,6 +28,8 @@ export type Cotisation = {
   platform_fee_reference?: string | null;
   is_free_tier?: boolean;
   extension_count?: number;
+  owner_wave_phone?: string | null;
+  owner_name?: string | null;
 };
 
 export type Contribution = {
@@ -36,9 +38,16 @@ export type Contribution = {
   contributor_name: string;
   contributor_phone: string;
   amount: number;
-  status: "pending" | "paid" | "failed" | string;
+  status:
+    | "pending"
+    | "awaiting_confirmation"
+    | "paid"
+    | "failed"
+    | "rejected"
+    | string;
   paystack_reference: string | null;
   payment_method: string | null;
+  note?: string | null;
   created_at: string;
 };
 
@@ -48,6 +57,8 @@ export type UserProfile = {
   name: string | null;
   avatar_url: string | null;
   paystack_subaccount_id: string | null;
+  wave_phone?: string | null;
+  role?: string;
   created_at: string;
 };
 

@@ -106,24 +106,22 @@ export default function ProfilePage() {
       </form>
 
       <div className="rounded-2xl border border-border bg-card p-6">
-        <h2 className="mb-2 font-semibold">Compte de versement</h2>
+        <h2 className="mb-2 font-semibold">Compte Wave</h2>
         <p className="mb-1 text-sm text-muted-foreground">
-          {profile?.paystack_subaccount_id
-            ? "Vos contributions seront versées automatiquement (frais de service ~3 % payés par le contributeur)."
-            : "Configurez Wave, MTN, Orange ou une banque pour recevoir les fonds."}
+          {profile?.wave_phone
+            ? "Les contributeurs envoient l’argent directement sur ce numéro via Wave."
+            : "Ajoutez votre numéro Wave pour recevoir les contributions en direct."}
         </p>
-        {profile?.paystack_subaccount_id ? (
-          <p className="mb-4 font-mono text-xs text-muted-foreground break-all">
-            ID : {profile.paystack_subaccount_id}
+        {profile?.wave_phone ? (
+          <p className="mb-4 text-sm font-semibold text-ink">
+            {profile.wave_phone}
           </p>
         ) : (
           <div className="mb-4" />
         )}
         <Button asChild variant="secondary">
           <Link href="/profile/payout">
-            {profile?.paystack_subaccount_id
-              ? "Modifier le compte"
-              : "Configurer le retrait"}
+            {profile?.wave_phone ? "Modifier le numéro" : "Configurer Wave"}
           </Link>
         </Button>
       </div>

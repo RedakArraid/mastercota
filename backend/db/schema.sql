@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
   name        text,
   avatar_url  text,
   paystack_subaccount_id text,
+  wave_phone  text,
   role        text NOT NULL DEFAULT 'user'
                 CHECK (role IN ('user', 'admin')),
   created_at  timestamptz NOT NULL DEFAULT now()
@@ -57,9 +58,16 @@ CREATE TABLE IF NOT EXISTS contributions (
   contributor_phone   text NOT NULL,
   amount              numeric NOT NULL CHECK (amount > 0),
   status              text NOT NULL DEFAULT 'pending'
-                        CHECK (status IN ('pending', 'paid', 'failed')),
+                        CHECK (status IN (
+                          'pending',
+                          'awaiting_confirmation',
+                          'paid',
+                          'failed',
+                          'rejected'
+                        )),
   paystack_reference  text UNIQUE,
   payment_method      text,
+  note                text,
   created_at          timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS contributions_cotisation_idx ON contributions(cotisation_id);

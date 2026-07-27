@@ -86,3 +86,23 @@ export function isValidNational(
   const digits = national.replace(/\D/g, "");
   return digits.length === country.nationalLength;
 }
+
+export function isoFromE164(e164: string): string | null {
+  const digits = e164.replace(/\D/g, "");
+  const sorted = [...PAYSTACK_COUNTRIES].sort(
+    (a, b) => b.dial.length - a.dial.length
+  );
+  for (const c of sorted) {
+    const dialDigits = c.dial.replace(/\D/g, "");
+    if (digits.startsWith(dialDigits)) return c.iso;
+  }
+  return null;
+}
+
+export function nationalFromE164(e164: string, iso?: string): string {
+  const digits = e164.replace(/\D/g, "");
+  const country = getCountryByIso(iso || isoFromE164(e164) || DEFAULT_COUNTRY_ISO);
+  const dialDigits = country.dial.replace(/\D/g, "");
+  if (digits.startsWith(dialDigits)) return digits.slice(dialDigits.length);
+  return digits;
+}

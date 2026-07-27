@@ -207,6 +207,31 @@ export default function CotisationDetailPage() {
     }
   }
 
+  async function confirmContribution(contributionId: string) {
+    try {
+      await api(`/api/contributions/${contributionId}/confirm`, {
+        method: "POST",
+      });
+      toast.success("Contribution confirmée");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
+    }
+  }
+
+  async function rejectContribution(contributionId: string) {
+    if (!confirm("Refuser cette contribution ?")) return;
+    try {
+      await api(`/api/contributions/${contributionId}/reject`, {
+        method: "POST",
+      });
+      toast.success("Contribution refusée");
+      load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Erreur");
+    }
+  }
+
   async function extendCotisation() {
     if (
       !confirm(
@@ -281,6 +306,7 @@ export default function CotisationDetailPage() {
           contributor_name: mName.trim(),
           contributor_phone: buildE164(country, mPhone),
           amount,
+          payment_method: "manual",
         }),
       });
       toast.success("Contribution ajoutée");
@@ -364,6 +390,18 @@ export default function CotisationDetailPage() {
             disabled={payingFee}
           >
             {payingFee ? "Redirection…" : "Payer les frais"}
+          </Button>
+        </div>
+      ) : null}
+
+      {!cotisation.owner_wave_phone && cotisation.status !== "pending_fee" ? (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          <p className="font-medium text-ink">Numéro Wave requis</p>
+          <p className="mt-1 text-muted-foreground">
+            Sans numéro Wave, personne ne peut contribuer via le lien public.
+          </p>
+          <Button asChild size="sm" variant="secondary" className="mt-3">
+            <Link href="/profile/payout">Configurer Wave</Link>
           </Button>
         </div>
       ) : null}
@@ -492,18 +530,42 @@ export default function CotisationDetailPage() {
               {contributions.map((c) => (
                 <li
                   key={c.id}
-                  className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
+                  className="flex flex-col gap-3 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div>
                     <p className="font-medium">{c.contributor_name}</p>
                     <p className="text-xs text-muted-foreground">
                       {statusLabel(c.status)} ·{" "}
                       {paymentMethodLabel(c.payment_method)}
+                      {c.note ? ` · ${c.note}` : ""}
+                    </p>
+                    <p className="mt-1 font-semibold sm:hidden">
+                      {formatAmount(Number(c.amount))}
                     </p>
                   </div>
-                  <p className="font-semibold">
-                    {formatAmount(Number(c.amount))}
-                  </p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="hidden font-semibold sm:block">
+                      {formatAmount(Number(c.amount))}
+                    </p>
+                    {c.status === "awaiting_confirmation" ||
+                    c.status === "pending" ? (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => confirmContribution(c.id)}
+                        >
+                          Confirmer
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => rejectContribution(c.id)}
+                        >
+                          Refuser
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
                 </li>
               ))}
             </ul>

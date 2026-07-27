@@ -41,7 +41,7 @@ export default async function HomePage() {
     (s, c) => s + Number(c.current_amount || 0),
     0
   );
-  const needsPayout = profile && !profile.paystack_subaccount_id;
+  const needsPayout = profile && !profile.wave_phone;
 
   return (
     <div className="space-y-8">
@@ -75,13 +75,13 @@ export default async function HomePage() {
         <div className="flex gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
           <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-700" />
           <div>
-            <p className="font-medium text-ink">Compte de versement manquant</p>
+            <p className="font-medium text-ink">Numéro Wave manquant</p>
             <p className="mt-1 text-muted-foreground">
-              Configurez Wave, MTN, Orange ou une banque pour recevoir les
-              fonds.
+              Ajoutez votre numéro Wave pour recevoir les contributions en
+              direct (0&nbsp;% de frais, argent immédiat).
             </p>
             <Button asChild size="sm" variant="secondary" className="mt-3">
-              <Link href="/profile/payout">Configurer</Link>
+              <Link href="/profile/payout">Configurer Wave</Link>
             </Button>
           </div>
         </div>

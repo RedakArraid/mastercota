@@ -13,6 +13,7 @@ services:
       - ./backend/db/migrate-pages.sql:/docker-entrypoint-initdb.d/02-pages.sql:ro
       - ./backend/db/migrate-admin.sql:/docker-entrypoint-initdb.d/03-admin.sql:ro
       - ./backend/db/migrate-billing.sql:/docker-entrypoint-initdb.d/04-billing.sql:ro
+      - ./backend/db/migrate-wave-p2p.sql:/docker-entrypoint-initdb.d/05-wave.sql:ro
     networks:
       - mastercota_internal
     healthcheck:

@@ -17,7 +17,7 @@ export default async function LandingPage() {
       },
       {
         title: "Mobile Money",
-        body: "Wave, MTN, Orange et carte — confirmation automatique.",
+        body: "Wave en direct — argent immédiat chez l’organisateur, suivi transparent.",
       },
       {
         title: "Suivi en direct",
