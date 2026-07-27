@@ -134,7 +134,7 @@ VALUES
     'comment-ca-marche',
     'Comment ça marche',
     'Créez, partagez, collectez.',
-    E'## 1. Créez votre cotisation\n\nIndiquez un objectif, une date limite et un titre clair.\n\n## 2. Partagez le lien\n\nEnvoyez `mastercota.com/c/votre-slug` sur WhatsApp.\n\n## 3. Recevez les contributions\n\nMobile Money via Paystack. Votre tableau de bord se met à jour automatiquement.',
+    E'## 1. Créez votre cotisation\n\nIndiquez un objectif, une date limite et un titre clair.\n\n## 2. Partagez le lien\n\nEnvoyez `mastercota.com/c/votre-slug` sur WhatsApp.\n\n## 3. Recevez les contributions\n\nMobile Money et carte — confirmation automatique. Votre tableau de bord se met à jour automatiquement.',
     'Comment ça marche',
     'header',
     10
@@ -152,7 +152,7 @@ VALUES
     'confidentialite',
     'Confidentialité',
     'Comment nous traitons vos données.',
-    E'## Politique de confidentialité\n\nNous collectons le numéro de téléphone pour l''authentification et le suivi des contributions.\n\nLes paiements sont traités par Paystack. Les OTP sont envoyés via WhatsApp (OpenWA).',
+    E'## Politique de confidentialité\n\nNous collectons le numéro de téléphone pour l''authentification et le suivi des contributions.\n\nLes paiements sont traités par un prestataire de paiement sécurisé. Les OTP sont envoyés via WhatsApp.',
     'Confidentialité',
     'footer',
     30

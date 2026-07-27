@@ -134,17 +134,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     _PrivacySection(
                       title: 'Utilisation des données',
                       body:
-                          'Vos données servent uniquement à faire fonctionner l\'application : authentification, création et suivi de cotisations, et initialisation des paiements via Paystack.',
+                          'Vos données servent uniquement à faire fonctionner l\'application : authentification, création et suivi de cotisations, et initialisation des paiements.',
                     ),
                     _PrivacySection(
                       title: 'Paiements',
                       body:
-                          'Les transactions sont traitées par Paystack (PCI-DSS). Mastercota ne stocke jamais vos informations bancaires ou de carte.',
+                          'Les paiements sont traités par un prestataire certifié. Mastercota ne stocke jamais vos informations bancaires ou de carte.',
                     ),
                     _PrivacySection(
                       title: 'Partage des données',
                       body:
-                          'Nous ne vendons ni ne partageons vos données personnelles avec des tiers. Seul Paystack reçoit les informations nécessaires au traitement de paiement.',
+                          'Nous ne vendons ni ne partageons vos données personnelles avec des tiers. Seul le prestataire de paiement reçoit les informations nécessaires au traitement.',
                     ),
                     _PrivacySection(
                       title: 'Suppression de compte',

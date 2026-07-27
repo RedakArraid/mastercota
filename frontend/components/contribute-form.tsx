@@ -140,7 +140,7 @@ export default function ContributeForm({
           ? "Redirection…"
           : quote
             ? `Payer ${formatAmount(quote.gross)}`
-            : "Contribuer avec Paystack"}
+            : "Contribuer"}
       </Button>
     </form>
   );

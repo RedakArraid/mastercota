@@ -835,7 +835,7 @@ class _PaymentFormState extends State<_PaymentForm> {
                         ),
                       ),
                       Text(
-                        'Paiement sécurisé par Paystack',
+                        'Paiement sécurisé Mobile Money / carte',
                         style: AppTextStyles.caption.copyWith(
                           color: AppColors.textSecondary,
                         ),
@@ -1203,7 +1203,7 @@ class _PaymentSuccess extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'La page sécurisée Paystack s\'est ouverte dans votre navigateur. Complétez le paiement pour valider votre contribution.',
+            'La page de paiement sécurisée s\'est ouverte dans votre navigateur. Complétez le paiement pour valider votre contribution.',
             textAlign: TextAlign.center,
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.textSecondary,
@@ -1420,17 +1420,9 @@ class _Footer extends StatelessWidget {
                   size: 11, color: AppColors.textTertiary),
               const SizedBox(width: 4),
               Text(
-                'Paiements sécurisés par ',
+                'Paiements sécurisés — Mobile Money & carte',
                 style: AppTextStyles.caption.copyWith(
                   color: AppColors.textTertiary,
-                  fontSize: 10,
-                ),
-              ),
-              Text(
-                'Paystack',
-                style: AppTextStyles.caption.copyWith(
-                  color: AppColors.accent,
-                  fontWeight: FontWeight.w700,
                   fontSize: 10,
                 ),
               ),

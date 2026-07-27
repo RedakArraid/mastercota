@@ -33,7 +33,7 @@ VALUES
     'comment-ca-marche',
     'Comment ça marche',
     'Créez, partagez, collectez.',
-    E'## 1. Créez votre cotisation\n\nIndiquez un objectif et une date limite.\n\n## 2. Partagez le lien\n\nEnvoyez le lien public sur WhatsApp.\n\n## 3. Recevez\n\nMobile Money via Paystack, tableau de bord mis à jour.',
+    E'## 1. Créez votre cotisation\n\nIndiquez un objectif et une date limite.\n\n## 2. Partagez le lien\n\nEnvoyez le lien public sur WhatsApp.\n\n## 3. Recevez\n\nMobile Money et carte — tableau de bord mis à jour automatiquement.',
     'Comment ça marche',
     'header',
     10
@@ -51,7 +51,7 @@ VALUES
     'confidentialite',
     'Confidentialité',
     'Traitement des données.',
-    E'## Confidentialité\n\nTéléphone pour auth OTP WhatsApp. Paiements via Paystack.',
+    E'## Confidentialité\n\nTéléphone pour auth OTP WhatsApp. Paiements via un prestataire sécurisé.',
     'Confidentialité',
     'footer',
     30

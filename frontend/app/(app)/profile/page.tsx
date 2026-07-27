@@ -93,7 +93,7 @@ export default function ProfilePage() {
         <h2 className="mb-2 font-semibold">Compte de retrait</h2>
         <p className="mb-4 text-sm text-muted-foreground">
           {profile?.paystack_subaccount_id
-            ? "Sous-compte Paystack configuré."
+            ? "Compte de versement configuré."
             : "Configurez Wave, MTN, Orange ou une banque pour recevoir les fonds."}
         </p>
         <Button asChild variant="secondary">

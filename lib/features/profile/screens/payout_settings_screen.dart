@@ -64,7 +64,7 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
     });
   }
 
-  // Vérifie le numéro de compte via l'API Paystack
+  // Vérifie le numéro de compte via l'API de paiement
   Future<void> _verify() async {
     final account = _accountController.text.trim();
     if (account.isEmpty) {
@@ -351,7 +351,7 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        'Paystack Subaccount',
+                        'Compte de versement',
                         style: AppTextStyles.caption.copyWith(
                           color: AppColors.ink4,
                         ),

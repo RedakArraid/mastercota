@@ -227,7 +227,7 @@ export default function CotisationDetailPage() {
                 <div>
                   <p className="font-medium">{c.contributor_name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {c.status} · {c.payment_method ?? "paystack"}
+                    {c.status} · {c.payment_method ?? "mobile_money"}
                   </p>
                 </div>
                 <p className="font-semibold">{formatAmount(Number(c.amount))}</p>

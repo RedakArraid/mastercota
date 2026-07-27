@@ -271,7 +271,7 @@ class _ContributionDialogState extends State<ContributionDialog> {
                         duration: 400.ms, curve: Curves.easeOutBack),
                     const SizedBox(height: 28),
                     Text(
-                      'Redirection vers Paystack…',
+                      'Redirection vers le paiement…',
                       style: AppTextStyles.titleLarge
                           .copyWith(fontWeight: FontWeight.w700),
                       textAlign: TextAlign.center,
