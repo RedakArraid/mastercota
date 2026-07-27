@@ -11,18 +11,42 @@ import {
   signSession,
   verifyToken,
 } from "./lib/auth.js";
-import { sendOtpWhatsApp } from "./lib/openwa.js";
+import { sendOtpWhatsApp, isOpenWaActive } from "./lib/openwa.js";
 import { paystackFetch } from "./lib/paystack.js";
 import { generateSlug } from "./lib/format.js";
 import { feesFromNet } from "./lib/fees.js";
+import { adminRoutes } from "./admin.js";
 
 const app = new Hono();
 const COOKIE = "mc_session";
 
+const APP_ORIGIN = (process.env.APP_URL ?? "https://mastercota.com").replace(
+  /\/$/,
+  ""
+);
+const ADMIN_ORIGIN = APP_ORIGIN.replace("://", "://admin.");
+const ALLOWED_ORIGINS = new Set([
+  APP_ORIGIN,
+  ADMIN_ORIGIN,
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+]);
+
+function cookieDomain(): string | undefined {
+  try {
+    const host = new URL(APP_ORIGIN).hostname;
+    if (host === "localhost" || host.endsWith(".local")) return undefined;
+    return `.${host.replace(/^www\./, "")}`;
+  } catch {
+    return undefined;
+  }
+}
+
 app.use(
   "*",
   cors({
-    origin: (origin) => origin || "*",
+    origin: (origin) =>
+      origin && ALLOWED_ORIGINS.has(origin) ? origin : APP_ORIGIN,
     credentials: true,
   })
 );
@@ -52,12 +76,15 @@ app.post("/api/auth/send-otp", async (c) => {
       `INSERT INTO otp_codes (phone, code_hash, expires_at) VALUES ($1,$2,$3)`,
       [phone, hashOtp(code), expires.toISOString()]
     );
-    if (!process.env.OPENWA_API_KEY || process.env.OTP_DEV_LOG === "1") {
+    if (process.env.OTP_DEV_LOG === "1" || !(await isOpenWaActive())) {
       console.log(`[OTP DEV] ${phone} → ${code}`);
     }
-    if (process.env.OPENWA_API_KEY && process.env.OPENWA_SESSION_ID) {
+    if (await isOpenWaActive()) {
       await sendOtpWhatsApp(phone, code);
-    } else if (process.env.NODE_ENV === "production" && !process.env.OTP_DEV_CODE) {
+    } else if (
+      process.env.NODE_ENV === "production" &&
+      !process.env.OTP_DEV_CODE
+    ) {
       return c.json({ error: "OpenWA non configuré" }, 500);
     }
     return c.json({ ok: true });
@@ -87,30 +114,61 @@ app.post("/api/auth/verify-otp", async (c) => {
       ]);
     }
     let user = (
-      await query<{ id: string; phone: string; name: string | null }>(
-        `SELECT id, phone, name FROM users WHERE phone = $1`,
-        [phone]
-      )
+      await query<{
+        id: string;
+        phone: string;
+        name: string | null;
+        role: string;
+      }>(`SELECT id, phone, name, role FROM users WHERE phone = $1`, [phone])
     ).rows[0];
     if (!user) {
       user = (
-        await query<{ id: string; phone: string; name: string | null }>(
-          `INSERT INTO users (phone) VALUES ($1) RETURNING id, phone, name`,
+        await query<{
+          id: string;
+          phone: string;
+          name: string | null;
+          role: string;
+        }>(
+          `INSERT INTO users (phone) VALUES ($1) RETURNING id, phone, name, role`,
           [phone]
         )
       ).rows[0];
     }
+    const bootstrap = (process.env.ADMIN_PHONES || "")
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (bootstrap.includes(phone) && user.role !== "admin") {
+      const updated = await query<{
+        id: string;
+        phone: string;
+        name: string | null;
+        role: string;
+      }>(
+        `UPDATE users SET role = 'admin' WHERE id = $1
+         RETURNING id, phone, name, role`,
+        [user.id]
+      );
+      user = updated.rows[0] ?? user;
+    }
     const jwt = await signSession({ id: user.id, phone: user.phone });
+    const domain = cookieDomain();
     setCookie(c, COOKIE, jwt, {
       httpOnly: true,
       sameSite: "Lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
       maxAge: 60 * 60 * 24 * 30,
+      ...(domain ? { domain } : {}),
     });
     return c.json({
       token: jwt,
-      user: { id: user.id, phone: user.phone, name: user.name },
+      user: {
+        id: user.id,
+        phone: user.phone,
+        name: user.name,
+        role: user.role,
+      },
     });
   } catch (e) {
     return c.json(
@@ -121,7 +179,8 @@ app.post("/api/auth/verify-otp", async (c) => {
 });
 
 app.post("/api/auth/logout", async (c) => {
-  deleteCookie(c, COOKIE, { path: "/" });
+  const domain = cookieDomain();
+  deleteCookie(c, COOKIE, { path: "/", ...(domain ? { domain } : {}) });
   return c.json({ ok: true });
 });
 
@@ -522,6 +581,8 @@ app.get("/api/pages", async (c) => {
     );
   }
 });
+
+app.route("/api/admin", adminRoutes);
 
 const port = Number(process.env.PORT ?? 4000);
 console.log(`mastercota-backend on :${port}`);

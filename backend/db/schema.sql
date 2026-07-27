@@ -7,8 +7,11 @@ CREATE TABLE IF NOT EXISTS users (
   name        text,
   avatar_url  text,
   paystack_subaccount_id text,
+  role        text NOT NULL DEFAULT 'user'
+                CHECK (role IN ('user', 'admin')),
   created_at  timestamptz NOT NULL DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS users_role_idx ON users(role);
 
 CREATE TABLE IF NOT EXISTS otp_codes (
   id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -167,4 +170,22 @@ VALUES
     40
   )
 ON CONFLICT (slug) DO NOTHING;
+
+-- Admin + OpenWA (also applied via migrate-admin.sql on existing DBs)
+ALTER TABLE users
+  ADD COLUMN IF NOT EXISTS role text NOT NULL DEFAULT 'user';
+
+CREATE INDEX IF NOT EXISTS users_role_idx ON users(role);
+
+CREATE TABLE IF NOT EXISTS openwa_settings (
+  id          text PRIMARY KEY DEFAULT 'default',
+  enabled     boolean NOT NULL DEFAULT false,
+  base_url    text,
+  api_key     text,
+  session_id  text,
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT openwa_settings_singleton CHECK (id = 'default')
+);
+
+INSERT INTO openwa_settings (id) VALUES ('default') ON CONFLICT DO NOTHING;
 

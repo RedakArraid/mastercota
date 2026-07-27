@@ -39,14 +39,25 @@ function OtpForm() {
     }
     setLoading(true);
     try {
-      const data = await api<{ user?: { name?: string | null } }>(
-        "/api/auth/verify-otp",
-        {
-          method: "POST",
-          body: JSON.stringify({ phone, token }),
+      const data = await api<{
+        user?: { name?: string | null; role?: string };
+      }>("/api/auth/verify-otp", {
+        method: "POST",
+        body: JSON.stringify({ phone, token }),
+      });
+      const next = searchParams.get("next");
+      if (next?.startsWith("/")) {
+        router.replace(next);
+      } else if (data.user?.role === "admin" && typeof window !== "undefined") {
+        const host = window.location.hostname;
+        if (host.startsWith("admin.")) {
+          router.replace("/admin");
+        } else if (!data.user?.name) {
+          router.replace("/profile");
+        } else {
+          router.replace("/home");
         }
-      );
-      if (!data.user?.name) {
+      } else if (!data.user?.name) {
         router.replace("/profile");
       } else {
         router.replace("/home");
