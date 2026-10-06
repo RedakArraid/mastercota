@@ -81,6 +81,7 @@ void main() {
       });
       final notifier = CotisationNotifier();
       final result = await notifier.createCotisation(
+        requestId: '11111111-1111-4111-8111-111111111111',
         title: 'Mariage',
         targetAmount: 10000,
         durationDays: 35,
@@ -89,6 +90,7 @@ void main() {
       );
       expect(sent!['duration_days'], 35);
       expect(sent!['use_free'], true);
+      expect(sent!['request_id'], '11111111-1111-4111-8111-111111111111');
       expect(sent!['settings']['show_contributors'], false);
       expect(sent!.containsKey('deadline'), false);
       expect(result.id, 'cot');
@@ -106,6 +108,7 @@ void main() {
       });
       final notifier = CotisationNotifier();
       await notifier.addManualContribution(
+        requestId: '22222222-2222-4222-8222-222222222222',
         cotisationId: 'cot',
         contributorName: 'A',
         contributorPhone: '+2250700000000',
@@ -114,6 +117,7 @@ void main() {
       );
       expect(sent!['payment_method'], 'manual');
       expect(sent!['note'], 'Espèces reçues');
+      expect(sent!['request_id'], '22222222-2222-4222-8222-222222222222');
       notifier.dispose();
     },
   );

@@ -10,10 +10,10 @@ export function progressPercent(current: number, target: number): number {
 }
 
 export function daysRemaining(deadline: string): number {
-  const end = new Date(deadline);
-  const now = new Date();
-  const diff = end.getTime() - now.getTime();
-  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+  // Cagnottes close after the calendar deadline in UTC (Côte d’Ivoire).
+  const end = Date.parse(`${deadline.slice(0, 10)}T00:00:00Z`);
+  const today = Date.parse(`${new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  return Math.round((end - today) / 86_400_000);
 }
 
 export function generateSlug(title: string): string {
@@ -26,4 +26,9 @@ export function generateSlug(title: string): string {
     .replace(/\s+/g, "-");
   const ts = Date.now().toString().slice(-5);
   return `${base}-${ts}`;
+}
+
+export function remainingLabel(deadline: string): string {
+  const days = daysRemaining(deadline);
+  return days < 0 ? "Échéance dépassée" : days === 0 ? "Dernier jour" : `${days} jour${days > 1 ? "s" : ""} restant${days > 1 ? "s" : ""}`;
 }

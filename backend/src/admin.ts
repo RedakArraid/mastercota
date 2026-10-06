@@ -1,7 +1,9 @@
 import type { Context } from "hono";
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
-import { query } from "./lib/db.js";
+import { query, transaction } from "./lib/db.js";
+import { textField } from "./lib/validation.js";
+import { HTTPException } from "hono/http-exception";
 import { verifyToken } from "./lib/auth.js";
 import {
   getPublicOpenWaSettings,
@@ -50,6 +52,36 @@ adminRoutes.use("*", async (c, next) => {
   await next();
 });
 
+adminRoutes.get('/platform-payments', async c => {
+  const status = c.req.query('application_status') ?? 'review_required';
+  if (!['pending', 'applied', 'review_required', 'review_resolved', 'all'].includes(status)) return c.json({ error: 'Statut invalide' }, 400);
+  const { rows } = await query(`SELECT pp.id,pp.cotisation_id,c.title,c.slug,u.phone AS user_phone,u.name AS user_name,
+    pp.purpose,pp.amount,pp.status,pp.application_status,pp.review_reason,pp.review_resolved_at,pp.review_resolved_by,pp.review_resolution_note,pp.paystack_reference,pp.created_at,pp.paid_at
+    FROM platform_payments pp JOIN users u ON u.id=pp.user_id LEFT JOIN cotisations c ON c.id=pp.cotisation_id
+    WHERE ($1='all' OR ($1='review_resolved' AND pp.application_status='review_required' AND pp.review_resolved_at IS NOT NULL)
+      OR (pp.application_status=$1 AND ($1<>'review_required' OR pp.review_resolved_at IS NULL OR $2)))
+    ORDER BY pp.created_at DESC LIMIT 200`, [status, c.req.query('include_resolved') === 'true']);
+  return c.json({ payments: rows });
+});
+
+adminRoutes.post('/platform-payments/:id/resolve-review', async c => {
+  const admin = await requireAdmin(c);
+  if (!admin) return c.json({ error: 'Accès admin requis' }, 403);
+  const body = await c.req.json();
+  const note = textField(body.note, 'Note de clôture', 2000);
+  const result = await transaction(async client => {
+    const { rows } = await client.query('SELECT * FROM platform_payments WHERE id::text=$1 FOR UPDATE', [c.req.param('id')]);
+    const payment = rows[0];
+    if (!payment) throw new HTTPException(404, { message: 'Paiement introuvable' });
+    if (payment.status !== 'paid' || payment.application_status !== 'review_required') throw new HTTPException(400, { message: 'Ce paiement ne nécessite pas d’examen' });
+    if (payment.review_resolved_at) return { payment, already_resolved: true };
+    const { rows: updated } = await client.query('UPDATE platform_payments SET review_resolved_at=now(),review_resolved_by=$2,review_resolution_note=$3 WHERE id=$1 RETURNING *', [payment.id, admin.id, note]);
+    await client.query('INSERT INTO notifications (user_id,title,body,cotisation_id) VALUES ($1,$2,$3,$4)', [payment.user_id, 'Examen du paiement terminé', `Le support a clôturé l’examen du paiement ${payment.paystack_reference}. Consultez sa note. Cette action n’exécute aucun remboursement.`, payment.cotisation_id]);
+    return { payment: updated[0], already_resolved: false };
+  });
+  return c.json(result);
+});
+
 adminRoutes.get("/stats", async (c) => {
   const [
     users,
@@ -63,6 +95,7 @@ adminRoutes.get("/stats", async (c) => {
     statusBreakdown,
     cotisationStatus,
     topCotisations,
+    paymentsReview,
   ] = await Promise.all([
     query<{ n: string; week: string }>(
       `SELECT count(*)::text AS n,
@@ -146,6 +179,7 @@ adminRoutes.get("/stats", async (c) => {
        ORDER BY c.current_amount DESC
        LIMIT 5`
     ),
+    query("SELECT count(*)::text AS n FROM platform_payments WHERE application_status='review_required' AND review_resolved_at IS NULL"),
   ]);
 
   return c.json({
@@ -164,6 +198,7 @@ adminRoutes.get("/stats", async (c) => {
       volumePaid: Number(volume.rows[0]?.total ?? 0),
       volumeWeek: Number(volume.rows[0]?.week ?? 0),
       otpLast24h: Number(otp24h.rows[0]?.n ?? 0),
+      platformPaymentsReview: Number(paymentsReview.rows[0]?.n ?? 0),
     },
     charts: {
       volumeByDay: volumeSeries.rows.map((r) => ({

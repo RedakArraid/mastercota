@@ -143,6 +143,7 @@ export default function ProfilePage() {
             Support :{" "}
             <a
               className="text-foreground hover:text-primary"
+              id="support"
               href={`mailto:${config.email_support || "support@mastercota.com"}`}
             >
               {config.email_support || "support@mastercota.com"}

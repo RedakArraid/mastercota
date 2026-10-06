@@ -86,7 +86,8 @@ class _CotisationDetailScreenState extends ConsumerState<CotisationDetailScreen>
                         contrAsync: contrAsync,
                         formatter: formatter,
                       ),
-                    if (_tabIndex == 2) SettingsEditor(cot: cot),
+                    if (_tabIndex == 2)
+                      SettingsEditor(key: ValueKey(cot.editVersion), cot: cot),
 
                     const SizedBox(height: 32),
                   ],
@@ -178,7 +179,7 @@ class _TopBar extends StatelessWidget {
             ),
             // Share button
             GestureDetector(
-              onTap: () => _share(context),
+              onTap: cot.isPendingFee ? null : () => _share(context),
               child: Container(
                 width: 38,
                 height: 38,
@@ -210,16 +211,9 @@ class _EditorialHero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Status eyebrow
-    final String eyebrow;
-    if (cot.isPendingFee) {
-      eyebrow = 'Frais en attente';
-    } else if (cot.isCompleted) {
-      eyebrow = 'Terminé';
-    } else if (cot.isActive) {
-      eyebrow = 'En cours · J−${cot.daysRemaining}';
-    } else {
-      eyebrow = 'Expiré';
-    }
+    final eyebrow = cot.isActive && cot.daysRemaining > 0
+        ? '${cot.statusLabel} · J−${cot.daysRemaining}'
+        : cot.statusLabel;
 
     // Split title: put last word on gold serif-italic
     final words = cot.title.trim().split(' ');
@@ -390,7 +384,9 @@ class _BigNumberCard extends StatelessWidget {
                           ),
                         ),
                         Text(
-                          '$daysLeft j restants',
+                          cot.isActive && daysLeft > 0
+                              ? '$daysLeft j restants'
+                              : cot.statusLabel,
                           style: AppTextStyles.mono.copyWith(
                             fontSize: 11,
                             color: AppColors.ink3,
@@ -821,7 +817,7 @@ class _ActionBar extends StatelessWidget {
             child: GestureDetector(
               onTap: () {
                 HapticFeedback.mediumImpact();
-                if (cot.isActive) {
+                if (cot.canRecordContribution) {
                   ContributionDialog.show(
                     context,
                     cotisationId: cot.id,
@@ -839,7 +835,9 @@ class _ActionBar extends StatelessWidget {
                 ),
                 child: Center(
                   child: Text(
-                    cot.isActive ? 'Ajouter une contribution' : 'Partager',
+                    cot.canRecordContribution
+                        ? 'Ajouter une contribution reçue'
+                        : 'Partager',
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: Colors.white,
                       fontSize: 14,

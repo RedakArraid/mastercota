@@ -6,7 +6,7 @@ import { HTTPException } from "hono/http-exception";
 import { bodyLimit } from "hono/body-limit";
 import { secureHeaders } from "hono/secure-headers";
 import { rateLimit, clientAddress } from "./lib/security.js";
-import { amountField, phoneField, textField, settingsField, optionalUrl } from "./lib/validation.js";
+import { amountField, phoneField, textField, settingsField, optionalUrl, requestIdField } from "./lib/validation.js";
 import { query, transaction } from "./lib/db.js";
 import {
   bearerUser,
@@ -168,7 +168,7 @@ app.get("/api/auth/me", async c => {
 });
 
 export async function autoCloseExpiredCotisations() {
-  await query("UPDATE cotisations SET status = 'closed' WHERE status = 'active' AND deadline < CURRENT_DATE");
+  await query("UPDATE cotisations SET status = 'closed', close_reason = 'expired' WHERE status = 'active' AND deadline < CURRENT_DATE");
   await query("DELETE FROM request_limits WHERE expires_at < now() - interval '1 day'");
   await query("DELETE FROM otp_codes WHERE expires_at < now() - interval '1 day'");
 }
@@ -177,6 +177,7 @@ export async function autoCloseExpiredCotisations() {
 app.get("/api/cotisations", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
+  await query("UPDATE cotisations SET status='closed', close_reason='expired' WHERE owner_id=$1 AND status='active' AND deadline<CURRENT_DATE", [session.id]);
   const { rows } = await query(
     `SELECT * FROM cotisations WHERE owner_id = $1 ORDER BY created_at DESC`,
     [session.id]
@@ -193,8 +194,17 @@ app.post("/api/cotisations", async c => {
   const target = amountField(body.target_amount);
   const settings = settingsField(body.settings ?? {});
   const cover = optionalUrl(body.cover_url);
+  const requestId = requestIdField(body.request_id);
   if (!Number.isInteger(body.duration_days) || (body.use_free !== undefined && typeof body.use_free !== "boolean")) return c.json({ error: "Durée ou offre invalide" }, 400);
+  const payload = JSON.stringify({ title, description, target, settings, cover, duration_days: body.duration_days, use_free: body.use_free === true });
   const cotisation = await transaction(async client => {
+    await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [`create:${session.id}:${requestId}`]);
+    const { rows: previous } = await client.query('SELECT *, request_payload = $3::jsonb AS same_request FROM cotisations WHERE owner_id = $1 AND request_id = $2', [session.id, requestId, payload]);
+    if (previous[0]) {
+      if (!previous[0].same_request) throw new HTTPException(409, { message: 'Cette requête a déjà créé une cotisation avec des informations différentes' });
+      delete previous[0].same_request;
+      return previous[0];
+    }
     const { rows: users } = await client.query("SELECT * FROM users WHERE id = $1", [session.id]);
     const user = users[0];
     const mode = user.wave_payout_mode || (user.wave_pay_link ? "business" : "phone");
@@ -203,19 +213,21 @@ app.post("/api/cotisations", async c => {
     const { rows: entitlements } = await client.query("SELECT * FROM phone_entitlements WHERE phone = $1 FOR UPDATE", [user.phone]);
     const quote = quoteDuration({ durationDays: body.duration_days, freeEligible: entitlements[0].free_cotisations_used < 1, useFree: body.use_free === true });
     if (!quote || (body.use_free && !quote.isFree)) throw new HTTPException(400, { message: "Offre gratuite déjà utilisée ou durée invalide (1 à 60 jours)" });
-    const { rows } = await client.query(`INSERT INTO cotisations (title,description,target_amount,deadline,owner_id,cover_url,slug,settings,duration_days,starts_at,platform_fee_amount,platform_fee_status,is_free_tier,status)
-      VALUES ($1,$2,$3,CURRENT_DATE + $4::int,$5,$6,$7,$8::jsonb,$4,CURRENT_DATE,$9,$10,$11,$12) RETURNING *`,
-      [title, description || null, target, quote.durationDays, session.id, cover, generateSlug(title), JSON.stringify(settings), quote.fee, quote.isFree ? "free" : "pending", quote.isFree, quote.isFree ? "active" : "pending_fee"]);
+    const { rows } = await client.query(`INSERT INTO cotisations (title,description,target_amount,deadline,owner_id,cover_url,slug,settings,duration_days,starts_at,platform_fee_amount,platform_fee_status,is_free_tier,status,request_id,request_payload)
+      VALUES ($1,$2,$3,CURRENT_DATE + $4::int,$5,$6,$7,$8::jsonb,$4,CURRENT_DATE,$9,$10,$11,$12,$13,$14::jsonb) RETURNING *`,
+      [title, description || null, target, quote.durationDays, session.id, cover, generateSlug(title), JSON.stringify(settings), quote.fee, quote.isFree ? "free" : "pending", quote.isFree, quote.isFree ? "active" : "pending_fee", requestId, payload]);
     if (quote.isFree) await client.query("UPDATE phone_entitlements SET free_cotisations_used = free_cotisations_used + 1, updated_at = now() WHERE phone = $1", [user.phone]);
     return rows[0];
   });
-  if (cotisation.is_free_tier) return c.json({ cotisation, payment_required: false }, 201);
+  if (cotisation.platform_fee_status !== 'pending') return c.json({ cotisation, payment_required: false }, 201);
   try {
     const payment = await initializePlatformFeePaystack({ userId: session.id, phone: session.phone, cotisationId: cotisation.id, purpose: "create", amount: Number(cotisation.platform_fee_amount), durationDays: cotisation.duration_days, callbackPath: `/cotisation/${cotisation.id}/frais` });
-    return c.json({ cotisation, payment_required: true, ...payment }, 201);
+    const { rows: latest } = await query('SELECT * FROM cotisations WHERE id=$1', [cotisation.id]);
+    return c.json({ cotisation: latest[0], ...payment }, 201);
   } catch {
     // The saved cotisation can be resumed; never tell a client to create it again.
-    return c.json({ cotisation, payment_required: true, payment_error: "Cotisation enregistrée. Ouvrez-la pour reprendre le paiement des frais." }, 201);
+    const { rows: latest } = await query('SELECT * FROM cotisations WHERE id=$1', [cotisation.id]);
+    return c.json({ cotisation: latest[0], reference: latest[0].platform_fee_reference, payment_required: latest[0].platform_fee_status === 'pending', payment_error: "Cotisation enregistrée. Ouvrez-la pour reprendre le paiement des frais." }, 201);
   }
 });
 
@@ -272,7 +284,7 @@ function publicCotisation(cot: Record<string, any>) {
   const settings = cot.settings ?? {};
   return {
     id: cot.id, slug: cot.slug, title: cot.title, description: cot.description,
-    cover_url: cot.cover_url, status: cot.status, deadline: cot.deadline, created_at: cot.created_at,
+    cover_url: cot.cover_url, status: cot.status, close_reason: cot.close_reason, deadline: cot.deadline, created_at: cot.created_at,
     settings, owner_name: cot.owner_name,
     owner_wave_phone: cot.owner_wave_payout_mode === "business" ? null : cot.owner_wave_phone,
     owner_wave_pay_link: cot.owner_wave_payout_mode === "phone" ? null : cot.owner_wave_pay_link,
@@ -281,6 +293,20 @@ function publicCotisation(cot: Record<string, any>) {
     target_amount: settings.show_target_amount === false ? 0 : cot.target_amount,
     progress_percent: settings.show_progress === false ? 0 : Math.min(100, Number(cot.current_amount) / Number(cot.target_amount) * 100),
   };
+}
+
+async function ownerCotisation(cot: Record<string, any>) {
+  const { rows: payments } = await query("SELECT status,application_status,review_reason,review_resolved_at,review_resolved_by,review_resolution_note,paystack_reference AS reference,purpose FROM platform_payments WHERE cotisation_id=$1 ORDER BY (application_status='review_required' AND review_resolved_at IS NULL) DESC, created_at DESC LIMIT 1", [cot.id]);
+  const today = (await query('SELECT CURRENT_DATE::text AS today')).rows[0].today;
+  const feeValid = ['free', 'paid', 'waived', 'none'].includes(cot.platform_fee_status);
+  const ext = canExtend({ startsAt: cot.starts_at, deadline: cot.deadline, extensionCount: Number(cot.extension_count) });
+  const extensionError = !feeValid || cot.status === 'pending_fee' ? 'Payez d’abord les frais de création' : Number(cot.current_amount) >= Number(cot.target_amount) ? 'L’objectif est atteint. Augmentez-le avant de demander une prolongation.' : !ext.ok ? ext.error : ext.newDeadline < today ? 'La prolongation serait déjà expirée' : payments[0]?.application_status === 'review_required' && !payments[0].review_resolved_at ? 'Un paiement doit être examiné par le support' : null;
+  return { ...cot, platform_payment: payments[0] ?? null, lifecycle: {
+    can_reopen: cot.status === 'closed' && cot.deadline >= today && feeValid && Number(cot.current_amount) < Number(cot.target_amount),
+    can_extend: extensionError === null,
+    can_record_contribution: cot.status !== 'pending_fee' && feeValid,
+    extension_error: extensionError,
+  } };
 }
 
 for (const route of ["/api/cotisations/by-slug/:slug", "/api/cotisations/:id"]) {
@@ -295,10 +321,10 @@ for (const route of ["/api/cotisations/by-slug/:slug", "/api/cotisations/:id"]) 
     if (!owner && cot.status === "pending_fee") return c.json({ error: "Introuvable" }, 404);
     // Enforce expiration at every read, independently of the maintenance timer.
     if (cot.status === "active") {
-      const { rows: expired } = await query("UPDATE cotisations SET status = 'closed' WHERE id = $1 AND status = 'active' AND deadline < CURRENT_DATE RETURNING status", [cot.id]);
-      if (expired[0]) cot.status = expired[0].status;
+      const { rows: expired } = await query("UPDATE cotisations SET status = 'closed', close_reason = 'expired' WHERE id = $1 AND status = 'active' AND deadline < CURRENT_DATE RETURNING status, close_reason", [cot.id]);
+      if (expired[0]) Object.assign(cot, expired[0]);
     }
-    return c.json({ cotisation: owner ? cot : publicCotisation(cot) });
+    return c.json({ cotisation: owner ? await ownerCotisation(cot) : publicCotisation(cot) });
   });
 }
 
@@ -311,21 +337,30 @@ app.patch("/api/cotisations/:id", async c => {
     const { rows } = await client.query("SELECT *, deadline < CURRENT_DATE AS expired FROM cotisations WHERE id::text = $1 AND owner_id = $2 FOR UPDATE", [c.req.param("id"), session.id]);
     const cot = rows[0];
     if (!cot) throw new HTTPException(403, { message: "Forbidden" });
+    if (body.expected_edit_version !== undefined && (!Number.isInteger(body.expected_edit_version) || body.expected_edit_version !== cot.edit_version)) throw new HTTPException(409, { message: 'La cotisation a été modifiée ailleurs. Rechargez ses informations avant d’enregistrer.' });
     if (body.status !== undefined && body.status !== cot.status) {
       if (!["active", "closed"].includes(body.status) || cot.status === "pending_fee") throw new HTTPException(400, { message: "Transition de statut interdite" });
       if (body.status === "active" && (cot.expired || !["free", "paid", "waived", "none"].includes(cot.platform_fee_status))) throw new HTTPException(400, { message: "Payez les frais ou prolongez la cotisation avant de la réactiver" });
     }
     const target = body.target_amount === undefined ? Number(cot.target_amount) : amountField(body.target_amount);
     let status = body.status ?? cot.status;
+    let closeReason = cot.close_reason;
+    if (body.status === 'closed') closeReason = 'manual';
+    if (body.status === 'active') closeReason = null;
+    if (status === 'completed' && Number(cot.current_amount) < target) {
+      status = cot.expired ? 'closed' : 'active';
+      closeReason = cot.expired ? 'expired' : null;
+    }
+    if (status === 'active' && cot.expired) { status = 'closed'; closeReason = 'expired'; }
     if (status === "active" && Number(cot.current_amount) >= target) status = "completed";
-    const { rows: updated } = await client.query(`UPDATE cotisations SET title=$1, description=$2, target_amount=$3, cover_url=$4, status=$5, settings=$6::jsonb WHERE id=$7 RETURNING *`, [
+    const { rows: updated } = await client.query(`UPDATE cotisations SET title=$1, description=$2, target_amount=$3, cover_url=$4, status=$5, settings=$6::jsonb, close_reason=$8, edit_version=edit_version+1 WHERE id=$7 RETURNING *`, [
       body.title === undefined ? cot.title : textField(body.title, "Titre", 160),
       body.description === undefined ? cot.description : textField(body.description, "Description", 5000, false) || null,
       target, body.cover_url === undefined ? cot.cover_url : optionalUrl(body.cover_url), status,
-      JSON.stringify(body.settings === undefined ? cot.settings : { ...cot.settings, ...settingsField(body.settings) }), cot.id]);
+      JSON.stringify(body.settings === undefined ? cot.settings : { ...cot.settings, ...settingsField(body.settings) }), cot.id, closeReason]);
     return updated[0];
   });
-  return c.json({ cotisation });
+  return c.json({ cotisation: await ownerCotisation(cotisation) });
 });
 
 app.get("/api/cotisations/:id/contributions", async c => {
@@ -350,27 +385,25 @@ app.post("/api/cotisations/:id/contributions", async c => {
   const amount = amountField(body.amount);
   const phone = phoneField(body.contributor_phone);
   const note = textField(body.note, "Note", 500, false) || null;
-  const requestId = body.request_id;
-  if (requestId !== undefined && (typeof requestId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId))) return c.json({ error: "Identifiant de requête invalide" }, 400);
+  const requestId = requestIdField(body.request_id);
   if (!manual) await rateLimit(`contribution:${clientAddress(c)}`, 60, 3600);
   const result = await transaction(async client => {
     const { rows: cots } = await client.query(`SELECT c.*, c.deadline < CURRENT_DATE AS expired, u.wave_payout_mode, u.wave_phone, u.wave_pay_link FROM cotisations c JOIN users u ON u.id=c.owner_id WHERE c.id::text=$1 FOR UPDATE OF c`, [c.req.param("id")]);
     const cot = cots[0];
     if (!cot) throw new HTTPException(404, { message: "Cotisation introuvable" });
     if (manual && session?.id !== cot.owner_id) throw new HTTPException(403, { message: "Forbidden" });
+    const name = textField(body.contributor_name, "Nom", 100, false) || "Anonyme";
     if (requestId) {
       const { rows } = await client.query("SELECT * FROM contributions WHERE cotisation_id = $1 AND request_id = $2", [cot.id, requestId]);
       if (rows[0]) {
-        if (rows[0].contributor_phone !== phone || Number(rows[0].amount) !== amount || (rows[0].payment_method === "manual") !== manual) throw new HTTPException(409, { message: "Identifiant déjà utilisé" });
+        if (rows[0].contributor_phone !== phone || rows[0].contributor_name !== name || rows[0].note !== note || Number(rows[0].amount) !== amount || (rows[0].payment_method === "manual") !== manual) throw new HTTPException(409, { message: "Identifiant déjà utilisé" });
         return rows[0];
       }
     }
-    if (cot.status !== "active" || cot.expired) throw new HTTPException(400, { message: "Cette cotisation n'accepte plus de contributions" });
-    const settings = cot.settings ?? {};
-    const name = textField(body.contributor_name, "Nom", 100, !settings.anonymous_allowed) || "Anonyme";
-    if (amount < Number(settings.min_amount ?? 0)) throw new HTTPException(400, { message: `Montant minimum : ${settings.min_amount} FCFA` });
+    if (cot.status === 'pending_fee' || cot.platform_fee_status === 'pending') throw new HTTPException(400, { message: 'Payez les frais de création avant d’enregistrer des contributions' });
+    // This endpoint records money already transferred. Closing collection or changing its minimum must not hide a receipt.
+    if (cot.status === 'active' && cot.expired) await client.query("UPDATE cotisations SET status='closed', close_reason='expired' WHERE id=$1", [cot.id]);
     const mode = cot.wave_payout_mode || (cot.wave_pay_link ? "business" : "phone");
-    if (!manual && !(mode === "business" ? cot.wave_pay_link : cot.wave_phone)) throw new HTTPException(400, { message: "L'organisateur doit configurer Wave" });
     const { rows } = await client.query(`INSERT INTO contributions (cotisation_id, contributor_name, contributor_phone, amount, status, payment_method, note, request_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`, [cot.id, name, phone, amount, manual ? "paid" : "awaiting_confirmation", manual ? "manual" : mode === "business" ? "wave_business" : "wave_p2p", note, requestId ?? null]);
     if (!manual) await client.query("INSERT INTO notifications (user_id,title,body,cotisation_id) VALUES ($1,$2,$3,$4)", [cot.owner_id, "Contribution à vérifier", `${name} signale un paiement de ${amount} FCFA. Vérifiez sa réception dans Wave.`, cot.id]);
     return rows[0];
@@ -499,9 +532,7 @@ app.post("/api/cotisations/:id/extend", async (c) => {
       metadata: { new_deadline: ext.newDeadline },
     });
     return c.json({
-      payment_required: true,
-      authorization_url: payment.authorization_url,
-      reference: payment.reference,
+      ...payment,
       fee: ext.fee,
       extension_days: EXTENSION_DAYS,
       new_deadline: ext.newDeadline,
@@ -548,9 +579,7 @@ app.post("/api/cotisations/:id/pay-fee", async (c) => {
       callbackPath: `/cotisation/${id}/frais`,
     });
     return c.json({
-      payment_required: true,
-      authorization_url: payment.authorization_url,
-      reference: payment.reference,
+      ...payment,
       fee,
     });
   } catch (e) {

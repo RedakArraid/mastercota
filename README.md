@@ -6,6 +6,24 @@ Les contributions arrivent directement sur le Wave de l’organisateur, par lien
 
 L’organisateur paie les frais de durée via Paystack : première cotisation de 35 jours gratuite par numéro, puis 2 000 FCFA pour 1–15 jours, 4 000 pour 16–35 jours ou 10 000 pour 36–60 jours. Une prolongation de 10 jours coûte 2 000 FCFA, avec une limite totale de 60 jours. Une cotisation payante n’est publiée qu’après confirmation du paiement ; sa durée commence à l’activation.
 
+## Cycle d’une cotisation
+
+| État | Comportement |
+| --- | --- |
+| Frais en attente | Page privée, paiement reprenable ; aucune contribution possible avant activation. |
+| Active | Nouveaux transferts possibles jusqu’à la fin du jour de l’échéance. |
+| Objectif atteint | Les nouveaux transferts s’arrêtent. Augmenter l’objectif réactive la collecte si la période reste valide ; sinon une prolongation admissible est nécessaire. |
+| Clôturée manuellement | Les nouveaux transferts s’arrêtent. Les paiements déjà reçus restent enregistrables. Une prolongation conserve la clôture ; la réouverture demande une action explicite et une échéance valide. |
+| Expirée | Les paiements déjà reçus restent enregistrables. Une prolongation peut réactiver la collecte uniquement si sa nouvelle échéance n’est pas déjà passée, dans la limite d’une prolongation et de 60 jours au total. |
+
+La création et l’enregistrement d’une contribution exigent un `request_id` UUID. Les interfaces conservent cet identifiant et les données de la demande pendant une interruption réseau, y compris après rechargement. Une reprise identique retrouve le même enregistrement ; réutiliser la clé avec un contenu différent est refusé. Les clients API doivent suivre ce contrat ; déployer les clients web et mobiles compatibles avec cette version du backend.
+
+Les modifications utilisent `expected_edit_version` pour détecter une modification concurrente. L’actualisation du suivi ne remplace pas une saisie en cours. L’organisateur peut modifier titre, description, objectif et réglages depuis le web et l’application mobile.
+
+Avant un nouveau transfert Wave, les interfaces vérifient que la collecte est encore ouverte et que les coordonnées affichées sont à jour. Un transfert déjà effectué peut toujours être signalé après clôture, expiration ou atteinte de l’objectif. Il reste en attente jusqu’à la vérification de sa réception par l’organisateur. Les montants réellement reçus restent enregistrables même si le minimum ou les réglages ont changé entre-temps.
+
+Un paiement Paystack reçu n’équivaut pas automatiquement à un service appliqué : `application_status` distingue `pending`, `applied` et `review_required`. Une prolongation payée trop tard ou un paiement supplémentaire est conservé avec sa référence et signalé à l’organisateur et aux administrateurs, sans annoncer une activation ni un remboursement fictif. Les paiements à examiner sont visibles dans **Administration → Frais Mastercota**. Le support doit vérifier le paiement et traiter le remboursement éventuel auprès de Paystack ; cette opération n’est pas automatisée par l’application. L’administrateur clôture ensuite l’examen avec une note : l’auteur, la date et l’historique du paiement sont conservés, et l’examen ne bloque plus une nouvelle prolongation admissible. Cette clôture enregistre le travail du support ; elle ne déclenche pas de remboursement.
+
 ## Démarrage local
 
 Node 22+, PostgreSQL 16+, Flutter 3.35+ et Dart 3.9+.
@@ -64,6 +82,8 @@ flutter test
 
 Les tests API utilisent PostgreSQL réel. Paystack est simulé et aucun message WhatsApp ni paiement réel n’est déclenché. Les tests navigateur démarrent une API isolée sur 4001 et le web sur 3100. Ne pas lancer simultanément tests API et tests navigateur contre la même base. L’intégration continue exécute ces vérifications sur chaque push et PR.
 
+La recette automatisée couvre notamment les reprises après réponse perdue, les requêtes concurrentes, la fin de journée, les clôtures et réouvertures, l’objectif atteint puis augmenté, les signalements tardifs, les conflits d’édition et les frais reçus mais non appliqués. Les scénarios navigateur vérifient les formulaires pendant l’actualisation et la reprise après rechargement. Flutter vérifie les états, l’édition et les reprises après redémarrage. Les appels prestataires restent simulés : une recette sur les vrais comptes et appareils est nécessaire avant ouverture publique.
+
 Les polices web sont incluses dans `frontend/public/fonts` avec leurs licences : la compilation ne dépend plus de Google Fonts. Les audits npm des dépendances de production sont sans alerte au 6 octobre 2026. L’audit complet signale encore `braces`, utilisé par les outils ESLint de développement, sans correction compatible proposée ; il doit rester suivi lors des mises à jour.
 
 ## Production
@@ -72,7 +92,7 @@ Les polices web sont incluses dans `frontend/public/fonts` avec leurs licences :
 2. Connecter la session OpenWA utilisée pour les OTP. `ADMIN_PHONES` contient les numéros internationaux autorisés à devenir administrateurs lors de leur connexion.
 3. Préparer les réseaux externes Traefik `traefik_network` et OpenWA `openwa-network`, les DNS et les certificats HTTPS.
 4. Sauvegarder la base existante avec `scripts/backup.sh` avant mise à jour.
-5. Exécuter `docker compose up -d --build`. Le service `migrate` applique les migrations une fois, sous verrou ; le backend démarre après sa réussite. Les migrations fonctionnent également sur une base déjà initialisée.
+5. Compiler avec `docker compose build`, puis suspendre les écritures de l’ancienne version avec `docker compose stop backend frontend` avant `docker compose up -d`. Prévoir cette courte interruption lors de la mise à jour : les anciennes et nouvelles API ne doivent pas écrire simultanément pendant la migration du cycle de vie. Le service `migrate` applique les migrations une fois, sous verrou ; le backend démarre après sa réussite. Les migrations fonctionnent également sur une base déjà initialisée. Distribuer également le client mobile compatible avec les identifiants de requête obligatoires.
 6. Configurer le webhook Paystack : `https://mastercota.com/api/paystack/webhook`.
 7. Exécuter `scripts/check-health.sh`, puis valider connexion WhatsApp, cotisation gratuite, paiement de frais, retour du navigateur, contribution Wave et confirmation par l’organisateur.
 
@@ -91,7 +111,7 @@ docker compose logs --tail=100 backend migrate
 
 Le test de restauration crée une base distincte et ne remplace jamais la principale. Programmer la sauvegarde quotidienne, copier les sauvegardes hors du serveur et surveiller `/ready` (API + accès base), le processus OpenWA et les erreurs backend. Ces scripts préparent l’exploitation ; leur planification et les alertes doivent être configurées sur le serveur réellement utilisé.
 
-Les anciens paiements Paystack de contribution peuvent encore être vérifiés ; les nouveaux utilisent Wave. Un paiement supplémentaire historique pour un service déjà activé crée une notification de support et ne réapplique pas ce service. Le support doit examiner les éventuels remboursements dans le tableau de bord Paystack.
+Les anciens paiements Paystack de contribution peuvent encore être vérifiés ; les nouveaux utilisent Wave. Un paiement supplémentaire pour un service déjà activé reste dans l’historique, passe en examen et ne réapplique pas ce service. Un échec ou une interruption d’initialisation ne supprime jamais l’ancienne référence. Une vérification prestataire indisponible ne déclenche pas un second paiement. Le support doit examiner les éventuels remboursements dans le tableau de bord Paystack.
 
 ## Livraison mobile
 

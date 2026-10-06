@@ -20,21 +20,32 @@ const { normalizeWavePhone } = await import('../src/lib/wave.js');
 const charges = new Map<string, any>();
 const originalFetch = globalThis.fetch;
 let initializeCalls = 0;
+let lostInitializeResponse = false;
+let failVerification = false;
+let waitForFullPool = false;
 globalThis.fetch = async (input, init) => {
   const target = String(input);
   assert.ok(target.startsWith('https://api.paystack.co/'), `Unexpected external request: ${target}`);
   if (target.endsWith('/initialize')) {
     initializeCalls++;
     const body = JSON.parse(String(init?.body));
-    charges.set(body.reference, { ...body, status: 'success' });
+    charges.set(body.reference, { ...body, status: 'abandoned' });
+    if (lostInitializeResponse) { lostInitializeResponse = false; throw new TypeError('Simulated lost initialize response'); }
     return Response.json({ status: true, data: { authorization_url: `https://checkout.paystack.com/${body.reference}` } });
   }
   const reference = target.split('/').at(-1)!;
-  return Response.json({ status: true, data: charges.get(reference) });
+  if (waitForFullPool) {
+    const until = Date.now() + 2000;
+    while ((pool.totalCount < 10 || pool.idleCount > 0) && Date.now() < until) await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(pool.totalCount, 10); assert.equal(pool.idleCount, 0);
+    waitForFullPool = false;
+  }
+  if (failVerification) return Response.json({ status: false, message: 'Unavailable' }, { status: 503 });
+  return charges.has(reference) ? Response.json({ status: true, data: charges.get(reference) }) : Response.json({ status: false, message: 'Transaction reference not found' }, { status: 404 });
 };
 beforeEach(async () => {
   await query('TRUNCATE users, otp_codes, phone_entitlements, request_limits RESTART IDENTITY CASCADE');
-  charges.clear(); initializeCalls = 0;
+  charges.clear(); initializeCalls = 0; lostInitializeResponse = false; failVerification = false; waitForFullPool = false;
 });
 after(async () => { globalThis.fetch = originalFetch; await pool.end(); });
 async function user(phone = '+2250700000000') {
@@ -46,7 +57,7 @@ async function request(path: string, method = 'GET', body?: unknown, token?: str
   return { status: response.status, body: await response.json() as any };
 }
 async function create(owner: any, free = true) {
-  const res = await request('/api/cotisations', 'POST', { title: 'Collecte test', target_amount: 50000, duration_days: free ? 35 : 15, use_free: free }, owner.token);
+  const res = await request('/api/cotisations', 'POST', { request_id: randomUUID(), title: 'Collecte test', target_amount: 50000, duration_days: free ? 35 : 15, use_free: free }, owner.token);
   assert.equal(res.status, 201, JSON.stringify(res.body));
   return res.body;
 }
@@ -54,6 +65,12 @@ async function pendingContribution(cot: any, overrides: any = {}) {
   const res = await request(`/api/cotisations/${cot.id}/contributions`, 'POST', { contributor_name: 'Alice', contributor_phone: '+2250100000000', amount: 1000, request_id: randomUUID(), ...overrides });
   assert.equal(res.status, 201, JSON.stringify(res.body));
   return res.body.contribution;
+}
+function successfulCharge(reference: string) {
+  const charge = charges.get(reference);
+  assert.ok(charge, `Missing checkout ${reference}`);
+  charge.status = 'success';
+  return charge;
 }
 function webhook(charge: any) {
   const body = JSON.stringify({ event: 'charge.success', data: charge });
@@ -87,7 +104,7 @@ test('production rejects development OTP and weak secrets; Wave preserves CI lea
 test('only one free cotisation can be created concurrently', async () => {
   const owner = await user();
   const body = { title: 'Gratuite', target_amount: 50000, duration_days: 35, use_free: true };
-  const results = await Promise.all([request('/api/cotisations', 'POST', body, owner.token), request('/api/cotisations', 'POST', body, owner.token)]);
+  const results = await Promise.all([request('/api/cotisations', 'POST', { ...body, request_id: randomUUID() }, owner.token), request('/api/cotisations', 'POST', { ...body, request_id: randomUUID() }, owner.token)]);
   assert.deepEqual(results.map(r => r.status).sort(), [201,400]);
   assert.equal(Number((await query('SELECT count(*) FROM cotisations')).rows[0].count), 1);
 });
@@ -139,15 +156,15 @@ test('contribution retries and parallel confirmation count once; another user ca
   assert.equal((await request(`/api/contributions/${a.id}/reject`, 'POST', {}, owner.token)).status, 400);
 });
 
-test('manual additions are paid, rejected contributions stay rejected and expiry is enforced', async () => {
+test('manual additions are paid, rejected contributions stay rejected and expired receipts remain recordable', async () => {
   const owner = await user(); const { cotisation } = await create(owner);
-  const added = await request(`/api/cotisations/${cotisation.id}/contributions`, 'POST', { contributor_name: 'Cash', contributor_phone: '+2250100000000', amount: 2000, payment_method: 'manual' }, owner.token);
+  const added = await request(`/api/cotisations/${cotisation.id}/contributions`, 'POST', { request_id: randomUUID(), contributor_name: 'Cash', contributor_phone: '+2250100000000', amount: 2000, payment_method: 'manual' }, owner.token);
   assert.equal(added.body.contribution.status, 'paid');
   const pending = await pendingContribution(cotisation);
   await request(`/api/contributions/${pending.id}/reject`, 'POST', {}, owner.token);
   assert.equal((await request(`/api/contributions/${pending.id}/confirm`, 'POST', {}, owner.token)).status, 400);
   await query("UPDATE cotisations SET deadline=CURRENT_DATE-1 WHERE id=$1", [cotisation.id]);
-  assert.equal((await request(`/api/cotisations/${cotisation.id}/contributions`, 'POST', { contributor_name:'A', contributor_phone:'+2250100000000', amount:1000 })).status, 400);
+  assert.equal((await request(`/api/cotisations/${cotisation.id}/contributions`, 'POST', { request_id: randomUUID(), contributor_name:'A', contributor_phone:'+2250100000000', amount:1000 })).status, 201);
   assert.equal((await request(`/api/cotisations/${cotisation.id}`, 'PATCH', { status:'closed' }, owner.token)).status, 200);
   assert.equal((await request(`/api/cotisations/${cotisation.id}`, 'PATCH', { status:'active' }, owner.token)).status, 400);
 });
@@ -158,7 +175,7 @@ test('checkout retries reuse one reference and verify checks ownership and amoun
   const results = await Promise.all([request(`/api/cotisations/${cotisation.id}/pay-fee`, 'POST', {}, owner.token), request(`/api/cotisations/${cotisation.id}/pay-fee`, 'POST', {}, owner.token)]);
   assert.ok(results.every(r => r.body.reference === reference)); assert.equal(initializeCalls, 1);
   assert.equal((await request(`/api/platform-payments/verify/${reference}`)).status, 401);
-  const charge = charges.get(reference);
+  const charge = successfulCharge(reference);
   const bad = await activatePlatformPayment(reference, {...charge, amount:1}); assert.equal(bad.ok, false);
   assert.equal((await activatePlatformPayment(reference, {...charge, currency:'NGN'})).ok, false);
   const result = await request(`/api/platform-payments/verify/${reference}`, 'GET', undefined, owner.token);
@@ -169,7 +186,7 @@ test('checkout retries reuse one reference and verify checks ownership and amoun
 test('webhook signature and duplicate extension delivery', async () => {
   const owner = await user(); const { cotisation } = await create(owner);
   const extension = await request(`/api/cotisations/${cotisation.id}/extend`, 'POST', {}, owner.token);
-  const charge = charges.get(extension.body.reference);
+  const charge = successfulCharge(extension.body.reference);
   assert.equal((await app.request('/api/paystack/webhook', { method:'POST', body:'{}' })).status, 401);
   const [a,b] = await Promise.all([webhook(charge), request(`/api/platform-payments/verify/${charge.reference}`, 'GET', undefined, owner.token)]);
   assert.equal(a.status, 200); assert.equal(b.status, 200);
@@ -180,6 +197,7 @@ test('webhook signature and duplicate extension delivery', async () => {
 
 test('activation error rolls back payment and allows a successful retry', async () => {
   const owner = await user(); const { cotisation, reference } = await create(owner, false);
+  successfulCharge(reference);
   await query(`CREATE OR REPLACE FUNCTION test_activation_failure() RETURNS trigger AS $$ BEGIN IF NEW.status='active' THEN RAISE EXCEPTION 'simulated failure'; END IF; RETURN NEW; END; $$ LANGUAGE plpgsql`);
   await query('CREATE TRIGGER test_failure BEFORE UPDATE ON cotisations FOR EACH ROW EXECUTE FUNCTION test_activation_failure()');
   try {
@@ -197,4 +215,261 @@ test('invalid input, CSRF and admin authorization are rejected', async () => {
   assert.equal((await request('/api/admin/stats', 'GET', undefined, owner.token)).status,403);
   assert.equal((await request('/api/cotisations', 'POST', { title:'A',target_amount:-5,duration_days:35,use_free:true }, owner.token)).status,400);
   assert.equal((await request('/api/profile', 'PATCH', { wave_payout_mode:'phone',wave_phone:'+2250700000000' }, owner.token)).status,200);
+});
+
+
+test('creation retries are idempotent, consume the free entitlement once and reject a reused key with changed payload', async () => {
+  const owner = await user();
+  const payload = { request_id: randomUUID(), title: 'Création stable', target_amount: 10000, duration_days: 35, use_free: true };
+  const [a, b] = await Promise.all([request('/api/cotisations', 'POST', payload, owner.token), request('/api/cotisations', 'POST', payload, owner.token)]);
+  assert.equal(a.status, 201); assert.equal(b.status, 201);
+  assert.equal(a.body.cotisation.id, b.body.cotisation.id);
+  assert.equal(Number((await query('SELECT count(*) FROM cotisations')).rows[0].count), 1);
+  assert.equal((await query('SELECT free_cotisations_used FROM phone_entitlements')).rows[0].free_cotisations_used, 1);
+  assert.equal((await request('/api/cotisations', 'POST', {...payload, title: 'Different'}, owner.token)).status, 409);
+  assert.equal((await request('/api/cotisations', 'POST', {...payload, request_id: undefined}, owner.token)).status, 400);
+});
+
+test('paid creation retries return the same cotisation and reference before and after settlement', async () => {
+  const owner = await user();
+  const payload = { request_id: randomUUID(), title: 'Payante stable', target_amount: 10000, duration_days: 15, use_free: false };
+  const [a,b] = await Promise.all([request('/api/cotisations', 'POST', payload, owner.token), request('/api/cotisations', 'POST', payload, owner.token)]);
+  assert.equal(a.status, 201); assert.equal(b.status, 201);
+  assert.equal(a.body.reference, b.body.reference); assert.equal(initializeCalls, 1);
+  await activatePlatformPayment(a.body.reference, successfulCharge(a.body.reference));
+  const again = await request('/api/cotisations', 'POST', payload, owner.token);
+  assert.equal(again.body.cotisation.id, a.body.cotisation.id);
+  assert.equal(again.body.payment_required, false); assert.equal(initializeCalls, 1);
+});
+
+test('manual receipts require a request key and concurrent retries count once even after manual closure', async () => {
+  const owner = await user(); const {cotisation} = await create(owner);
+  await request(`/api/cotisations/${cotisation.id}`, 'PATCH', {status:'closed', settings:{ min_amount:5000 }}, owner.token);
+  const payload = { request_id:randomUUID(), contributor_name:'Espèces reçues', contributor_phone:'+2250100000000', amount:1000, payment_method:'manual' };
+  assert.equal((await request(`/api/cotisations/${cotisation.id}/contributions`, 'POST', {...payload, request_id:undefined}, owner.token)).status, 400);
+  const [a,b] = await Promise.all([request(`/api/cotisations/${cotisation.id}/contributions`, 'POST', payload, owner.token),request(`/api/cotisations/${cotisation.id}/contributions`, 'POST', payload, owner.token)]);
+  assert.equal(a.status,201); assert.equal(b.status,201); assert.equal(a.body.contribution.id,b.body.contribution.id);
+  const cot = (await request(`/api/cotisations/${cotisation.id}`, 'GET', undefined, owner.token)).body.cotisation;
+  assert.equal(Number(cot.current_amount),1000); assert.equal(cot.status,'closed'); assert.equal(cot.close_reason,'manual');
+  assert.equal(cot.lifecycle.can_record_contribution,true);
+  assert.equal((await request(`/api/cotisations/${cotisation.id}/contributions`, 'POST', {...payload,amount:2000}, owner.token)).status,409);
+});
+
+test('late Wave reports can be confirmed after manual closure, completion and expiration without reopening collection', async () => {
+  const owner = await user();
+  for (const ending of ['manual','completed','expired']) {
+    const {cotisation,reference} = await create(owner, false);
+    await activatePlatformPayment(reference, successfulCharge(reference));
+    if (ending === 'manual') await request(`/api/cotisations/${cotisation.id}`, 'PATCH',{status:'closed'},owner.token);
+    if (ending === 'completed') {
+      const first=await pendingContribution(cotisation,{amount:50000});
+      await request(`/api/contributions/${first.id}/confirm`,'POST',{},owner.token);
+    }
+    if (ending === 'expired') await query('UPDATE cotisations SET deadline=CURRENT_DATE-1 WHERE id=$1',[cotisation.id]);
+    const reported=await pendingContribution(cotisation);
+    assert.equal(reported.status,'awaiting_confirmation');
+    assert.equal((await request(`/api/contributions/${reported.id}/confirm`,'POST',{},owner.token)).status,200);
+    const cot=(await request(`/api/cotisations/${cotisation.id}`,'GET',undefined,owner.token)).body.cotisation;
+    assert.equal(cot.status,ending==='completed'?'completed':'closed');
+    assert.equal(cot.close_reason,ending==='completed'?null:ending);
+    assert.equal(Number(cot.current_amount),ending==='completed'?51000:1000);
+  }
+});
+
+test('target edits reactivate completed cotisations within the valid period, preserve manual closure and detect stale edits', async () => {
+  const owner=await user(); const {cotisation}=await create(owner);
+  const contribution=await pendingContribution(cotisation,{amount:50000});
+  await request(`/api/contributions/${contribution.id}/confirm`,'POST',{},owner.token);
+  const reopened=await request(`/api/cotisations/${cotisation.id}`,'PATCH',{target_amount:60000,expected_edit_version:0},owner.token);
+  assert.equal(reopened.body.cotisation.status,'active'); assert.equal(reopened.body.cotisation.edit_version,1);
+  assert.equal((await request(`/api/cotisations/${cotisation.id}`,'PATCH',{title:'Stale',expected_edit_version:0},owner.token)).status,409);
+  const completed=await request(`/api/cotisations/${cotisation.id}`,'PATCH',{target_amount:40000},owner.token);
+  assert.equal(completed.body.cotisation.status,'completed');
+  await query('UPDATE cotisations SET deadline=CURRENT_DATE-1 WHERE id=$1',[cotisation.id]);
+  const expired=await request(`/api/cotisations/${cotisation.id}`,'PATCH',{target_amount:60000},owner.token);
+  assert.equal(expired.body.cotisation.status,'closed'); assert.equal(expired.body.cotisation.close_reason,'expired');
+  await query('UPDATE cotisations SET deadline=CURRENT_DATE+1 WHERE id=$1',[cotisation.id]);
+  await request(`/api/cotisations/${cotisation.id}`,'PATCH',{status:'closed'},owner.token);
+  const manuallyClosed=await request(`/api/cotisations/${cotisation.id}`,'PATCH',{target_amount:70000},owner.token);
+  assert.equal(manuallyClosed.body.cotisation.status,'closed'); assert.equal(manuallyClosed.body.cotisation.close_reason,'manual');
+});
+
+test('a late paid extension is recorded for review once without consuming the extension or announcing activation', async () => {
+  const owner=await user(); const admin=await user('+2250500000000');
+  await query("UPDATE users SET role='admin' WHERE id=$1",[admin.id]);
+  const {cotisation}=await create(owner);
+  const extension=await request(`/api/cotisations/${cotisation.id}/extend`,'POST',{},owner.token);
+  const charge=successfulCharge(extension.body.reference);
+  await query("UPDATE cotisations SET starts_at=CURRENT_DATE-46,deadline=CURRENT_DATE-11,status='closed',close_reason='expired' WHERE id=$1",[cotisation.id]);
+  const results=await Promise.all([activatePlatformPayment(charge.reference,charge),activatePlatformPayment(charge.reference,charge)]);
+  assert.ok(results.every(r=>r.ok));
+  const payment=(await request(`/api/platform-payments/verify/${charge.reference}`,'GET',undefined,owner.token)).body.payment;
+  assert.equal(payment.status,'paid'); assert.equal(payment.application_status,'review_required'); assert.equal(payment.review_reason,'extension_expired');
+  const cot=(await request(`/api/cotisations/${cotisation.id}`,'GET',undefined,owner.token)).body.cotisation;
+  assert.equal(cot.status,'closed'); assert.equal(cot.extension_count,0); assert.equal(cot.platform_payment.application_status,'review_required'); assert.equal(cot.lifecycle.can_extend,false);
+  assert.equal(Number((await query("SELECT count(*) FROM notifications WHERE title='Paiement à examiner' AND user_id=$1",[owner.id])).rows[0].count),1);
+  const reviews=await request('/api/admin/platform-payments?application_status=review_required','GET',undefined,admin.token);
+  assert.equal(reviews.status,200); assert.equal(reviews.body.payments.length,1);
+  assert.equal(reviews.body.payments[0].paystack_reference,charge.reference);
+});
+
+test('extensions reopen expiration but preserve manual closure, and include their final calendar day', async () => {
+  const owner=await user();
+  for (const reason of ['manual','expired']) {
+    const {cotisation,reference}=await create(owner,false);
+    await activatePlatformPayment(reference,successfulCharge(reference));
+    await query("UPDATE cotisations SET starts_at=CURRENT_DATE-25,deadline=CURRENT_DATE-10,status='closed',close_reason=$2 WHERE id=$1",[cotisation.id,reason]);
+    const ext=await request(`/api/cotisations/${cotisation.id}/extend`,'POST',{},owner.token);
+    assert.equal(ext.status,200,JSON.stringify(ext.body));
+    await activatePlatformPayment(ext.body.reference,successfulCharge(ext.body.reference));
+    const cot=(await request(`/api/cotisations/${cotisation.id}`,'GET',undefined,owner.token)).body.cotisation;
+    assert.equal(cot.status,reason==='manual'?'closed':'active'); assert.equal(cot.extension_count,1);
+    assert.equal(cot.deadline,(await query('SELECT CURRENT_DATE::text AS today')).rows[0].today);
+    if(reason==='expired') {
+      assert.equal((await request(`/api/cotisations/${cot.id}`,'PATCH',{status:'closed'},owner.token)).status,200);
+      assert.equal((await request(`/api/cotisations/${cot.id}`,'PATCH',{status:'active'},owner.token)).body.cotisation.status,'active');
+    }
+  }
+});
+
+test('checkout retries verify the existing charge, replace failed checkouts and never rotate an uncertain pending payment', async () => {
+  const owner=await user(); const {cotisation,reference}=await create(owner,false);
+  charges.get(reference).status='pending';
+  const pending=await request(`/api/cotisations/${cotisation.id}/pay-fee`,'POST',{},owner.token);
+  assert.equal(pending.body.reference,reference); assert.equal(initializeCalls,1);
+  failVerification=true;
+  assert.equal((await request(`/api/cotisations/${cotisation.id}/pay-fee`,'POST',{},owner.token)).status,400);
+  assert.equal(initializeCalls,1); failVerification=false;
+  charges.get(reference).status='failed';
+  const retry=await request(`/api/cotisations/${cotisation.id}/pay-fee`,'POST',{},owner.token);
+  assert.equal(retry.status,200); assert.notEqual(retry.body.reference,reference); assert.equal(initializeCalls,2);
+  await activatePlatformPayment(retry.body.reference,successfulCharge(retry.body.reference));
+  // Even a contradictory, delayed provider success for the old checkout cannot deliver twice.
+  const old=await activatePlatformPayment(reference,successfulCharge(reference));
+  assert.ok(old.ok); if(old.ok) assert.equal(old.payment.application_status,'review_required');
+  assert.equal((await query("SELECT count(*) FROM platform_payments WHERE application_status='applied'")).rows[0].count,'1');
+});
+
+test('lost initialize responses recover safely and a completed payment is never charged again', async () => {
+  const owner=await user(); lostInitializeResponse=true;
+  const created=await create(owner,false);
+  assert.ok(created.payment_error); assert.equal(initializeCalls,1);
+  const oldReference=(await query('SELECT paystack_reference FROM platform_payments')).rows[0].paystack_reference;
+  const resumed=await request(`/api/cotisations/${created.cotisation.id}/pay-fee`,'POST',{},owner.token);
+  assert.equal(resumed.status,200); assert.ok(resumed.body.authorization_url); assert.notEqual(resumed.body.reference,oldReference);
+  successfulCharge(resumed.body.reference);
+  const alreadyPaid=await request(`/api/cotisations/${created.cotisation.id}/pay-fee`,'POST',{},owner.token);
+  assert.equal(alreadyPaid.body.payment_required,false); assert.equal(alreadyPaid.body.application_status,'applied'); assert.equal(initializeCalls,2);
+});
+
+test('ten simultaneous paid checkout retries reuse their database connection without pool starvation', { timeout: 15000 }, async () => {
+  const owner=await user(); const {cotisation,reference}=await create(owner,false);
+  successfulCharge(reference); waitForFullPool=true;
+  const results=await Promise.all(Array.from({length:10},()=>initializePlatformFeePaystack({
+    userId:owner.id,phone:owner.phone,cotisationId:cotisation.id,purpose:'create',amount:2000,callbackPath:`/cotisation/${cotisation.id}/frais`,
+  })));
+  assert.ok(results.every(r=>r.payment_required===false && r.reference===reference));
+  assert.equal(initializeCalls,1);
+  assert.equal((await query("SELECT count(*) FROM platform_payments WHERE application_status='applied'")).rows[0].count,'1');
+});
+
+test('an unpaid extension checkout that becomes expired is not offered again', async () => {
+  const owner=await user(); const {cotisation}=await create(owner);
+  const first=await request(`/api/cotisations/${cotisation.id}/extend`,'POST',{},owner.token);
+  assert.equal(first.status,200);
+  await query("UPDATE cotisations SET starts_at=CURRENT_DATE-46,deadline=CURRENT_DATE-11,status='closed',close_reason='expired' WHERE id=$1",[cotisation.id]);
+  const resumed=await request(`/api/cotisations/${cotisation.id}/extend`,'POST',{},owner.token);
+  assert.equal(resumed.status,400); assert.equal(resumed.body.authorization_url,undefined); assert.equal(initializeCalls,1);
+  assert.match(resumed.body.error,/expirée/);
+});
+
+test('an in-flight payment after a lost initialize response is verified without generating a second checkout', async () => {
+  const owner=await user(); lostInitializeResponse=true; const created=await create(owner,false);
+  const reference=created.reference;
+  charges.get(reference).status='pending';
+  const pending=await request(`/api/cotisations/${created.cotisation.id}/pay-fee`,'POST',{},owner.token);
+  assert.equal(pending.status,400); assert.equal(initializeCalls,1);
+  successfulCharge(reference);
+  const paid=await request(`/api/cotisations/${created.cotisation.id}/pay-fee`,'POST',{},owner.token);
+  assert.equal(paid.body.payment_required,false); assert.equal(paid.body.application_status,'applied'); assert.equal(initializeCalls,1);
+});
+
+test('a completed goal blocks new extension charges but a previously paid extension still applies without reopening', async () => {
+  const owner=await user(); const {cotisation}=await create(owner);
+  const extension=await request(`/api/cotisations/${cotisation.id}/extend`,'POST',{},owner.token);
+  const reported=await pendingContribution(cotisation,{amount:50000});
+  await request(`/api/contributions/${reported.id}/confirm`,'POST',{},owner.token);
+  const detail=(await request(`/api/cotisations/${cotisation.id}`,'GET',undefined,owner.token)).body.cotisation;
+  assert.equal(detail.lifecycle.can_extend,false);
+  assert.equal((await request(`/api/cotisations/${cotisation.id}/extend`,'POST',{},owner.token)).status,400);
+  assert.equal(initializeCalls,1);
+  await activatePlatformPayment(extension.body.reference,successfulCharge(extension.body.reference));
+  const extended=(await request(`/api/cotisations/${cotisation.id}`,'GET',undefined,owner.token)).body.cotisation;
+  assert.equal(extended.status,'completed'); assert.equal(extended.extension_count,1); assert.equal(extended.platform_payment.application_status,'applied');
+});
+
+test('historical review payments remain visible and prevent another checkout', async () => {
+  const owner=await user(); const {cotisation,reference}=await create(owner,false);
+  charges.get(reference).status='failed';
+  const retry=await request(`/api/cotisations/${cotisation.id}/pay-fee`,'POST',{},owner.token);
+  await activatePlatformPayment(retry.body.reference,successfulCharge(retry.body.reference));
+  await activatePlatformPayment(reference,successfulCharge(reference));
+  const detail=(await request(`/api/cotisations/${cotisation.id}`,'GET',undefined,owner.token)).body.cotisation;
+  assert.equal(detail.platform_payment.reference,reference); assert.equal(detail.platform_payment.application_status,'review_required'); assert.equal(detail.lifecycle.can_extend,false);
+  const extension=await request(`/api/cotisations/${cotisation.id}/extend`,'POST',{},owner.token);
+  assert.equal(extension.status,400); assert.equal(initializeCalls,2);
+});
+
+test('only an admin can close a review with a note; retries preserve history and unlock a valid extension', async () => {
+  const owner=await user(); const admin=await user('+2250500000000');
+  await query("UPDATE users SET role='admin' WHERE id=$1",[admin.id]);
+  const {cotisation,reference}=await create(owner,false);
+  charges.get(reference).status='failed';
+  const retry=await request(`/api/cotisations/${cotisation.id}/pay-fee`,'POST',{},owner.token);
+  await activatePlatformPayment(retry.body.reference,successfulCharge(retry.body.reference));
+  await activatePlatformPayment(reference,successfulCharge(reference));
+  const before=(await query('SELECT * FROM platform_payments WHERE id=$1',[reference])).rows[0];
+  const path=`/api/admin/platform-payments/${reference}/resolve-review`;
+  assert.equal((await request(path,'POST',{note:'Examiné'})).status,403);
+  assert.equal((await request(path,'POST',{note:'Examiné'},owner.token)).status,403);
+  for(const note of [undefined,'   ','x'.repeat(2001)]) assert.equal((await request(path,'POST',{note},admin.token)).status,400);
+  assert.equal((await request(`/api/admin/platform-payments/${retry.body.reference}/resolve-review`,'POST',{note:'Examiné'},admin.token)).status,400);
+  assert.equal((await request(`/api/admin/platform-payments/${randomUUID()}/resolve-review`,'POST',{note:'Examiné'},admin.token)).status,404);
+  assert.equal((await request('/api/admin/stats','GET',undefined,admin.token)).body.stats.platformPaymentsReview,1);
+  const note='Dossier contrôlé avec l’organisateur. La décision a été communiquée séparément ; cette clôture ne déclenche aucun remboursement.';
+  const results=await Promise.all([request(path,'POST',{note},admin.token),request(path,'POST',{note},admin.token)]);
+  assert.ok(results.every(r=>r.status===200));
+  assert.deepEqual(results.map(r=>r.body.already_resolved).sort(),[false,true]);
+  const verified=(await request(`/api/platform-payments/verify/${reference}`,'GET',undefined,owner.token)).body.payment;
+  assert.equal(verified.status,'paid'); assert.equal(verified.application_status,'review_required'); assert.equal(verified.review_reason,'duplicate_service');
+  assert.equal(verified.review_resolved_by,admin.id); assert.equal(verified.review_resolution_note,note); assert.ok(verified.review_resolved_at);
+  assert.equal(verified.paid_at,new Date(before.paid_at).toISOString()); assert.equal(verified.amount,before.amount);
+  const repeated=await request(path,'POST',{note:'Ne doit pas remplacer la note initiale'},admin.token);
+  assert.equal(repeated.body.already_resolved,true); assert.equal(repeated.body.payment.review_resolution_note,note);
+  assert.equal(Number((await query("SELECT count(*) FROM notifications WHERE user_id=$1 AND title='Examen du paiement terminé'",[owner.id])).rows[0].count),1);
+  assert.equal((await request('/api/admin/platform-payments','GET',undefined,admin.token)).body.payments.length,0);
+  assert.equal((await request('/api/admin/platform-payments?application_status=review_resolved','GET',undefined,admin.token)).body.payments.length,1);
+  assert.equal((await request('/api/admin/platform-payments?application_status=all','GET',undefined,admin.token)).body.payments.length,2);
+  assert.equal((await request('/api/admin/stats','GET',undefined,admin.token)).body.stats.platformPaymentsReview,0);
+  const detail=(await request(`/api/cotisations/${cotisation.id}`,'GET',undefined,owner.token)).body.cotisation;
+  assert.equal(detail.lifecycle.can_extend,true); assert.equal(detail.extension_count,0); assert.equal(initializeCalls,2);
+  const extension=await request(`/api/cotisations/${cotisation.id}/extend`,'POST',{},owner.token);
+  assert.equal(extension.status,200); assert.equal(extension.body.payment_required,true); assert.ok(extension.body.authorization_url); assert.equal(initializeCalls,3);
+});
+
+test('closing an expired extension review does not apply the service or bypass its date limit', async () => {
+  const owner=await user(); const admin=await user('+2250500000000');
+  await query("UPDATE users SET role='admin' WHERE id=$1",[admin.id]);
+  const {cotisation}=await create(owner);
+  const ext=await request(`/api/cotisations/${cotisation.id}/extend`,'POST',{},owner.token);
+  await query("UPDATE cotisations SET starts_at=CURRENT_DATE-46,deadline=CURRENT_DATE-11,status='closed',close_reason='expired' WHERE id=$1",[cotisation.id]);
+  await activatePlatformPayment(ext.body.reference,successfulCharge(ext.body.reference));
+  assert.equal((await request(`/api/admin/platform-payments/${ext.body.reference}/resolve-review`,'POST',{note:'Examen terminé. La période ne peut pas être prolongée.'},admin.token)).status,200);
+  const detail=(await request(`/api/cotisations/${cotisation.id}`,'GET',undefined,owner.token)).body.cotisation;
+  assert.equal(detail.platform_payment.application_status,'review_required'); assert.ok(detail.platform_payment.review_resolved_at); assert.equal(detail.lifecycle.can_extend,false);
+  assert.equal(detail.status,'closed'); assert.equal(detail.extension_count,0);
+  const retry=await request(`/api/cotisations/${cotisation.id}/extend`,'POST',{},owner.token);
+  assert.equal(retry.status,400); assert.equal(initializeCalls,1);
+  assert.equal((await activatePlatformPayment(ext.body.reference,successfulCharge(ext.body.reference))).already,true);
+  assert.equal((await query('SELECT extension_count FROM cotisations WHERE id=$1',[cotisation.id])).rows[0].extension_count,0);
 });

@@ -4,6 +4,11 @@ export function invalid(message: string): never {
   throw new HTTPException(400, { message });
 }
 
+export function requestIdField(value: unknown): string {
+  if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) invalid('Identifiant de requête UUID requis');
+  return value.toLowerCase();
+}
+
 export function textField(value: unknown, label: string, max: number, required = true): string {
   if (typeof value !== "string") {
     if (!required && value == null) return "";

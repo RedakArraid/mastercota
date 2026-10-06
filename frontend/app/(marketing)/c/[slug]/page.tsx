@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { backendFetch } from "@/lib/backend";
-import { formatAmount, progressPercent, daysRemaining } from "@/lib/format";
+import { formatAmount, progressPercent, daysRemaining, remainingLabel } from "@/lib/format";
 import type { Cotisation, Contribution } from "@/lib/types";
 import type { Metadata } from "next";
 
@@ -44,7 +44,7 @@ export default async function PublicContributionPage({ params }: Props) {
   const showTarget = settings.show_target_amount !== false;
   const showContributors = settings.show_contributors !== false;
   const showBest = settings.show_best_contributor !== false;
-  const pct = progressPercent(
+  const pct = cot.progress_percent ?? progressPercent(
     Number(cot.current_amount),
     Number(cot.target_amount)
   );
@@ -75,7 +75,7 @@ export default async function PublicContributionPage({ params }: Props) {
   const statusText =
     cot.status === "active"
       ? days >= 0
-        ? `${days} j restants`
+        ? remainingLabel(cot.deadline)
         : "Expirée"
       : cot.status === "closed"
         ? "Clôturée"
@@ -126,16 +126,11 @@ export default async function PublicContributionPage({ params }: Props) {
           ) : null}
         </section>
 
-        {canContribute ? (
-          <section className="rounded-2xl border border-border bg-card/90 p-5 shadow-sm backdrop-blur">
-            <h2 className="mb-4 text-lg font-semibold">Je contribue</h2>
-            <ContributeForm cotisation={cot} />
-          </section>
-        ) : (
-          <section className="rounded-2xl border border-border bg-secondary/60 p-5 text-center text-sm text-muted-foreground">
-            Les contributions sont fermées pour cette cotisation.
-          </section>
-        )}
+        <section className="rounded-2xl border border-border bg-card/90 p-5 shadow-sm backdrop-blur">
+          <h2 className="mb-4 text-lg font-semibold">{canContribute ? "Je contribue" : "Vous avez déjà payé ?"}</h2>
+          {!canContribute ? <p className="mb-4 text-sm text-muted-foreground">Les nouveaux transferts sont fermés. Vous pouvez encore signaler un montant déjà envoyé à l’organisateur.</p> : null}
+          <ContributeForm cotisation={cot} reportOnly={!canContribute} />
+        </section>
 
         {showContributors && contributions.length > 0 ? (
           <>

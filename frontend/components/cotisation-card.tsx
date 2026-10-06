@@ -1,19 +1,13 @@
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
-import { formatAmount, progressPercent, daysRemaining } from "@/lib/format";
+import { formatAmount, progressPercent, remainingLabel } from "@/lib/format";
 import type { Cotisation } from "@/lib/types";
+import { statusLabel } from "@/lib/labels";
 import { cn } from "@/lib/utils";
-
-const statusLabel: Record<string, string> = {
-  active: "Active",
-  completed: "Atteinte",
-  closed: "Clôturée",
-};
 
 export function CotisationCard({ cotisation }: { cotisation: Cotisation }) {
   const pct = progressPercent(cotisation.current_amount, cotisation.target_amount);
-  const days = daysRemaining(cotisation.deadline);
 
   return (
     <Link
@@ -28,7 +22,7 @@ export function CotisationCard({ cotisation }: { cotisation: Cotisation }) {
           {cotisation.title}
         </h3>
         <Badge variant={cotisation.status === "active" ? "default" : "secondary"}>
-          {statusLabel[cotisation.status] ?? cotisation.status}
+          {statusLabel(cotisation.status)}
         </Badge>
       </div>
       {cotisation.description ? (
@@ -47,7 +41,7 @@ export function CotisationCard({ cotisation }: { cotisation: Cotisation }) {
           </p>
         </div>
         <p className="text-muted-foreground">
-          {days >= 0 ? `${days} j restants` : "Expirée"}
+          {cotisation.status === "pending_fee" ? "Durée à partir de l’activation" : remainingLabel(cotisation.deadline)}
         </p>
       </div>
     </Link>

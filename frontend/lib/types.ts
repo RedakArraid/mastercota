@@ -22,6 +22,16 @@ export type Cotisation = {
   status: "pending_fee" | "active" | "closed" | "completed" | string;
   settings: CotisationSettings | null;
   created_at: string;
+  updated_at?: string;
+  edit_version?: number;
+  platform_payment?: { status: string; application_status: string; review_reason?: string | null; review_resolved_at?: string | null; review_resolved_by?: string | null; review_resolution_note?: string | null; reference: string; purpose: string } | null;
+  close_reason?: "manual" | "expired" | null;
+  lifecycle?: {
+    can_reopen: boolean;
+    can_extend: boolean;
+    can_record_contribution: boolean;
+    extension_error?: string | null;
+  };
   duration_days?: number | null;
   starts_at?: string;
   platform_fee_amount?: number;

@@ -47,6 +47,7 @@ type Stats = {
   volumePaid: number;
   volumeWeek: number;
   otpLast24h: number;
+  platformPaymentsReview: number;
 };
 
 type Charts = {
@@ -232,6 +233,12 @@ export default function AdminDashboardPage() {
           Mis à jour · {new Date().toLocaleString("fr-FR")}
         </p>
       </div>
+
+      {stats.platformPaymentsReview > 0 && (
+        <Link href="/admin/platform-payments" className="block rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 hover:bg-amber-100">
+          {stats.platformPaymentsReview} paiement(s) de frais à examiner : paiement reçu, service non appliqué.
+        </Link>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <StatCard

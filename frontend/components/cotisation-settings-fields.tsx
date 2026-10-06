@@ -74,7 +74,7 @@ function Row({
           <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
         ) : null}
       </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      <Switch aria-label={label} checked={checked} onCheckedChange={onCheckedChange} />
     </div>
   );
 }

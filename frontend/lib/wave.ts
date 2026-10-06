@@ -86,10 +86,11 @@ export function wavePayUrlWithAmount(payLink: string, amount: number): string {
 export async function launchWaveBusiness(options: {
   amount: number;
   wavePayLink: string;
+  popup?: Window;
 }): Promise<{ mode: "business"; url: string }> {
   const url = wavePayUrlWithAmount(options.wavePayLink, options.amount);
   // Open synchronously inside the click event and keep this form available.
-  const popup = window.open("about:blank", "_blank");
+  const popup = options.popup ?? window.open("about:blank", "_blank");
   if (!popup) throw new Error("Autorisez l’ouverture de Wave dans un nouvel onglet, puis réessayez");
   popup.opener = null;
   popup.location.replace(url);
@@ -118,6 +119,7 @@ export async function launchWavePayment(options: {
   mode: WavePayoutMode;
   wavePayLink?: string | null;
   wavePhone?: string | null;
+  popup?: Window;
 }) {
   if (options.mode === "business") {
     if (!options.wavePayLink) {
@@ -126,6 +128,7 @@ export async function launchWavePayment(options: {
     return launchWaveBusiness({
       amount: options.amount,
       wavePayLink: options.wavePayLink,
+      popup: options.popup,
     });
   }
   if (!options.wavePhone) {

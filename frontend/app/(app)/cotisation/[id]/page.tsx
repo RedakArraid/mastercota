@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -26,7 +26,8 @@ import {
   settingsToPayload,
   type SettingsFormValue,
 } from "@/components/cotisation-settings-fields";
-import { api } from "@/lib/api";
+import { usePendingSubmission } from "@/lib/pending-submission";
+import { api, ApiError } from "@/lib/api";
 import { APP_URL, CURRENCY } from "@/lib/constants";
 import {
   buildE164,
@@ -34,9 +35,17 @@ import {
   getCountryByIso,
   isValidNational,
 } from "@/lib/countries";
-import { formatAmount, progressPercent, daysRemaining } from "@/lib/format";
+import { formatAmount, progressPercent, remainingLabel } from "@/lib/format";
 import { paymentMethodLabel, statusLabel } from "@/lib/labels";
 import type { Cotisation, Contribution } from "@/lib/types";
+
+function information(cot: Cotisation) {
+  return JSON.stringify([cot.title, cot.description ?? "", Number(cot.target_amount)]);
+}
+function settingsKey(cot: Cotisation) {
+  return JSON.stringify(settingsFromCotisation(cot.settings));
+}
+type ManualPayload = { contributor_name: string; contributor_phone: string; amount: number; payment_method: "manual" };
 
 export default function CotisationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -45,6 +54,14 @@ export default function CotisationDetailPage() {
   const [contributions, setContributions] = useState<Contribution[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const infoDirty = useRef(false);
+  const settingsDirty = useRef(false);
+  const infoBase = useRef("");
+  const settingsBase = useRef("");
+  const loadVersion = useRef(0);
+  const [infoConflict, setInfoConflict] = useState(false);
+  const [settingsConflict, setSettingsConflict] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
 
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -62,8 +79,25 @@ export default function CotisationDetailPage() {
   const [mSaving, setMSaving] = useState(false);
   const [extending, setExtending] = useState(false);
   const [payingFee, setPayingFee] = useState(false);
+  const manualSubmission = usePendingSubmission<ManualPayload>(`mastercota:manual:${id}`);
+
+  function resetInfo(cot: Cotisation) {
+    setTitle(cot.title);
+    setDescription(cot.description ?? "");
+    setTarget(String(cot.target_amount));
+    infoDirty.current = false;
+    infoBase.current = information(cot);
+    setInfoConflict(false);
+  }
+  function resetSettings(cot: Cotisation) {
+    setSettings(settingsFromCotisation(cot.settings));
+    settingsDirty.current = false;
+    settingsBase.current = settingsKey(cot);
+    setSettingsConflict(false);
+  }
 
   const load = useCallback(async () => {
+    const version = ++loadVersion.current;
     try {
       const [c, contrib] = await Promise.all([
         api<{ cotisation: Cotisation }>(`/api/cotisations/${id}`),
@@ -71,13 +105,14 @@ export default function CotisationDetailPage() {
           `/api/cotisations/${id}/contributions`
         ),
       ]);
+      if (version !== loadVersion.current) return;
       setCotisation(c.cotisation);
       setContributions(contrib.contributions ?? []);
-      setTitle(c.cotisation.title);
-      setDescription(c.cotisation.description ?? "");
-      setTarget(String(c.cotisation.target_amount));
+      if (!infoDirty.current) resetInfo(c.cotisation);
+      else setInfoConflict(infoBase.current !== information(c.cotisation));
+      if (!settingsDirty.current) resetSettings(c.cotisation);
+      else setSettingsConflict(settingsBase.current !== settingsKey(c.cotisation));
       setDeadline(String(c.cotisation.deadline).slice(0, 10));
-      setSettings(settingsFromCotisation(c.cotisation.settings));
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Chargement impossible");
     } finally {
@@ -106,6 +141,8 @@ export default function CotisationDetailPage() {
 
   async function saveInfo(e: React.FormEvent) {
     e.preventDefault();
+    if (saving) return;
+    ++loadVersion.current;
     setSaving(true);
     try {
       const data = await api<{ cotisation: Cotisation }>(
@@ -113,16 +150,20 @@ export default function CotisationDetailPage() {
         {
           method: "PATCH",
           body: JSON.stringify({
+            expected_edit_version: cotisation?.edit_version,
             title: title.trim(),
             description: description.trim() || null,
             target_amount: Number(target.replace(/\s/g, "").replace(",", ".")),
           }),
         }
       );
+      ++loadVersion.current;
       setCotisation(data.cotisation);
+      resetInfo(data.cotisation);
       toast.success("Informations enregistrées");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
+      void load();
     } finally {
       setSaving(false);
     }
@@ -130,27 +171,33 @@ export default function CotisationDetailPage() {
 
   async function saveSettings(e: React.FormEvent) {
     e.preventDefault();
+    if (saving) return;
+    ++loadVersion.current;
     setSaving(true);
     try {
       const data = await api<{ cotisation: Cotisation }>(
         `/api/cotisations/${id}`,
         {
           method: "PATCH",
-          body: JSON.stringify({ settings: settingsToPayload(settings) }),
+          body: JSON.stringify({ expected_edit_version: cotisation?.edit_version, settings: settingsToPayload(settings) }),
         }
       );
+      ++loadVersion.current;
       setCotisation(data.cotisation);
+      resetSettings(data.cotisation);
       toast.success("Réglages enregistrés");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
+      void load();
     } finally {
       setSaving(false);
     }
   }
 
   async function closeCotisation() {
-    if (!confirm("Clôturer cette cotisation ? Les contributions seront fermées."))
+    if (changingStatus || !confirm("Clôturer cette cotisation ? Les nouveaux transferts seront fermés. Les montants déjà reçus pourront encore être enregistrés."))
       return;
+    setChangingStatus(true);
     try {
       const data = await api<{ cotisation: Cotisation }>(
         `/api/cotisations/${id}`,
@@ -159,14 +206,17 @@ export default function CotisationDetailPage() {
           body: JSON.stringify({ status: "closed" }),
         }
       );
+      ++loadVersion.current;
       setCotisation(data.cotisation);
       toast.success("Cotisation clôturée");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
-    }
+    } finally { setChangingStatus(false); }
   }
 
   async function reopenCotisation() {
+    if (changingStatus) return;
+    setChangingStatus(true);
     try {
       const data = await api<{ cotisation: Cotisation }>(
         `/api/cotisations/${id}`,
@@ -175,11 +225,12 @@ export default function CotisationDetailPage() {
           body: JSON.stringify({ status: "active" }),
         }
       );
+      ++loadVersion.current;
       setCotisation(data.cotisation);
       toast.success("Cotisation réouverte");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
-    }
+    } finally { setChangingStatus(false); }
   }
 
   async function resumeFeePayment() {
@@ -188,11 +239,13 @@ export default function CotisationDetailPage() {
       const data = await api<{
         authorization_url?: string;
         payment_required?: boolean;
+        reference?: string;
       }>(`/api/cotisations/${id}/pay-fee`, { method: "POST" });
       if (data.authorization_url) {
         window.location.href = data.authorization_url;
         return;
       }
+      if (data.reference) { router.push(`/cotisation/${id}/frais?ref=${encodeURIComponent(data.reference)}`); return; }
       toast.error("Paiement indisponible");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
@@ -239,6 +292,7 @@ export default function CotisationDetailPage() {
       const data = await api<{
         authorization_url?: string;
         fee?: number;
+        reference?: string;
         error?: string;
       }>(`/api/cotisations/${id}/extend`, { method: "POST" });
       if (data.authorization_url) {
@@ -246,6 +300,7 @@ export default function CotisationDetailPage() {
         window.location.href = data.authorization_url;
         return;
       }
+      if (data.reference) { router.push(`/cotisation/${id}/frais?ref=${encodeURIComponent(data.reference)}`); return; }
       toast.error("Prolongation impossible");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");
@@ -280,29 +335,30 @@ export default function CotisationDetailPage() {
 
   async function addManual(e: React.FormEvent) {
     e.preventDefault();
+    if (mSaving || !manualSubmission.ready) return;
     const amount = Number(mAmount.replace(/\s/g, "").replace(",", "."));
-    if (!mName.trim() || !amount) {
+    if (!manualSubmission.pending && (!mName.trim() || !Number.isSafeInteger(amount) || amount <= 0 || amount > 1_000_000_000)) {
       toast.error("Nom et montant requis");
       return;
     }
     const country = getCountryByIso(mCountryIso);
-    if (!isValidNational(country, mPhone)) {
+    if (!manualSubmission.pending && !isValidNational(country, mPhone)) {
       toast.error(
         `Numéro invalide (${country.nationalLength} chiffres, ${country.name})`
       );
       return;
     }
+    const attempt = manualSubmission.begin({
+      contributor_name: mName.trim(), contributor_phone: buildE164(country, mPhone),
+      amount, payment_method: "manual",
+    });
     setMSaving(true);
     try {
       await api(`/api/cotisations/${id}/contributions`, {
         method: "POST",
-        body: JSON.stringify({
-          contributor_name: mName.trim(),
-          contributor_phone: buildE164(country, mPhone),
-          amount,
-          payment_method: "manual",
-        }),
+        body: JSON.stringify({ ...attempt.payload, request_id: attempt.request_id }),
       });
+      manualSubmission.clear();
       toast.success("Contribution ajoutée");
       setManualOpen(false);
       setMName("");
@@ -311,6 +367,7 @@ export default function CotisationDetailPage() {
       setMAmount("");
       load();
     } catch (err) {
+      if (err instanceof ApiError && [400, 403, 422].includes(err.status)) manualSubmission.clear();
       toast.error(err instanceof Error ? err.message : "Erreur");
     } finally {
       setMSaving(false);
@@ -337,7 +394,6 @@ export default function CotisationDetailPage() {
     Number(cotisation.current_amount),
     Number(cotisation.target_amount)
   );
-  const days = daysRemaining(cotisation.deadline);
   const showBest =
     cotisation.settings?.show_best_contributor !== false && best;
 
@@ -359,9 +415,7 @@ export default function CotisationDetailPage() {
           <p className="mt-2 text-muted-foreground">{cotisation.description}</p>
         ) : null}
         <p className="mt-2 text-sm text-muted-foreground">
-          {days >= 0
-            ? `${days} jour${days > 1 ? "s" : ""} restant${days > 1 ? "s" : ""}`
-            : "Échéance dépassée"}
+          {cotisation.status === "pending_fee" ? "La durée commence à l’activation" : remainingLabel(cotisation.deadline)}
           {cotisation.duration_days
             ? ` · durée ${cotisation.duration_days} j`
             : ""}
@@ -369,7 +423,21 @@ export default function CotisationDetailPage() {
         </p>
       </div>
 
-      {cotisation.status === "pending_fee" ? (
+      {cotisation.platform_payment?.application_status === "review_required" && !cotisation.platform_payment.review_resolved_at ? (
+        <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          <p>Votre paiement a été reçu, mais le service n’a pas pu être appliqué. Ne payez pas une seconde fois.</p>
+          <Button asChild variant="secondary" className="mt-3"><Link href={`/cotisation/${id}/frais?ref=${encodeURIComponent(cotisation.platform_payment.reference)}`}>Consulter le paiement</Link></Button>
+        </div>
+      ) : null}
+      {cotisation.platform_payment?.review_resolved_at ? (
+        <div role="status" className="space-y-2 rounded-xl border bg-secondary/50 p-4 text-sm">
+          <p className="font-medium">Le support a terminé l’examen de votre paiement.</p>
+          <p className="whitespace-pre-wrap break-words">{cotisation.platform_payment.review_resolution_note}</p>
+          <p>Ce paiement n’a pas activé le service. Suivez les instructions du support avant un nouveau paiement.</p>
+          <Button asChild variant="secondary"><Link href={`/cotisation/${id}/frais?ref=${encodeURIComponent(cotisation.platform_payment.reference)}`}>Consulter le paiement examiné</Link></Button>
+        </div>
+      ) : null}
+      {cotisation.status === "pending_fee" && (cotisation.platform_payment?.application_status !== "review_required" || !!cotisation.platform_payment.review_resolved_at) ? (
         <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-4 text-sm">
           <p className="font-semibold text-ink">
             Frais Mastercota en attente
@@ -424,17 +492,17 @@ export default function CotisationDetailPage() {
       </section>
 
       <div className="flex flex-wrap gap-2">
-        <Button onClick={share}>
+        <Button onClick={share} disabled={cotisation.status === "pending_fee"}>
           <Share2 className="size-4" />
           Partager
         </Button>
-        <Button variant="secondary" onClick={copyLink}>
+        <Button variant="secondary" onClick={copyLink} disabled={cotisation.status === "pending_fee"}>
           <Copy className="size-4" />
           Copier le lien
         </Button>
         <Dialog open={manualOpen} onOpenChange={setManualOpen}>
           <DialogTrigger asChild>
-            <Button variant="outline">
+            <Button variant="outline" disabled={!cotisation.lifecycle?.can_record_contribution}>
               <Pencil className="size-4" />
               Contribution manuelle
             </Button>
@@ -443,10 +511,14 @@ export default function CotisationDetailPage() {
             <DialogHeader>
               <DialogTitle>Ajouter une contribution</DialogTitle>
             </DialogHeader>
+            <p className="text-sm text-muted-foreground">Enregistrez uniquement un montant déjà reçu. L’ajout reste possible après la clôture pour régulariser un transfert.</p>
             <form onSubmit={addManual} className="space-y-4">
+              {manualSubmission.pending ? <p role="status" className="text-sm">À confirmer : {manualSubmission.pending.payload.contributor_name}, {formatAmount(manualSubmission.pending.payload.amount)}. Réessayez pour retrouver le même enregistrement.</p> : null}
+              <fieldset disabled={mSaving || !!manualSubmission.pending} className="space-y-4">
               <div className="space-y-2">
-                <Label>Nom</Label>
+                <Label htmlFor="manual-name">Nom</Label>
                 <Input
+                  id="manual-name"
                   value={mName}
                   onChange={(e) => setMName(e.target.value)}
                   required
@@ -465,31 +537,32 @@ export default function CotisationDetailPage() {
                 />
               </div>
               <div className="space-y-2">
-                <Label>Montant ({CURRENCY})</Label>
+                <Label htmlFor="manual-amount">Montant ({CURRENCY})</Label>
                 <Input
+                  id="manual-amount"
                   value={mAmount}
                   onChange={(e) => setMAmount(e.target.value)}
                   required
                 />
               </div>
-              <Button type="submit" className="w-full" disabled={mSaving}>
-                {mSaving ? "Enregistrement…" : "Enregistrer"}
+              </fieldset>
+              <Button type="submit" className="w-full" disabled={mSaving || !manualSubmission.ready}>
+                {mSaving ? "Enregistrement…" : manualSubmission.pending ? "Réessayer l’enregistrement" : "Enregistrer"}
               </Button>
             </form>
           </DialogContent>
         </Dialog>
         {cotisation.status === "active" ? (
-          <Button variant="destructive" onClick={closeCotisation}>
+          <Button variant="destructive" onClick={closeCotisation} disabled={changingStatus}>
             <Lock className="size-4" />
             Clôturer
           </Button>
-        ) : cotisation.status !== "pending_fee" ? (
-          <Button variant="secondary" onClick={reopenCotisation}>
+        ) : cotisation.lifecycle?.can_reopen ? (
+          <Button variant="secondary" onClick={reopenCotisation} disabled={changingStatus}>
             Réouvrir
           </Button>
         ) : null}
-        {(cotisation.status === "active" || cotisation.status === "closed") &&
-        Number(cotisation.extension_count ?? 0) < 1 ? (
+        {cotisation.lifecycle?.can_extend ? (
           <Button
             variant="outline"
             onClick={extendCotisation}
@@ -573,24 +646,32 @@ export default function CotisationDetailPage() {
             onSubmit={saveInfo}
             className="space-y-4 rounded-2xl border border-border bg-card p-5"
           >
+            {infoConflict ? <div role="alert" className="space-y-2 rounded-xl bg-amber-500/10 p-3 text-sm">
+              <p>Ces informations ont changé sur un autre écran. Votre saisie est conservée.</p>
+              <Button type="button" variant="secondary" onClick={() => resetInfo(cotisation)}>Charger les informations à jour</Button>
+              <Button type="button" variant="ghost" onClick={() => { infoBase.current = information(cotisation); setInfoConflict(false); }}>Garder ma saisie</Button>
+            </div> : null}
+            <fieldset disabled={saving} className="space-y-4">
             <div className="space-y-2">
-              <Label>Titre</Label>
-              <Input value={title} onChange={(e) => setTitle(e.target.value)} />
+              <Label htmlFor="edit-title">Titre</Label>
+              <Input id="edit-title" value={title} onChange={(e) => { infoDirty.current = true; setTitle(e.target.value); }} />
             </div>
             <div className="space-y-2">
-              <Label>Description</Label>
+              <Label htmlFor="edit-description">Description</Label>
               <Textarea
+                id="edit-description"
                 rows={4}
                 value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                onChange={(e) => { infoDirty.current = true; setDescription(e.target.value); }}
               />
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Objectif ({CURRENCY})</Label>
+                <Label htmlFor="edit-target">Objectif ({CURRENCY})</Label>
                 <Input
+                  id="edit-target"
                   value={target}
-                  onChange={(e) => setTarget(e.target.value)}
+                  onChange={(e) => { infoDirty.current = true; setTarget(e.target.value); }}
                 />
               </div>
               <div className="space-y-2">
@@ -602,7 +683,8 @@ export default function CotisationDetailPage() {
                 </p>
               </div>
             </div>
-            <Button type="submit" disabled={saving}>
+            </fieldset>
+            <Button type="submit" disabled={saving || infoConflict}>
               <Save className="size-4" />
               {saving ? "…" : "Enregistrer"}
             </Button>
@@ -614,11 +696,18 @@ export default function CotisationDetailPage() {
             onSubmit={saveSettings}
             className="rounded-2xl border border-border bg-card p-5"
           >
+            {settingsConflict ? <div role="alert" className="space-y-2 rounded-xl bg-amber-500/10 p-3 text-sm">
+              <p>Les réglages ont changé sur un autre écran. Vos choix sont conservés.</p>
+              <Button type="button" variant="secondary" onClick={() => resetSettings(cotisation)}>Charger les réglages à jour</Button>
+              <Button type="button" variant="ghost" onClick={() => { settingsBase.current = settingsKey(cotisation); setSettingsConflict(false); }}>Garder mes réglages</Button>
+            </div> : null}
+            <fieldset disabled={saving}>
             <CotisationSettingsFields
               value={settings}
-              onChange={setSettings}
+              onChange={(value) => { settingsDirty.current = true; setSettings(value); }}
             />
-            <Button type="submit" className="mt-4" disabled={saving}>
+            </fieldset>
+            <Button type="submit" className="mt-4" disabled={saving || settingsConflict}>
               <Save className="size-4" />
               {saving ? "…" : "Enregistrer les réglages"}
             </Button>

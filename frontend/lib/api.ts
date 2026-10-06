@@ -1,3 +1,7 @@
+export class ApiError extends Error {
+  constructor(message: string, public readonly status: number) { super(message); this.name = "ApiError"; }
+}
+
 /** Client HTTP navigateur — cookies de session inclus */
 export async function api<T = unknown>(
   path: string,
@@ -17,8 +21,8 @@ export async function api<T = unknown>(
     window.location.assign(`/auth/phone?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
   }
   if (!res.ok) {
-    throw new Error(
-      (data as { error?: string }).error || `Erreur ${res.status}`
+    throw new ApiError(
+      (data as { error?: string }).error || `Erreur ${res.status}`, res.status
     );
   }
   return data as T;

@@ -14,7 +14,8 @@ import {
   settingsToPayload,
   type SettingsFormValue,
 } from "@/components/cotisation-settings-fields";
-import { api } from "@/lib/api";
+import { usePendingSubmission } from "@/lib/pending-submission";
+import { api, ApiError } from "@/lib/api";
 import { CURRENCY } from "@/lib/constants";
 import {
   DURATION_PRESETS,
@@ -24,6 +25,11 @@ import {
 import { formatAmount } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import type { Cotisation } from "@/lib/types";
+
+type CreationPayload = {
+  title: string; description: string | null; target_amount: number;
+  duration_days: number; use_free: boolean; settings: ReturnType<typeof settingsToPayload>;
+};
 
 type BillingInfo = {
   freeEligible: boolean;
@@ -47,11 +53,14 @@ export default function CreateCotisationPage() {
   const [durationDays, setDurationDays] = useState(35);
   const [loading, setLoading] = useState(false);
   const [hasWave, setHasWave] = useState<boolean | null>(null);
+  const [ownerId, setOwnerId] = useState<string | null>(null);
+  const submission = usePendingSubmission<CreationPayload>(ownerId ? `mastercota:create:${ownerId}` : null);
 
   useEffect(() => {
     let active = true;
     api<{
       user: {
+        id: string;
         wave_pay_link?: string | null;
         wave_phone?: string | null;
         wave_payout_mode?: "business" | "phone" | null;
@@ -59,6 +68,7 @@ export default function CreateCotisationPage() {
     }>("/api/profile")
       .then((p) => {
         if (!active) return;
+        setOwnerId(p.user.id);
         setHasWave(
           Boolean(
             (p.user?.wave_payout_mode === "phone" && p.user?.wave_phone) ||
@@ -95,13 +105,19 @@ export default function CreateCotisationPage() {
     });
   }, [billing, durationDays, useFree]);
 
-  async function onSubmit(e: React.FormEvent) {
+  async function onSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
     const targetAmount = Number(target.replace(/\s/g, "").replace(",", "."));
-    if (!title.trim() || !targetAmount || !quote) {
+    if (loading || !submission.ready) return;
+    if (!submission.pending && (!title.trim() || !Number.isSafeInteger(targetAmount) || targetAmount <= 0 || targetAmount > 1_000_000_000 || !quote)) {
       toast.error("Remplissez tous les champs obligatoires");
       return;
     }
+    const attempt = submission.pending ?? submission.begin({
+      title: title.trim(), description: description.trim() || null,
+      target_amount: targetAmount, duration_days: quote!.durationDays,
+      use_free: quote!.isFree, settings: settingsToPayload(settings),
+    });
     setLoading(true);
     try {
       const data = await api<{
@@ -111,30 +127,25 @@ export default function CreateCotisationPage() {
         fee?: number;
       }>("/api/cotisations", {
         method: "POST",
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim() || null,
-          target_amount: targetAmount,
-          duration_days: quote.durationDays,
-          use_free: quote.isFree,
-          settings: settingsToPayload(settings),
-        }),
+        body: JSON.stringify({ ...attempt.payload, request_id: attempt.request_id }),
       });
+      submission.clear();
       if (data.payment_required && data.authorization_url) {
         toast.message(
-          `Paiement des frais : ${formatAmount(data.fee ?? quote.fee)}`
+          `Paiement des frais : ${formatAmount(data.fee ?? quote?.fee ?? 0)}`
         );
         window.location.href = data.authorization_url;
         return;
       }
       toast.success(
-        quote.isFree
+        data.cotisation.is_free_tier
           ? "Cotisation gratuite créée (35 jours)"
           : "Cotisation créée"
       );
       router.push(`/cotisation/${data.cotisation.id}`);
       router.refresh();
     } catch (err) {
+      if (err instanceof ApiError && [400, 403, 422].includes(err.status)) submission.clear();
       toast.error(err instanceof Error ? err.message : "Création impossible");
       setLoading(false);
     }
@@ -172,7 +183,15 @@ export default function CreateCotisationPage() {
         </div>
       ) : null}
 
+      {submission.pending ? (
+        <div role="status" className="space-y-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+          <p>Une création de « {submission.pending.payload.title} » attend sa confirmation. Reprenez cette tentative pour retrouver la même cotisation, sans la créer deux fois.</p>
+          <Button disabled={loading} onClick={onSubmit}>{loading ? "Vérification…" : "Reprendre la création"}</Button>
+          <Button asChild variant="ghost"><Link href="/home">Voir mes cotisations</Link></Button>
+        </div>
+      ) : null}
       <form onSubmit={onSubmit} className="space-y-6">
+        <fieldset disabled={loading || !!submission.pending} className="space-y-6 disabled:opacity-60">
         <section className="space-y-5 rounded-2xl border border-border bg-card p-4 sm:p-6">
           <h2 className="text-lg font-semibold text-ink">Informations</h2>
           <div className="space-y-2">
@@ -297,7 +316,7 @@ export default function CreateCotisationPage() {
           <CotisationSettingsFields value={settings} onChange={setSettings} />
         </section>
 
-        <Button type="submit" size="lg" className="w-full" disabled={loading || !quote}>
+        <Button type="submit" size="lg" className="w-full" disabled={loading || !quote || !submission.ready || hasWave !== true}>
           {loading
             ? "…"
             : quote?.isFree
@@ -306,6 +325,7 @@ export default function CreateCotisationPage() {
                 ? `Continuer · ${formatAmount(quote.fee)}`
                 : "Créer la cotisation"}
         </Button>
+        </fieldset>
       </form>
     </div>
   );

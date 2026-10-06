@@ -5,6 +5,7 @@ import '../../../core/services/api_service.dart';
 import '../models/cotisation_model.dart';
 import '../providers/cotisation_provider.dart';
 import 'settings_fields.dart';
+import 'cotisation_editor.dart';
 
 class OwnerControls extends ConsumerStatefulWidget {
   final CotisationModel cot;
@@ -46,15 +47,37 @@ class _OwnerControlsState extends ConsumerState<OwnerControls>
     try {
       final latest = await ApiService.get('/api/cotisations/${widget.cot.id}');
       final reference =
-          latest['cotisation']['platform_fee_reference'] as String?;
+          (latest['cotisation']['platform_payment']?['reference'] ??
+                  latest['cotisation']['platform_fee_reference'])
+              as String?;
       if (reference != null) {
-        await ApiService.get('/api/platform-payments/verify/$reference');
+        final data = await ApiService.get(
+          '/api/platform-payments/verify/$reference',
+        );
+        _paymentResult(data);
       }
     } catch (e) {
       _message(e.toString());
     } finally {
       _invalidate();
       if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  void _paymentResult(Map<String, dynamic> data) {
+    final payment = data['payment'] as Map<String, dynamic>? ?? data;
+    if (payment['application_status'] == 'review_required') {
+      if (payment['review_resolved_at'] != null) {
+        _message(
+          'Examen terminé pour ce paiement. Le service n’a pas été appliqué. Consultez la réponse de l’assistance pour connaître la suite.',
+        );
+      } else {
+        _message(
+          'Paiement reçu, mais le service n’a pas été appliqué. Un examen est nécessaire. Ne payez pas une seconde fois.',
+        );
+      }
+    } else if (payment['application_status'] == 'applied') {
+      _message('Paiement confirmé et service appliqué.');
     }
   }
 
@@ -97,6 +120,10 @@ class _OwnerControlsState extends ConsumerState<OwnerControls>
         body: {},
       );
       _invalidate();
+      if (data['payment_required'] == false) {
+        _paymentResult(data);
+        return;
+      }
       if (!await launchUrl(
         Uri.parse(data['authorization_url'] as String),
         mode: LaunchMode.externalApplication,
@@ -193,7 +220,34 @@ class _OwnerControlsState extends ConsumerState<OwnerControls>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (cot.isPendingFee) ...[
+          if (cot.paymentNeedsReview)
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: Text(
+                  'Paiement reçu, mais service non appliqué. Contactez l’assistance avec la référence du paiement. Ne payez pas une seconde fois.',
+                ),
+              ),
+            ),
+          if (cot.paymentReviewResolved) ...[
+            const Card(
+              child: Padding(
+                padding: EdgeInsets.all(12),
+                child: Text(
+                  'Examen terminé pour ce paiement. Le service n’a pas été appliqué. Consultez la réponse de l’assistance pour connaître la suite.',
+                ),
+              ),
+            ),
+            if ((cot.platformPayment?['review_resolution_note'] as String?)
+                    ?.trim()
+                    .isNotEmpty ==
+                true)
+              Text(cot.platformPayment!['review_resolution_note'] as String),
+          ],
+          if ((cot.paymentNeedsReview || cot.paymentReviewResolved) &&
+              cot.platformPayment?['reference'] != null)
+            SelectableText('Référence : ${cot.platformPayment!['reference']}'),
+          if (cot.isPendingFee && !cot.paymentNeedsReview) ...[
             Text(
               'Frais en attente : ${cot.platformFee.toStringAsFixed(0)} FCFA',
               style: Theme.of(context).textTheme.titleMedium,
@@ -210,11 +264,21 @@ class _OwnerControlsState extends ConsumerState<OwnerControls>
             spacing: 8,
             children: [
               OutlinedButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () => showDialog<void>(
+                        context: context,
+                        builder: (_) => CotisationEditor(cot: cot),
+                      ),
+                icon: const Icon(Icons.edit_outlined),
+                label: const Text('Modifier'),
+              ),
+              OutlinedButton.icon(
                 onPressed: _busy ? null : _refresh,
                 icon: const Icon(Icons.refresh),
                 label: const Text('Actualiser'),
               ),
-              if (cot.canExtend)
+              if (cot.canExtend && !cot.paymentNeedsReview)
                 OutlinedButton(
                   onPressed: _busy ? null : () => _payment('extend'),
                   child: const Text('Prolonger · 2 000 F'),
@@ -224,7 +288,7 @@ class _OwnerControlsState extends ConsumerState<OwnerControls>
                   onPressed: _busy ? null : () => _status('closed'),
                   child: const Text('Clôturer'),
                 ),
-              if (cot.status == 'closed' && cot.daysRemaining >= 0)
+              if (cot.canReopen)
                 TextButton(
                   onPressed: _busy ? null : () => _status('active'),
                   child: const Text('Rouvrir'),
@@ -306,7 +370,11 @@ class _SettingsEditorState extends ConsumerState<SettingsEditor> {
     try {
       await ref
           .read(cotisationNotifierProvider.notifier)
-          .updateSettings(widget.cot.id, _settings);
+          .updateSettings(
+            widget.cot.id,
+            _settings,
+            editVersion: widget.cot.editVersion,
+          );
       if (!mounted) return;
       ref.invalidate(cotisationByIdProvider(widget.cot.id));
       if (mounted) {

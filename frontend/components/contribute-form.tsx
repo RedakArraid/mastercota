@@ -1,13 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PhoneInput } from "@/components/phone-input";
-import { api } from "@/lib/api";
+import { usePendingSubmission } from "@/lib/pending-submission";
+import { api, ApiError } from "@/lib/api";
 import { CURRENCY } from "@/lib/constants";
 import {
   buildE164,
@@ -15,7 +16,7 @@ import {
   getCountryByIso,
   isValidNational,
 } from "@/lib/countries";
-import { formatAmount } from "@/lib/format";
+import { daysRemaining, formatAmount } from "@/lib/format";
 import {
   digitsOnly,
   formatWaveDisplay,
@@ -24,13 +25,22 @@ import {
 } from "@/lib/wave";
 import type { Cotisation } from "@/lib/types";
 
+type WavePayload = {
+  contributor_name: string; contributor_phone: string; amount: number;
+  note: string | null; payment_method: string;
+};
+type WaveDraft = { name: string; countryIso: string; phone: string; amount: string; note: string };
 type Step = "form" | "pay" | "done";
 
 export default function ContributeForm({
   cotisation,
+  reportOnly = false,
 }: {
   cotisation: Cotisation;
+  reportOnly?: boolean;
 }) {
+  const [reporting, setReporting] = useState(reportOnly);
+  const onlyReport = reportOnly || reporting;
   const settings = cotisation.settings ?? {};
   const minAmount = settings.min_amount ?? 0;
   const anonymousAllowed = settings.anonymous_allowed ?? false;
@@ -45,7 +55,8 @@ export default function ContributeForm({
     (payoutMode === "business" && Boolean(wavePayLink)) ||
     (payoutMode === "phone" && Boolean(wavePhone));
 
-  const requestId = useRef<string | null>(null);
+  const submission = usePendingSubmission<WavePayload>(`mastercota:wave-report:${cotisation.id}`);
+  const draftKey = `mastercota:wave-transfer:${cotisation.id}`;
   const [name, setName] = useState("");
   const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO);
   const [phone, setPhone] = useState("");
@@ -59,20 +70,55 @@ export default function ContributeForm({
 
   const preview = Number(amount.replace(/\s/g, "").replace(",", ".")) || 0;
   const isBusiness = payoutMode === "business";
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem(draftKey);
+      if (saved) {
+        const draft = JSON.parse(saved) as WaveDraft;
+        setName(draft.name); setCountryIso(draft.countryIso); setPhone(draft.phone);
+        setAmount(draft.amount); setNote(draft.note); setStep("pay");
+      }
+    } catch { /* The form remains available when storage is disabled. */ }
+  }, [draftKey]);
+  function saveDraft() {
+    try { sessionStorage.setItem(draftKey, JSON.stringify({ name, countryIso, phone, amount, note })); } catch { /* See above. */ }
+  }
+
+
+  async function launchVerifiedPayment(value: number) {
+    // Reserve the tab within the user's click, before checking the latest status.
+    const popup = isBusiness ? window.open("about:blank", "_blank") : undefined;
+    if (isBusiness && !popup) throw new Error("Autorisez l’ouverture de Wave dans un nouvel onglet, puis réessayez");
+    if (popup) popup.opener = null;
+    try {
+      const latest = await api<{ cotisation: Cotisation }>(`/api/cotisations/by-slug/${encodeURIComponent(cotisation.slug)}`);
+      if (latest.cotisation.status !== "active" || daysRemaining(latest.cotisation.deadline) < 0) {
+        popup?.close();
+        setReporting(true);
+        toast.message("Les nouveaux transferts sont fermés. Signalez seulement un montant déjà envoyé.");
+        return;
+      }
+      const current = latest.cotisation;
+      const currentMode = resolveWavePayoutMode({ mode: current.owner_wave_payout_mode, wavePayLink: current.owner_wave_pay_link, wavePhone: current.owner_wave_phone });
+      if (currentMode !== payoutMode || (current.owner_wave_pay_link ?? null) !== (wavePayLink ?? null) || (current.owner_wave_phone ?? null) !== (wavePhone ?? null)) {
+        throw new Error("Les coordonnées Wave ont changé. Actualisez cette page avant de payer.");
+      }
+      if (value < Number(current.settings?.min_amount ?? 0)) {
+        throw new Error(`Le minimum a changé : ${formatAmount(Number(current.settings?.min_amount))}. Corrigez le montant avant de payer.`);
+      }
+      await launchWavePayment({ amount: value, mode: payoutMode!, wavePayLink, wavePhone, popup: popup ?? undefined });
+      if (!isBusiness) toast.message("Numéro copié. Ouvrez Wave et envoyez le montant");
+    } catch (error) {
+      popup?.close();
+      throw error;
+    }
+  }
 
   async function openWave() {
-    if (!payoutMode || preview <= 0) return;
+    if (onlyReport || !payoutMode || preview <= 0) return;
     setLaunching(true);
     try {
-      await launchWavePayment({
-        amount: preview,
-        mode: payoutMode,
-        wavePayLink,
-        wavePhone,
-      });
-      if (!isBusiness) {
-        toast.message("Numéro copié. Collez-le dans Wave, puis le montant");
-      }
+      await launchVerifiedPayment(preview);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Ouverture Wave impossible");
     } finally {
@@ -102,7 +148,7 @@ export default function ContributeForm({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!canPay || !payoutMode) {
+    if (!onlyReport && (!canPay || !payoutMode)) {
       toast.error("Paiement Wave non configuré par l’organisateur");
       return;
     }
@@ -111,7 +157,7 @@ export default function ContributeForm({
       toast.error("Indiquez un montant valide");
       return;
     }
-    if (minAmount > 0 && parsed < minAmount) {
+    if (!onlyReport && minAmount > 0 && parsed < minAmount) {
       toast.error(`Minimum dans la cotisation : ${formatAmount(minAmount)}`);
       return;
     }
@@ -129,16 +175,10 @@ export default function ContributeForm({
     }
     setLoading(true);
     try {
+      saveDraft();
       setStep("pay");
-      await launchWavePayment({
-        amount: parsed,
-        mode: payoutMode,
-        wavePayLink,
-        wavePhone,
-      });
-      if (!isBusiness) {
-        toast.message("Numéro copié. Ouvrez Wave et envoyez le montant");
-      }
+      if (onlyReport) { setLoading(false); return; }
+      await launchVerifiedPayment(parsed);
       setLoading(false);
       setLaunching(false);
     } catch (err) {
@@ -153,41 +193,42 @@ export default function ContributeForm({
     const contributorName =
       anonymousAllowed && !name.trim() ? "Anonyme" : name.trim();
     const fullPhone = buildE164(country, phone);
-    if (loading) return;
-    requestId.current ??= crypto.randomUUID();
+    if (loading || !submission.ready) return;
+    const attempt = submission.begin({
+      contributor_name: contributorName, contributor_phone: fullPhone, amount: parsed,
+      note: note.trim() || null, payment_method: isBusiness ? "wave_business" : "wave_p2p",
+    });
+    saveDraft();
     setLoading(true);
     try {
       const data = await api<{ contribution: { id: string } }>(
         `/api/cotisations/${cotisation.id}/contributions`,
         {
           method: "POST",
-          body: JSON.stringify({
-            request_id: requestId.current,
-            contributor_name: contributorName,
-            contributor_phone: fullPhone,
-            amount: parsed,
-            note: note.trim() || null,
-            payment_method: isBusiness ? "wave_business" : "wave_p2p",
-          }),
+          body: JSON.stringify({ ...attempt.payload, request_id: attempt.request_id }),
         }
       );
+      submission.clear();
+      try { sessionStorage.removeItem(draftKey); } catch { /* See above. */ }
       setContributionId(data.contribution.id);
       setStep("done");
       toast.success("Signalement envoyé à l’organisateur");
     } catch (err) {
+      if (err instanceof ApiError && [400, 403, 422].includes(err.status)) submission.clear();
       toast.error(err instanceof Error ? err.message : "Envoi impossible");
     } finally {
       setLoading(false);
     }
   }
 
-  if (!canPay) {
+  if (!canPay && !onlyReport) {
     return (
       <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm">
         <p className="font-medium text-ink">Paiement bientôt disponible</p>
         <p className="mt-1 text-muted-foreground">
           L’organisateur doit encore configurer Wave (lien Business ou numéro).
         </p>
+        <Button type="button" variant="ghost" className="mt-3" onClick={() => setReporting(true)}>J’ai déjà effectué le transfert</Button>
       </div>
     );
   }
@@ -227,7 +268,9 @@ export default function ContributeForm({
           </h2>
         </div>
 
-        {isBusiness ? (
+        {onlyReport ? (
+          <p className="rounded-xl bg-secondary/60 p-3 text-sm">Signalez uniquement un transfert déjà effectué. L’organisateur vérifiera sa réception avant de l’ajouter au total.</p>
+        ) : isBusiness ? (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
             <p className="font-medium text-ink">
               Wave ouvert avec le montant prérempli
@@ -264,12 +307,12 @@ export default function ContributeForm({
           </div>
         )}
 
-        <Button
+        {!onlyReport ? <Button
           type="button"
           size="lg"
           className="w-full"
           onClick={openWave}
-          disabled={launching}
+          disabled={launching || loading || !!submission.pending}
         >
           <ExternalLink className="size-4" />
           {launching
@@ -277,13 +320,14 @@ export default function ContributeForm({
             : isBusiness
               ? "Payer via Wave"
               : "Rouvrir Wave"}
-        </Button>
+        </Button> : null}
 
         <div className="space-y-2">
           <Label htmlFor="note">Note (optionnel)</Label>
           <Input
             id="note"
-            value={note}
+            value={submission.pending?.payload.note ?? note}
+            disabled={loading || !!submission.pending}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Ex. nom affiché sur Wave"
           />
@@ -293,7 +337,7 @@ export default function ContributeForm({
           type="button"
           size="lg"
           className="w-full"
-          disabled={loading}
+          disabled={loading || !submission.ready}
           onClick={markPaid}
         >
           {loading ? "Envoi…" : "J’ai payé, prévenir l’organisateur"}
@@ -302,6 +346,7 @@ export default function ContributeForm({
           type="button"
           variant="ghost"
           className="w-full"
+          disabled={loading || !!submission.pending}
           onClick={() => {
             setStep("form");
             setLaunching(false);
@@ -318,14 +363,14 @@ export default function ContributeForm({
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="rounded-xl border border-border bg-secondary/40 px-4 py-4 text-sm">
         <p className="font-medium text-ink">
-          {isBusiness
+          {onlyReport ? "Signaler un transfert déjà effectué" : isBusiness
             ? "Paiement Wave Business en 1 clic"
             : "Paiement Wave, envoi manuel au numéro"}
         </p>
         <p className="mt-2 leading-relaxed text-muted-foreground">
-          {isBusiness
-            ? "Après « Payer avec Wave », une page pay.wave.com s’ouvre avec le montant déjà saisi. Validez dans l’app Wave, puis revenez ici pour prévenir l’organisateur. Mastercota ne prend 0 % sur ce montant."
-            : "Vous allez voir le numéro Wave de l’organisateur. Ouvrez Wave, envoyez exactement le montant indiqué, puis revenez cliquer « J’ai payé ». Mastercota ne prend 0 % sur ce montant."}
+          {onlyReport ? "Indiquez le montant réellement envoyé et le numéro utilisé pour permettre à l’organisateur de retrouver votre transfert." : isBusiness
+            ? "Après « Payer avec Wave », une page pay.wave.com s’ouvre avec le montant déjà saisi. Validez dans l’app Wave, puis revenez ici pour prévenir l’organisateur. Mastercota prend 0 % sur ce montant."
+            : "Vous allez voir le numéro Wave de l’organisateur. Ouvrez Wave, envoyez exactement le montant indiqué, puis revenez cliquer « J’ai payé ». Mastercota prend 0 % sur ce montant."}
         </p>
       </div>
       <div className="space-y-2">
@@ -371,11 +416,12 @@ export default function ContributeForm({
       ) : null}
       <Button type="submit" className="w-full" size="lg" disabled={loading}>
         {loading
-          ? "Ouverture de Wave…"
-          : isBusiness
+          ? "Chargement…"
+          : onlyReport ? "Signaler mon transfert" : isBusiness
             ? "Payer avec Wave"
             : "Continuer vers Wave"}
       </Button>
+      {!onlyReport ? <Button type="button" variant="ghost" className="w-full" onClick={() => setReporting(true)}>J’ai déjà effectué le transfert</Button> : null}
     </form>
   );
 }

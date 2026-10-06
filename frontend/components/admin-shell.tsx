@@ -9,6 +9,7 @@ import {
   Users,
   PiggyBank,
   HandCoins,
+  Receipt,
   FileText,
   LogOut,
   Menu,
@@ -29,6 +30,7 @@ const NAV = [
   },
   { href: "/admin/cotisations", label: "Cotisations", icon: PiggyBank },
   { href: "/admin/contributions", label: "Contributions", icon: HandCoins },
+  { href: "/admin/platform-payments", label: "Frais Mastercota", icon: Receipt },
   { href: "/admin/users", label: "Utilisateurs", icon: Users },
   { href: "/admin/openwa", label: "WhatsApp / OTP", icon: MessageCircle },
   { href: "/admin/pages", label: "Pages CMS", icon: FileText },
@@ -217,7 +219,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="hidden items-center gap-2 rounded-full bg-[#f4f7fb] px-3 py-1.5 text-xs text-[#6b7a95] sm:flex">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Système opérationnel
+            Compte administrateur
           </div>
         </header>
 

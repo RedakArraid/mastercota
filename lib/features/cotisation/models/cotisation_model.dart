@@ -109,6 +109,10 @@ class CotisationModel {
   final double platformFee;
   final double? publicProgress;
   final DateTime? startsAt;
+  final String? closeReason;
+  final Map<String, dynamic>? lifecycle;
+  final Map<String, dynamic>? platformPayment;
+  final int editVersion;
   bool get isPendingFee => status == 'pending_fee';
   bool get hasWave => wavePayoutMode == 'phone'
       ? wavePhone != null
@@ -116,12 +120,36 @@ class CotisationModel {
       ? wavePayLink != null
       : (wavePhone != null || wavePayLink != null);
   bool get canExtend =>
-      (status == 'active' || status == 'closed') &&
-      extensionCount == 0 &&
-      startsAt != null &&
-      deadline.add(const Duration(days: 10)).difference(startsAt!).inDays <=
-          60 &&
-      !deadline.add(const Duration(days: 11)).isBefore(DateTime.now());
+      lifecycle?['can_extend'] as bool? ??
+      ((status == 'active' || status == 'closed') &&
+          !paymentNeedsReview &&
+          currentAmount < targetAmount &&
+          extensionCount == 0 &&
+          startsAt != null &&
+          DateTime.utc(deadline.year, deadline.month, deadline.day + 10)
+                  .difference(
+                    DateTime.utc(
+                      startsAt!.year,
+                      startsAt!.month,
+                      startsAt!.day,
+                    ),
+                  )
+                  .inDays <=
+              60 &&
+          daysRemaining >= -10);
+  bool get canReopen =>
+      lifecycle?['can_reopen'] as bool? ??
+      (status == 'closed' &&
+          daysRemaining >= 0 &&
+          currentAmount < targetAmount);
+  bool get canRecordContribution =>
+      lifecycle?['can_record_contribution'] as bool? ?? !isPendingFee;
+  bool get paymentNeedsReview =>
+      platformPayment?['application_status'] == 'review_required' &&
+      !paymentReviewResolved;
+  bool get paymentReviewResolved =>
+      platformPayment?['application_status'] == 'review_required' &&
+      platformPayment?['review_resolved_at'] != null;
 
   const CotisationModel({
     required this.id,
@@ -145,6 +173,10 @@ class CotisationModel {
     this.platformFee = 0,
     this.publicProgress,
     this.startsAt,
+    this.closeReason,
+    this.lifecycle,
+    this.platformPayment,
+    this.editVersion = 0,
   });
 
   // ── Computed ────────────────────────────────────────────
@@ -164,10 +196,24 @@ class CotisationModel {
   }
 
   bool get isActive => status == 'active' && daysRemaining >= 0;
-  bool get isCompleted =>
-      status == 'completed' || (progressPercent >= 1 && status == 'active');
-  bool get isClosed =>
-      status == 'closed' || (daysRemaining < 0 && !isCompleted);
+  bool get isCompleted => status == 'completed';
+  bool get isExpired =>
+      !isPendingFee &&
+      !isCompleted &&
+      (closeReason == 'expired' ||
+          (closeReason != 'manual' && daysRemaining < 0));
+  bool get isClosed => status == 'closed' && !isExpired;
+  String get statusLabel {
+    if (isPendingFee) {
+      if (paymentReviewResolved) return 'Paiement examiné';
+      return paymentNeedsReview ? 'Paiement à examiner' : 'Frais en attente';
+    }
+    if (isCompleted) return 'Objectif atteint';
+    if (isExpired) return 'Expirée';
+    if (isClosed) return 'Clôturée';
+    if (isActive) return daysRemaining == 0 ? 'Dernier jour' : 'En cours';
+    return 'Indisponible';
+  }
 
   // ── Serialization ───────────────────────────────────────
   factory CotisationModel.fromJson(Map<String, dynamic> json) {
@@ -195,6 +241,10 @@ class CotisationModel {
       platformFee: parseNum(json['platform_fee_amount']).toDouble(),
       publicProgress: (json['progress_percent'] as num?)?.toDouble(),
       startsAt: DateTime.tryParse(json['starts_at']?.toString() ?? ''),
+      closeReason: json['close_reason'] as String?,
+      lifecycle: json['lifecycle'] as Map<String, dynamic>?,
+      platformPayment: json['platform_payment'] as Map<String, dynamic>?,
+      editVersion: (json['edit_version'] as num?)?.toInt() ?? 0,
       status: json['status'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
       settings: CotisationSettings.fromJson(
@@ -254,6 +304,10 @@ class CotisationModel {
       platformFee: platformFee,
       publicProgress: publicProgress,
       startsAt: startsAt,
+      closeReason: closeReason,
+      lifecycle: lifecycle,
+      platformPayment: platformPayment,
+      editVersion: editVersion,
     );
   }
 }

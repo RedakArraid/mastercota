@@ -22,7 +22,6 @@ class CotisationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final formatter = NumberFormat('#,###', 'fr_FR');
     final progress = cotisation.progressPercent;
-    final daysLeft = cotisation.daysRemaining;
     final completed = cotisation.isCompleted;
     final isAccent = cotisation.id.hashCode.abs() % 3 == 0;
 
@@ -31,157 +30,163 @@ class CotisationCard extends StatelessWidget {
         HapticFeedback.lightImpact();
         onTap();
       },
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.paper,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: isAccent ? AppColors.accentLine : AppColors.line,
-          ),
-        ),
-        padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Title row + badge ──────────────────────────────
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        cotisation.title,
-                        style: AppTextStyles.titleLarge.copyWith(
-                          fontSize: 18,
-                          letterSpacing: -0.01 * 18,
-                          fontWeight: FontWeight.w500,
-                          height: 1.15,
+      child:
+          Container(
+                decoration: BoxDecoration(
+                  color: AppColors.paper,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: isAccent ? AppColors.accentLine : AppColors.line,
+                  ),
+                ),
+                padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // ── Title row + badge ──────────────────────────────
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                cotisation.title,
+                                style: AppTextStyles.titleLarge.copyWith(
+                                  fontSize: 18,
+                                  letterSpacing: -0.01 * 18,
+                                  fontWeight: FontWeight.w500,
+                                  height: 1.15,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              if (cotisation.description != null &&
+                                  cotisation.description!
+                                      .trim()
+                                      .isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(
+                                  cotisation.description!,
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: AppColors.ink3,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (cotisation.description != null &&
-                          cotisation.description!.trim().isNotEmpty) ...[
-                        const SizedBox(height: 4),
+                        const SizedBox(width: 12),
+                        _StatusBadge(cot: cotisation),
+                      ],
+                    ),
+
+                    // ── Amounts ────────────────────────────────────────
+                    const SizedBox(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      children: [
                         Text(
-                          cotisation.description!,
+                          formatter.format(cotisation.currentAmount),
+                          style: AppTextStyles.amount.copyWith(
+                            fontSize: 26,
+                            letterSpacing: -0.02 * 26,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'F',
                           style: AppTextStyles.bodySmall.copyWith(
                             color: AppColors.ink3,
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const Spacer(),
+                        Text(
+                          '/ ${formatter.format(cotisation.targetAmount)} F',
+                          style: AppTextStyles.mono.copyWith(
+                            fontSize: 11,
+                            color: AppColors.ink3,
+                          ),
                         ),
                       ],
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                _StatusBadge(daysLeft: daysLeft, completed: completed),
-              ],
-            ),
+                    ),
 
-            // ── Amounts ────────────────────────────────────────
-            const SizedBox(height: 16),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  formatter.format(cotisation.currentAmount),
-                  style: AppTextStyles.amount.copyWith(
-                    fontSize: 26,
-                    letterSpacing: -0.02 * 26,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  'F',
-                  style: AppTextStyles.bodySmall.copyWith(color: AppColors.ink3),
-                ),
-                const Spacer(),
-                Text(
-                  '/ ${formatter.format(cotisation.targetAmount)} F',
-                  style: AppTextStyles.mono.copyWith(
-                    fontSize: 11,
-                    color: AppColors.ink3,
-                  ),
-                ),
-              ],
-            ),
+                    // ── Progress bar ───────────────────────────────────
+                    const SizedBox(height: 14),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: SizedBox(
+                        height: 4,
+                        child: LinearProgressIndicator(
+                          value: progress.clamp(0.0, 1.0),
+                          backgroundColor: AppColors.paper2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            completed
+                                ? AppColors.forest
+                                : AppColors.accentBright,
+                          ),
+                        ),
+                      ),
+                    ),
 
-            // ── Progress bar ───────────────────────────────────
-            const SizedBox(height: 14),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: SizedBox(
-                height: 4,
-                child: LinearProgressIndicator(
-                  value: progress.clamp(0.0, 1.0),
-                  backgroundColor: AppColors.paper2,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    completed ? AppColors.forest : AppColors.accentBright,
-                  ),
+                    // ── Footer ─────────────────────────────────────────
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${(progress * 100).toStringAsFixed(0)}%',
+                          style: AppTextStyles.mono.copyWith(
+                            fontSize: 11,
+                            color: AppColors.ink,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        Text(
+                          'Voir →',
+                          style: AppTextStyles.bodySmall.copyWith(
+                            color: AppColors.accent,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ),
-            ),
-
-            // ── Footer ─────────────────────────────────────────
-            const SizedBox(height: 10),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${(progress * 100).toStringAsFixed(0)}%',
-                  style: AppTextStyles.mono.copyWith(
-                    fontSize: 11,
-                    color: AppColors.ink,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                Text(
-                  'Voir →',
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.accent,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      )
-          .animate(delay: Duration(milliseconds: 50 * animIndex))
-          .fadeIn(duration: 350.ms)
-          .slideY(begin: 0.08, end: 0, curve: Curves.easeOutQuad),
+              )
+              .animate(delay: Duration(milliseconds: 50 * animIndex))
+              .fadeIn(duration: 350.ms)
+              .slideY(begin: 0.08, end: 0, curve: Curves.easeOutQuad),
     );
   }
 }
 
 class _StatusBadge extends StatelessWidget {
-  final int daysLeft;
-  final bool completed;
-  const _StatusBadge({required this.daysLeft, required this.completed});
+  final CotisationModel cot;
+  const _StatusBadge({required this.cot});
 
   @override
   Widget build(BuildContext context) {
-    if (completed) {
+    if (cot.isCompleted) {
       return const _Chip(
         label: 'Atteint',
         color: AppColors.forest,
         bg: AppColors.forestSoft,
       );
     }
-    if (daysLeft <= 0) {
+    if (!cot.isActive) {
       return _Chip(
-        label: 'Expiré',
+        label: cot.statusLabel,
         color: AppColors.error,
         bg: AppColors.error.withValues(alpha: 0.08),
       );
     }
     return _Chip(
-      label: 'J−$daysLeft',
+      label: cot.daysRemaining == 0 ? 'Dernier jour' : 'J−${cot.daysRemaining}',
       color: AppColors.paper,
       bg: AppColors.ink,
       mono: true,
@@ -194,7 +199,12 @@ class _Chip extends StatelessWidget {
   final Color color;
   final Color bg;
   final bool mono;
-  const _Chip({required this.label, required this.color, required this.bg, this.mono = false});
+  const _Chip({
+    required this.label,
+    required this.color,
+    required this.bg,
+    this.mono = false,
+  });
 
   @override
   Widget build(BuildContext context) {

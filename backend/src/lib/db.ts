@@ -11,8 +11,8 @@ export const pool = new Pool({
     "postgresql://mastercota:mastercota@localhost:5432/mastercota",
 });
 
-export async function transaction<T>(work: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
+export async function transaction<T>(work: (client: PoolClient) => Promise<T>, existingClient?: PoolClient): Promise<T> {
+  const client = existingClient ?? await pool.connect();
   try {
     await client.query("BEGIN");
     const result = await work(client);
@@ -22,7 +22,7 @@ export async function transaction<T>(work: (client: PoolClient) => Promise<T>): 
     await client.query("ROLLBACK");
     throw error;
   } finally {
-    client.release();
+    if (!existingClient) client.release();
   }
 }
 

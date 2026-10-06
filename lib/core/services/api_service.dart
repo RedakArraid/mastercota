@@ -5,6 +5,14 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_constants.dart';
 
+class ApiException implements Exception {
+  final String message;
+  final int statusCode;
+  const ApiException(this.message, this.statusCode);
+  @override
+  String toString() => message;
+}
+
 class ApiService {
   ApiService._();
 
@@ -42,9 +50,9 @@ class ApiService {
   }
 
   static Map<String, String> get _headers => {
-        'Content-Type': 'application/json',
-        if (_token != null) 'Authorization': 'Bearer $_token',
-      };
+    'Content-Type': 'application/json',
+    if (_token != null) 'Authorization': 'Bearer $_token',
+  };
 
   static Future<Map<String, dynamic>> post(
     String path, {
@@ -62,10 +70,7 @@ class ApiService {
 
   static Future<Map<String, dynamic>> get(String path) async {
     final res = await client
-        .get(
-          Uri.parse('${AppConstants.apiBaseUrl}$path'),
-          headers: _headers,
-        )
+        .get(Uri.parse('${AppConstants.apiBaseUrl}$path'), headers: _headers)
         .timeout(const Duration(seconds: 30));
     return _decode(res);
   }
@@ -94,7 +99,7 @@ class ApiService {
     }
     if (res.statusCode >= 400) {
       final msg = data is Map ? (data['error'] ?? res.body) : res.body;
-      throw Exception(msg);
+      throw ApiException(msg.toString(), res.statusCode);
     }
     return data is Map<String, dynamic> ? data : {'data': data};
   }
