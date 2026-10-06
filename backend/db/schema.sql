@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
   paystack_subaccount_id text,
   wave_phone  text,
   wave_pay_link text,
+  wave_payout_mode text
+                CHECK (wave_payout_mode IS NULL OR wave_payout_mode IN ('business', 'phone')),
   role        text NOT NULL DEFAULT 'user'
                 CHECK (role IN ('user', 'admin')),
   created_at  timestamptz NOT NULL DEFAULT now()
@@ -121,14 +123,14 @@ INSERT INTO site_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 -- Contenu landing dynamique (JSON éditable)
 ALTER TABLE site_config
   ADD COLUMN IF NOT EXISTS landing jsonb NOT NULL DEFAULT '{
-    "hero_title": "Cotisez ensemble, facilement",
-    "hero_subtitle": "Créez une cotisation, partagez un lien, recevez via Mobile Money. Simple, transparent, pensé pour la Côte d''Ivoire.",
-    "cta_primary": "Créer une cotisation",
-    "cta_secondary": "Voir comment ça marche",
+    "hero_title": "Une cotisation WhatsApp. L’argent arrive sur votre Wave.",
+    "hero_subtitle": "Créez une page, partagez le lien. Vos proches paient via Wave. Mastercota prend 0 % sur ce qu’ils envoient.",
+    "cta_primary": "Créer ma cotisation (gratuit 35 jours)",
+    "cta_secondary": "Voir les frais",
     "features": [
-      {"title": "Lien public", "body": "Partagez /c/votre-slug sur WhatsApp. Vos proches contribuent sans créer de compte."},
-      {"title": "Mobile Money", "body": "Wave, MTN, Orange — paiement sécurisé et confirmation automatique."},
-      {"title": "Suivi en direct", "body": "Barre de progression et liste des contributeurs mis à jour en temps réel."}
+      {"title": "Lien WhatsApp", "body": "Partagez votre page. Vos proches contribuent sans créer de compte."},
+      {"title": "Argent sur Wave", "body": "Les contributions vont directement sur votre Wave. Mastercota ne garde rien."},
+      {"title": "Suivi simple", "body": "Vous confirmez chaque paiement. Le total de la cotisation se met à jour."}
     ]
   }'::jsonb;
 
@@ -153,17 +155,17 @@ VALUES
   (
     'comment-ca-marche',
     'Comment ça marche',
-    'Créez, partagez, collectez.',
-    E'## 1. Créez votre cotisation\n\nIndiquez un objectif, une date limite et un titre clair.\n\n## 2. Partagez le lien\n\nEnvoyez `mastercota.com/c/votre-slug` sur WhatsApp.\n\n## 3. Recevez les contributions\n\nMobile Money et carte — confirmation automatique. Votre tableau de bord se met à jour automatiquement.',
+    'Créez, partagez, collectez via Wave.',
+    E'## 1. Créez votre cotisation\n\nIndiquez un objectif, une durée et un titre clair.\n\n## 2. Partagez le lien\n\nEnvoyez votre page sur WhatsApp.\n\n## 3. Recevez sur Wave\n\nVos proches paient via Wave. Vous confirmez chaque paiement. Mastercota : 0 % sur les contributions.',
     'Comment ça marche',
-    'header',
+    'none',
     10
   ),
   (
     'cgu',
     'Conditions générales',
     'Les règles d''utilisation de Mastercota.',
-    E'## Conditions générales d''utilisation\n\nEn utilisant Mastercota, vous acceptez les présentes conditions.\n\n### Compte\nVous êtes responsable de la confidentialité de votre accès téléphone.\n\n### Cotisations\nVous êtes responsable du contenu et de l''usage des fonds collectés.\n\n### Frais de service\nDes frais de service d''environ 3 % (plateforme + traitement paiement) sont ajoutés au montant payé par le contributeur. Le montant choisi est crédité intégralement à la cotisation.',
+    E'## Conditions générales d''utilisation\n\nEn utilisant Mastercota, vous acceptez les présentes conditions.\n\n### Compte\n\nVous vous connectez avec votre numéro WhatsApp (code OTP).\n\n### Cotisations\n\nVous êtes responsable du contenu et de l''usage des fonds collectés.\n\n### Contributions\n\nLes contributions vont directement sur votre Wave. Mastercota ne prend 0 % sur les montants envoyés.\n\n### Frais de durée\n\nL''organisateur paie des frais pour garder la page active (1re cotisation gratuite 35 jours). Ce n''est pas un prélèvement sur les contributions.',
     'CGU',
     'footer',
     20
@@ -172,7 +174,7 @@ VALUES
     'confidentialite',
     'Confidentialité',
     'Comment nous traitons vos données.',
-    E'## Politique de confidentialité\n\nNous collectons le numéro de téléphone pour l''authentification et le suivi des contributions.\n\nLes paiements sont traités par un prestataire de paiement sécurisé. Les OTP sont envoyés via WhatsApp.',
+    E'## Politique de confidentialité\n\nNous collectons le numéro de téléphone pour l''authentification WhatsApp (OTP).\n\nLes contributions passent par Wave vers l''organisateur. Les frais de durée peuvent être payés via un prestataire sécurisé.\n\nContact : support@mastercota.com',
     'Confidentialité',
     'footer',
     30
@@ -181,7 +183,7 @@ VALUES
     'mentions-legales',
     'Mentions légales',
     'Informations légales Mastercota.',
-    E'## Mentions légales\n\n**Mastercota** — plateforme de cotisations communautaires.\n\nContact : support@mastercota.com',
+    E'## Mentions légales\n\n**Mastercota**, plateforme de cotisations communautaires.\n\nCotisations via WhatsApp. Réception sur Wave. 0 % Mastercota sur les contributions.\n\nContact : support@mastercota.com',
     'Mentions légales',
     'footer',
     40

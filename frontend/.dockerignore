@@ -1,7 +1,9 @@
 node_modules
-.next
+.next*
 .git
 *.log
-.env
-.env*.local
+.env*
+playwright-report
+test-results
+tests
 README.md

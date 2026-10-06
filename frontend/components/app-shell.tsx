@@ -77,9 +77,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Sheet>
         </header>
 
-        <main className="flex-1 px-4 py-6 md:px-8 md:py-8">{children}</main>
+        <main className="flex-1 px-4 py-6 pb-24 md:px-8 md:py-8 md:pb-8">
+          {children}
+        </main>
 
-        <nav className="sticky bottom-0 z-30 grid grid-cols-3 border-t border-border bg-background/95 backdrop-blur md:hidden">
+        <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-3 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden">
           {nav.map((item) => {
             const active =
               pathname === item.href ||
@@ -90,7 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center gap-1 py-3 text-xs font-medium",
+                  "flex flex-col items-center gap-1 py-2.5 text-[11px] font-medium",
                   active ? "text-primary" : "text-muted-foreground"
                 )}
               >

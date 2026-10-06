@@ -72,7 +72,7 @@ class AppButton extends StatelessWidget {
                   : labelWidget,
             )
           : ElevatedButton(
-              onPressed: isLoading
+              onPressed: isLoading || onPressed == null
                   ? null
                   : () {
                       HapticFeedback.lightImpact();

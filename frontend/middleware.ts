@@ -10,7 +10,25 @@ export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const host = request.headers.get("host") || "";
   const token = request.cookies.get(SESSION_COOKIE)?.value;
-  const user = token ? await verifyToken(token) : null;
+  let user = token ? await verifyToken(token) : null;
+  if (user) {
+    try {
+      const backend = process.env.BACKEND_URL || "http://127.0.0.1:4000";
+      const response = await fetch(`${backend}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` }, cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      });
+      if (response.status === 401) user = null;
+    } catch { /* The page will render its existing service-unavailable state. */ }
+  }
+  function finish(response: NextResponse) {
+    if (token && !user) {
+      const hostname = new URL(process.env.NEXT_PUBLIC_APP_URL || request.url).hostname;
+      const domain = hostname === "localhost" || hostname === "127.0.0.1" ? undefined : `.${hostname.replace(/^www\./, "")}`;
+      response.cookies.set(SESSION_COOKIE, "", { path: "/", maxAge: 0, ...(domain ? { domain } : {}) });
+    }
+    return response;
+  }
 
   // admin.mastercota.com → rewrite clean URLs to /admin/*
   if (isAdminHost(host)) {
@@ -20,14 +38,14 @@ export async function middleware(request: NextRequest) {
       path.startsWith("/auth") ||
       path.includes(".")
     ) {
-      return NextResponse.next();
+      return finish(NextResponse.next());
     }
 
     if (!user && !path.startsWith("/auth")) {
       const url = request.nextUrl.clone();
       url.pathname = "/auth/phone";
       url.searchParams.set("next", path === "/" ? "/admin" : `/admin${path}`);
-      return NextResponse.redirect(url);
+      return finish(NextResponse.redirect(url));
     }
 
     const rewritePath =
@@ -38,7 +56,7 @@ export async function middleware(request: NextRequest) {
           : `/admin${path}`;
     const url = request.nextUrl.clone();
     url.pathname = rewritePath;
-    return NextResponse.rewrite(url);
+    return finish(NextResponse.rewrite(url));
   }
 
   const isAuthRoute = path.startsWith("/auth") || path === "/onboarding";
@@ -51,25 +69,25 @@ export async function middleware(request: NextRequest) {
   if (!user && (isAppRoute || isAdminRoute)) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/phone";
-    if (isAdminRoute) url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
+    url.searchParams.set("next", path + request.nextUrl.search);
+    return finish(NextResponse.redirect(url));
   }
 
   if (user && isAuthRoute) {
     const next = request.nextUrl.searchParams.get("next");
     const url = request.nextUrl.clone();
-    url.pathname = next?.startsWith("/") ? next : "/home";
-    url.search = "";
-    return NextResponse.redirect(url);
+    url.pathname = next?.startsWith("/") && !next.startsWith("//") && !next.includes("\\") ? next.split("?")[0] : "/home";
+    url.search = next?.startsWith("/") && !next.startsWith("//") && !next.includes("\\") ? next.split("?").slice(1).join("?") : "";
+    return finish(NextResponse.redirect(url));
   }
 
   if (user && path === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/home";
-    return NextResponse.redirect(url);
+    return finish(NextResponse.redirect(url));
   }
 
-  return NextResponse.next();
+  return finish(NextResponse.next());
 }
 
 export const config = {

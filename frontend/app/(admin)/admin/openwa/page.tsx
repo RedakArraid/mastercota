@@ -136,8 +136,8 @@ export default function AdminOpenWaPage() {
           WhatsApp / OTP (OpenWA)
         </h2>
         <p className="text-sm text-muted-foreground">
-          Configurez la session utilisée pour envoyer les codes de connexion —
-          comme sur Geneamap.
+          Configurez la session utilisée pour envoyer les codes de connexion
+          WhatsApp, comme sur Geneamap.
         </p>
       </div>
 

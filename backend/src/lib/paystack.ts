@@ -3,6 +3,7 @@ export async function paystackFetch(path: string, init?: RequestInit) {
   if (!secret) throw new Error("PAYSTACK_SECRET_KEY manquant");
   const res = await fetch(`https://api.paystack.co${path}`, {
     ...init,
+    signal: AbortSignal.timeout(20000),
     headers: {
       Authorization: `Bearer ${secret}`,
       "Content-Type": "application/json",

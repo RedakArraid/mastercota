@@ -50,14 +50,14 @@ class CotisationSettings {
   }
 
   Map<String, dynamic> toJson() => {
-        'show_best_contributor': showBestContributor,
-        'show_contributors': showContributors,
-        'show_progress': showProgress,
-        'show_target_amount': showTargetAmount,
-        'anonymous_allowed': anonymousAllowed,
-        'min_amount': minAmount,
-        'share_message': shareMessage,
-      };
+    'show_best_contributor': showBestContributor,
+    'show_contributors': showContributors,
+    'show_progress': showProgress,
+    'show_target_amount': showTargetAmount,
+    'anonymous_allowed': anonymousAllowed,
+    'min_amount': minAmount,
+    'share_message': shareMessage,
+  };
 
   CotisationSettings copyWith({
     bool? showBestContributor,
@@ -76,8 +76,9 @@ class CotisationSettings {
       showTargetAmount: showTargetAmount ?? this.showTargetAmount,
       anonymousAllowed: anonymousAllowed ?? this.anonymousAllowed,
       minAmount: minAmount ?? this.minAmount,
-      shareMessage:
-          clearShareMessage ? null : (shareMessage ?? this.shareMessage),
+      shareMessage: clearShareMessage
+          ? null
+          : (shareMessage ?? this.shareMessage),
     );
   }
 }
@@ -99,6 +100,28 @@ class CotisationModel {
   final String status;
   final DateTime createdAt;
   final CotisationSettings settings;
+  final String? wavePhone;
+  final String? wavePayLink;
+  final String? wavePayoutMode;
+  final String? feeReference;
+  final int extensionCount;
+  final int durationDays;
+  final double platformFee;
+  final double? publicProgress;
+  final DateTime? startsAt;
+  bool get isPendingFee => status == 'pending_fee';
+  bool get hasWave => wavePayoutMode == 'phone'
+      ? wavePhone != null
+      : wavePayoutMode == 'business'
+      ? wavePayLink != null
+      : (wavePhone != null || wavePayLink != null);
+  bool get canExtend =>
+      (status == 'active' || status == 'closed') &&
+      extensionCount == 0 &&
+      startsAt != null &&
+      deadline.add(const Duration(days: 10)).difference(startsAt!).inDays <=
+          60 &&
+      !deadline.add(const Duration(days: 11)).isBefore(DateTime.now());
 
   const CotisationModel({
     required this.id,
@@ -113,18 +136,38 @@ class CotisationModel {
     required this.status,
     required this.createdAt,
     this.settings = const CotisationSettings(),
+    this.wavePhone,
+    this.wavePayLink,
+    this.wavePayoutMode,
+    this.feeReference,
+    this.extensionCount = 0,
+    this.durationDays = 35,
+    this.platformFee = 0,
+    this.publicProgress,
+    this.startsAt,
   });
 
   // ── Computed ────────────────────────────────────────────
-  double get progressPercent =>
-      targetAmount > 0 ? (currentAmount / targetAmount).clamp(0.0, 1.0) : 0.0;
+  double get progressPercent => publicProgress != null
+      ? (publicProgress! / 100).clamp(0.0, 1.0)
+      : targetAmount > 0
+      ? (currentAmount / targetAmount).clamp(0.0, 1.0)
+      : 0.0;
 
-  int get daysRemaining => deadline.difference(DateTime.now()).inDays;
+  int get daysRemaining {
+    final now = DateTime.now().toUtc();
+    return DateTime.utc(
+      deadline.year,
+      deadline.month,
+      deadline.day,
+    ).difference(DateTime.utc(now.year, now.month, now.day)).inDays;
+  }
 
   bool get isActive => status == 'active' && daysRemaining >= 0;
   bool get isCompleted =>
       status == 'completed' || (progressPercent >= 1 && status == 'active');
-  bool get isClosed => status == 'closed' || (daysRemaining < 0 && !isCompleted);
+  bool get isClosed =>
+      status == 'closed' || (daysRemaining < 0 && !isCompleted);
 
   // ── Serialization ───────────────────────────────────────
   factory CotisationModel.fromJson(Map<String, dynamic> json) {
@@ -142,28 +185,38 @@ class CotisationModel {
       targetAmount: parseNum(json['target_amount']).toDouble(),
       currentAmount: parseNum(json['current_amount']).toDouble(),
       deadline: DateTime.parse(json['deadline'] as String),
-      ownerId: json['owner_id'] as String,
+      ownerId: json['owner_id'] as String? ?? '',
+      wavePhone: json['owner_wave_phone'] as String?,
+      wavePayLink: json['owner_wave_pay_link'] as String?,
+      wavePayoutMode: json['owner_wave_payout_mode'] as String?,
+      feeReference: json['platform_fee_reference'] as String?,
+      extensionCount: (json['extension_count'] as num?)?.toInt() ?? 0,
+      durationDays: (json['duration_days'] as num?)?.toInt() ?? 35,
+      platformFee: parseNum(json['platform_fee_amount']).toDouble(),
+      publicProgress: (json['progress_percent'] as num?)?.toDouble(),
+      startsAt: DateTime.tryParse(json['starts_at']?.toString() ?? ''),
       status: json['status'] as String,
       createdAt: DateTime.parse(json['created_at'] as String),
       settings: CotisationSettings.fromJson(
-          json['settings'] as Map<String, dynamic>?),
+        json['settings'] as Map<String, dynamic>?,
+      ),
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'slug': slug,
-        'title': title,
-        'description': description,
-        'cover_url': coverUrl,
-        'target_amount': targetAmount,
-        'current_amount': currentAmount,
-        'deadline': deadline.toIso8601String().split('T').first,
-        'owner_id': ownerId,
-        'status': status,
-        'created_at': createdAt.toIso8601String(),
-        'settings': settings.toJson(),
-      };
+    'id': id,
+    'slug': slug,
+    'title': title,
+    'description': description,
+    'cover_url': coverUrl,
+    'target_amount': targetAmount,
+    'current_amount': currentAmount,
+    'deadline': deadline.toIso8601String().split('T').first,
+    'owner_id': ownerId,
+    'status': status,
+    'created_at': createdAt.toIso8601String(),
+    'settings': settings.toJson(),
+  };
 
   CotisationModel copyWith({
     String? id,
@@ -192,10 +245,18 @@ class CotisationModel {
       status: status ?? this.status,
       createdAt: createdAt ?? this.createdAt,
       settings: settings ?? this.settings,
+      wavePhone: wavePhone,
+      wavePayLink: wavePayLink,
+      wavePayoutMode: wavePayoutMode,
+      feeReference: feeReference,
+      extensionCount: extensionCount,
+      durationDays: durationDays,
+      platformFee: platformFee,
+      publicProgress: publicProgress,
+      startsAt: startsAt,
     );
   }
 }
-
 
 // ─────────────────────────────────────────────────────────
 
@@ -208,6 +269,7 @@ class ContributionModel {
   final String status;
   final String? paystackReference;
   final String? paymentMethod;
+  final String? note;
   final DateTime createdAt;
 
   const ContributionModel({
@@ -219,10 +281,18 @@ class ContributionModel {
     required this.status,
     this.paystackReference,
     this.paymentMethod,
+    this.note,
     required this.createdAt,
   });
 
   bool get isPaid => status == 'paid';
+  String get statusLabel => switch (status) {
+    'paid' => 'Reçu',
+    'awaiting_confirmation' => 'À confirmer',
+    'rejected' => 'Refusé',
+    'failed' => 'Échoué',
+    _ => 'En attente',
+  };
 
   factory ContributionModel.fromJson(Map<String, dynamic> json) {
     num parseNum(dynamic v) {
@@ -239,6 +309,7 @@ class ContributionModel {
       status: json['status'] as String,
       paystackReference: json['paystack_reference'] as String?,
       paymentMethod: json['payment_method'] as String?,
+      note: json['note'] as String?,
       createdAt: DateTime.parse(json['created_at'] as String),
     );
   }

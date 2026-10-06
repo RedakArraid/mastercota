@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_constants.dart';
@@ -6,24 +8,37 @@ import '../constants/app_constants.dart';
 class ApiService {
   ApiService._();
 
+  @visibleForTesting
+  static http.Client client = http.Client();
+
+  static const _storage = FlutterSecureStorage();
   static const _tokenKey = 'mc_jwt';
   static String? _token;
+  static final authChanges = ValueNotifier<int>(0);
 
   static Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
-    _token = prefs.getString(_tokenKey);
+    _token = await _storage.read(key: _tokenKey);
+    final legacy = prefs.getString(_tokenKey);
+    if (_token == null && legacy != null) {
+      await _storage.write(key: _tokenKey, value: legacy);
+      _token = legacy;
+    }
+    await prefs.remove(_tokenKey);
   }
 
   static bool get isAuthenticated => _token != null && _token!.isNotEmpty;
 
   static Future<void> setToken(String? token) async {
-    _token = token;
-    final prefs = await SharedPreferences.getInstance();
     if (token == null) {
-      await prefs.remove(_tokenKey);
+      await _storage.delete(key: _tokenKey);
     } else {
-      await prefs.setString(_tokenKey, token);
+      await _storage.write(key: _tokenKey, value: token);
     }
+    _token = token;
+    authChanges.value++;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
   }
 
   static Map<String, String> get _headers => {
@@ -35,19 +50,23 @@ class ApiService {
     String path, {
     Map<String, dynamic>? body,
   }) async {
-    final res = await http.post(
-      Uri.parse('${AppConstants.apiBaseUrl}$path'),
-      headers: _headers,
-      body: body == null ? null : jsonEncode(body),
-    );
+    final res = await client
+        .post(
+          Uri.parse('${AppConstants.apiBaseUrl}$path'),
+          headers: _headers,
+          body: body == null ? null : jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 30));
     return _decode(res);
   }
 
   static Future<Map<String, dynamic>> get(String path) async {
-    final res = await http.get(
-      Uri.parse('${AppConstants.apiBaseUrl}$path'),
-      headers: _headers,
-    );
+    final res = await client
+        .get(
+          Uri.parse('${AppConstants.apiBaseUrl}$path'),
+          headers: _headers,
+        )
+        .timeout(const Duration(seconds: 30));
     return _decode(res);
   }
 
@@ -55,16 +74,24 @@ class ApiService {
     String path, {
     Map<String, dynamic>? body,
   }) async {
-    final res = await http.patch(
-      Uri.parse('${AppConstants.apiBaseUrl}$path'),
-      headers: _headers,
-      body: body == null ? null : jsonEncode(body),
-    );
+    final res = await client
+        .patch(
+          Uri.parse('${AppConstants.apiBaseUrl}$path'),
+          headers: _headers,
+          body: body == null ? null : jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 30));
     return _decode(res);
   }
 
-  static Map<String, dynamic> _decode(http.Response res) {
-    final data = jsonDecode(res.body.isEmpty ? '{}' : res.body);
+  static Future<Map<String, dynamic>> _decode(http.Response res) async {
+    if (res.statusCode == 401 && isAuthenticated) await setToken(null);
+    dynamic data;
+    try {
+      data = jsonDecode(res.body.isEmpty ? '{}' : res.body);
+    } catch (_) {
+      throw Exception('Service temporairement indisponible. Réessayez.');
+    }
     if (res.statusCode >= 400) {
       final msg = data is Map ? (data['error'] ?? res.body) : res.body;
       throw Exception(msg);

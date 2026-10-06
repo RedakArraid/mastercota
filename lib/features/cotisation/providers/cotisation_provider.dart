@@ -42,11 +42,14 @@ class CotisationNotifier extends StateNotifier<AsyncValue<void>> {
 
   void reset() => state = const AsyncValue.data(null);
 
-  Future<({String? id, String? error})> createCotisation({
+  Future<({String? id, String? error, String? authorizationUrl})>
+      createCotisation({
     required String title,
     String? description,
     required double targetAmount,
-    required DateTime deadline,
+    required int durationDays,
+    required bool useFree,
+    CotisationSettings settings = const CotisationSettings(),
     String? coverUrl,
   }) async {
     state = const AsyncValue.loading();
@@ -55,15 +58,24 @@ class CotisationNotifier extends StateNotifier<AsyncValue<void>> {
         'title': title,
         'description': description,
         'target_amount': targetAmount,
-        'deadline': deadline.toIso8601String().split('T').first,
+        'duration_days': durationDays,
+        'use_free': useFree,
         'cover_url': coverUrl,
-        'settings': const CotisationSettings().toJson(),
+        'settings': settings.toJson(),
       });
       state = const AsyncValue.data(null);
-      return (id: res['cotisation']['id'] as String, error: null);
+      return (
+        id: res['cotisation']['id'] as String,
+        error: null,
+        authorizationUrl: res['authorization_url'] as String?
+      );
     } catch (e, st) {
       state = AsyncValue.error(e, st);
-      return (id: null, error: e.toString().replaceAll('Exception: ', ''));
+      return (
+        id: null,
+        error: e.toString().replaceAll('Exception: ', ''),
+        authorizationUrl: null
+      );
     }
   }
 
@@ -90,6 +102,8 @@ class CotisationNotifier extends StateNotifier<AsyncValue<void>> {
             'contributor_name': contributorName.trim(),
             'contributor_phone': contributorPhone.trim(),
             'amount': amount,
+            'payment_method': 'manual',
+            'note': note,
           });
       return (error: null);
     } catch (e) {

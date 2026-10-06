@@ -1,9 +1,13 @@
-import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import { createHmac, randomUUID } from "crypto";
-import { query } from "./lib/db.js";
+import { createHmac, randomUUID, timingSafeEqual } from "crypto";
+import { HTTPException } from "hono/http-exception";
+import { bodyLimit } from "hono/body-limit";
+import { secureHeaders } from "hono/secure-headers";
+import { rateLimit, clientAddress } from "./lib/security.js";
+import { amountField, phoneField, textField, settingsField, optionalUrl } from "./lib/validation.js";
+import { query, transaction } from "./lib/db.js";
 import {
   bearerUser,
   generateOtp,
@@ -23,7 +27,6 @@ import {
   freeEligibleForPhone,
   getOwnerPhone,
   initializePlatformFeePaystack,
-  markFreeUsed,
   quoteDuration,
   canExtend,
   EXTENSION_DAYS,
@@ -31,10 +34,10 @@ import {
 import { normalizeWavePhone, normalizeWavePayLink } from "./lib/wave.js";
 import { adminRoutes } from "./admin.js";
 
-const app = new Hono();
+export const app = new Hono();
 const COOKIE = "mc_session";
 
-const APP_ORIGIN = (process.env.APP_URL ?? "https://mastercota.com").replace(
+const APP_ORIGIN = (process.env.APP_URL ?? "http://localhost:3000").replace(
   /\/$/,
   ""
 );
@@ -42,14 +45,13 @@ const ADMIN_ORIGIN = APP_ORIGIN.replace("://", "://admin.");
 const ALLOWED_ORIGINS = new Set([
   APP_ORIGIN,
   ADMIN_ORIGIN,
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
+  ...(process.env.NODE_ENV === "production" ? [] : ["http://localhost:3000", "http://127.0.0.1:3000"]),
 ]);
 
 function cookieDomain(): string | undefined {
   try {
     const host = new URL(APP_ORIGIN).hostname;
-    if (host === "localhost" || host.endsWith(".local")) return undefined;
+    if (host === "localhost" || host === "127.0.0.1" || host.endsWith(".local")) return undefined;
     return `.${host.replace(/^www\./, "")}`;
   } catch {
     return undefined;
@@ -65,174 +67,111 @@ app.use(
   })
 );
 
-async function sessionFrom(c: {
-  req: { header: (k: string) => string | undefined };
-}) {
-  const auth = c.req.header("authorization");
-  const fromBearer = await bearerUser(auth);
-  if (fromBearer) return fromBearer;
-  // cookie read via helper in handlers
-  return null;
+app.use("*", secureHeaders());
+app.use("*", bodyLimit({ maxSize: 128 * 1024, onError: c => c.json({ error: "Requête trop volumineuse" }, 413) }));
+app.use("/api/*", async (c, next) => {
+  c.header("Cache-Control", "no-store");
+  if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method) && c.req.path !== "/api/paystack/webhook") {
+    const origin = c.req.header("origin");
+    if (origin && !ALLOWED_ORIGINS.has(origin)) return c.json({ error: "Origine non autorisée" }, 403);
+    if (!c.req.header("content-type")?.includes("application/json")) return c.json({ error: "Content-Type application/json requis" }, 415);
+  }
+  await next();
+  if (c.res.status === 401 && getCookie(c, COOKIE)) {
+    const domain = cookieDomain();
+    deleteCookie(c, COOKIE, { path: "/", ...(domain ? { domain } : {}) });
+  }
+});
+app.onError((error, c) => {
+  if (error instanceof HTTPException) return c.json({ error: error.message }, error.status);
+  if (error instanceof SyntaxError) return c.json({ error: "JSON invalide" }, 400);
+  console.error("[api]", c.req.method, c.req.path, error.name);
+  return c.json({ error: "Une erreur est survenue. Réessayez." }, 500);
+});
+
+app.get("/health", c => c.json({ ok: true, service: "mastercota-backend" }));
+app.get("/ready", async c => {
+  try { await query("SELECT 1 FROM request_limits LIMIT 1"); return c.json({ ok: true }); }
+  catch { return c.json({ ok: false }, 503); }
+});
+
+app.post("/api/auth/send-otp", async c => {
+  const phone = phoneField((await c.req.json()).phone);
+  await rateLimit(`otp-send-ip:${clientAddress(c)}`, 30, 3600);
+  await rateLimit(`otp-send-minute:${phone}`, 1, 60);
+  await rateLimit(`otp-send-hour:${phone}`, 5, 3600);
+  const active = await isOpenWaActive();
+  const devCode = process.env.NODE_ENV !== "production" ? process.env.OTP_DEV_CODE : undefined;
+  if (!active && !devCode) return c.json({ error: "Connexion WhatsApp temporairement indisponible" }, 503);
+  const code = devCode || generateOtp();
+  const id = await transaction(async client => {
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`otp:${phone}`]);
+    await client.query("UPDATE otp_codes SET consumed_at = now() WHERE phone = $1 AND consumed_at IS NULL", [phone]);
+    const { rows } = await client.query("INSERT INTO otp_codes (phone, code_hash, expires_at) VALUES ($1,$2,now() + interval '10 minutes') RETURNING id", [phone, hashOtp(code)]);
+    return rows[0].id;
+  });
+  try {
+    if (active) await sendOtpWhatsApp(phone, code);
+  } catch {
+    await query("UPDATE otp_codes SET consumed_at = now() WHERE id = $1", [id]);
+    return c.json({ error: "Envoi WhatsApp impossible. Réessayez dans une minute." }, 503);
+  }
+  return c.json({ ok: true });
+});
+
+app.post("/api/auth/verify-otp", async c => {
+  const body = await c.req.json();
+  const phone = phoneField(body.phone);
+  const token = textField(body.token, "Code", 6);
+  if (!/^\d{6}$/.test(token)) return c.json({ error: "Code à 6 chiffres requis" }, 400);
+  await rateLimit(`otp-verify-ip:${clientAddress(c)}`, 100, 600);
+  await rateLimit(`otp-verify:${phone}`, 10, 600);
+  const valid = await transaction(async client => {
+    const { rows } = await client.query(`SELECT * FROM otp_codes WHERE phone = $1 AND consumed_at IS NULL AND expires_at > now() ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, [phone]);
+    const otp = rows[0];
+    if (!otp || otp.attempts >= 5) return false;
+    if (otp.code_hash !== hashOtp(token)) {
+      await client.query("UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1", [otp.id]);
+      return false;
+    }
+    await client.query("UPDATE otp_codes SET consumed_at = now() WHERE id = $1", [otp.id]);
+    return true;
+  });
+  if (!valid) return c.json({ error: "Code invalide ou expiré" }, 401);
+  const bootstrap = (process.env.ADMIN_PHONES || "").split(",").map(p => p.trim());
+  const { rows } = await query(`INSERT INTO users (phone, role) VALUES ($1,$2) ON CONFLICT (phone) DO UPDATE SET role = CASE WHEN $2 = 'admin' THEN 'admin' ELSE users.role END RETURNING *`, [phone, bootstrap.includes(phone) ? "admin" : "user"]);
+  const user = rows[0];
+  const jwt = await signSession({ id: user.id, phone: user.phone, session_version: user.session_version });
+  const domain = cookieDomain();
+  setCookie(c, COOKIE, jwt, { httpOnly: true, sameSite: "Lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 24 * 30, ...(domain ? { domain } : {}) });
+  return c.json({ token: jwt, user: { id: user.id, phone: user.phone, name: user.name, role: user.role } });
+});
+
+async function requireUser(c: Parameters<typeof getCookie>[0]) {
+  const token = c.req.header("authorization")?.replace(/^Bearer\s+/i, "") || getCookie(c, COOKIE);
+  return token ? verifyToken(token) : null;
 }
 
-app.get("/health", (c) => c.json({ ok: true, service: "mastercota-backend" }));
-
-// ── Auth ────────────────────────────────────────────────
-app.post("/api/auth/send-otp", async (c) => {
-  try {
-    const { phone } = await c.req.json();
-    if (!phone || typeof phone !== "string" || !phone.startsWith("+")) {
-      return c.json({ error: "Numéro international requis" }, 400);
-    }
-    const code = generateOtp();
-    const expires = new Date(Date.now() + 10 * 60 * 1000);
-    await query(
-      `INSERT INTO otp_codes (phone, code_hash, expires_at) VALUES ($1,$2,$3)`,
-      [phone, hashOtp(code), expires.toISOString()]
-    );
-    if (process.env.OTP_DEV_LOG === "1" || !(await isOpenWaActive())) {
-      console.log(`[OTP DEV] ${phone} → ${code}`);
-    }
-    if (await isOpenWaActive()) {
-      await sendOtpWhatsApp(phone, code);
-    } else if (
-      process.env.NODE_ENV === "production" &&
-      !process.env.OTP_DEV_CODE
-    ) {
-      return c.json({ error: "OpenWA non configuré" }, 500);
-    }
-    return c.json({ ok: true });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : "Erreur OTP" }, 500);
-  }
-});
-
-app.post("/api/auth/verify-otp", async (c) => {
-  try {
-    const { phone, token } = await c.req.json();
-    if (!phone || !token || String(token).length !== 6) {
-      return c.json({ error: "phone et code à 6 chiffres requis" }, 400);
-    }
-    const devCode = process.env.OTP_DEV_CODE;
-    const isDevBypass = Boolean(devCode && String(token) === devCode);
-    if (!isDevBypass) {
-      const { rows } = await query<{ id: string }>(
-        `SELECT id FROM otp_codes
-         WHERE phone = $1 AND code_hash = $2 AND consumed_at IS NULL AND expires_at > now()
-         ORDER BY created_at DESC LIMIT 1`,
-        [phone, hashOtp(String(token))]
-      );
-      if (!rows[0]) return c.json({ error: "Code invalide ou expiré" }, 401);
-      await query(`UPDATE otp_codes SET consumed_at = now() WHERE id = $1`, [
-        rows[0].id,
-      ]);
-    }
-    let user = (
-      await query<{
-        id: string;
-        phone: string;
-        name: string | null;
-        role: string;
-      }>(`SELECT id, phone, name, role FROM users WHERE phone = $1`, [phone])
-    ).rows[0];
-    if (!user) {
-      user = (
-        await query<{
-          id: string;
-          phone: string;
-          name: string | null;
-          role: string;
-        }>(
-          `INSERT INTO users (phone) VALUES ($1) RETURNING id, phone, name, role`,
-          [phone]
-        )
-      ).rows[0];
-    }
-    const bootstrap = (process.env.ADMIN_PHONES || "")
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (bootstrap.includes(phone) && user.role !== "admin") {
-      const updated = await query<{
-        id: string;
-        phone: string;
-        name: string | null;
-        role: string;
-      }>(
-        `UPDATE users SET role = 'admin' WHERE id = $1
-         RETURNING id, phone, name, role`,
-        [user.id]
-      );
-      user = updated.rows[0] ?? user;
-    }
-    const jwt = await signSession({ id: user.id, phone: user.phone });
-    const domain = cookieDomain();
-    setCookie(c, COOKIE, jwt, {
-      httpOnly: true,
-      sameSite: "Lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30,
-      ...(domain ? { domain } : {}),
-    });
-    return c.json({
-      token: jwt,
-      user: {
-        id: user.id,
-        phone: user.phone,
-        name: user.name,
-        role: user.role,
-      },
-    });
-  } catch (e) {
-    return c.json(
-      { error: e instanceof Error ? e.message : "Erreur vérification" },
-      500
-    );
-  }
-});
-
-app.post("/api/auth/logout", async (c) => {
+app.post("/api/auth/logout", async c => {
+  const session = await requireUser(c);
+  if (session) await query("UPDATE users SET session_version = session_version + 1 WHERE id = $1", [session.id]);
   const domain = cookieDomain();
   deleteCookie(c, COOKIE, { path: "/", ...(domain ? { domain } : {}) });
   return c.json({ ok: true });
 });
 
-app.get("/api/auth/me", async (c) => {
-  const token =
-    c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ||
-    getCookie(c, COOKIE);
-  const session = token ? await verifyToken(token) : null;
+app.get("/api/auth/me", async c => {
+  const session = await requireUser(c);
   if (!session) return c.json({ user: null }, 401);
-  const { rows } = await query(`SELECT * FROM users WHERE id = $1`, [
-    session.id,
-  ]);
-  if (!rows[0]) return c.json({ user: null }, 401);
+  const { rows } = await query("SELECT * FROM users WHERE id = $1", [session.id]);
   return c.json({ user: rows[0] });
 });
 
-async function requireUser(c: Parameters<typeof getCookie>[0]) {
-  const token =
-    c.req.header("authorization")?.replace(/^Bearer\s+/i, "") ||
-    getCookie(c, COOKIE);
-  return token ? verifyToken(token) : null;
+export async function autoCloseExpiredCotisations() {
+  await query("UPDATE cotisations SET status = 'closed' WHERE status = 'active' AND deadline < CURRENT_DATE");
+  await query("DELETE FROM request_limits WHERE expires_at < now() - interval '1 day'");
+  await query("DELETE FROM otp_codes WHERE expires_at < now() - interval '1 day'");
 }
-
-async function autoCloseExpiredCotisations() {
-  try {
-    await query(
-      `UPDATE cotisations
-       SET status = 'closed'
-       WHERE status = 'active'
-         AND deadline < CURRENT_DATE`
-    );
-  } catch (e) {
-    console.error("[auto-close]", e);
-  }
-}
-
-setInterval(autoCloseExpiredCotisations, 15 * 60 * 1000);
-autoCloseExpiredCotisations();
 
 // ── Cotisations ─────────────────────────────────────────
 app.get("/api/cotisations", async (c) => {
@@ -245,113 +184,38 @@ app.get("/api/cotisations", async (c) => {
   return c.json({ cotisations: rows });
 });
 
-app.post("/api/cotisations", async (c) => {
+app.post("/api/cotisations", async c => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
   const body = await c.req.json();
-  const {
-    title,
-    description,
-    target_amount,
-    cover_url,
-    settings,
-    duration_days,
-    use_free,
-  } = body;
-  if (!title || !target_amount || duration_days == null) {
-    return c.json(
-      { error: "title, target_amount et duration_days requis" },
-      400
-    );
-  }
+  const title = textField(body.title, "Titre", 160);
+  const description = textField(body.description, "Description", 5000, false);
+  const target = amountField(body.target_amount);
+  const settings = settingsField(body.settings ?? {});
+  const cover = optionalUrl(body.cover_url);
+  if (!Number.isInteger(body.duration_days) || (body.use_free !== undefined && typeof body.use_free !== "boolean")) return c.json({ error: "Durée ou offre invalide" }, 400);
+  const cotisation = await transaction(async client => {
+    const { rows: users } = await client.query("SELECT * FROM users WHERE id = $1", [session.id]);
+    const user = users[0];
+    const mode = user.wave_payout_mode || (user.wave_pay_link ? "business" : "phone");
+    if (!(mode === "business" ? user.wave_pay_link : user.wave_phone)) throw new HTTPException(400, { message: "Configurez votre réception Wave avant de créer une cotisation" });
+    await client.query("INSERT INTO phone_entitlements (phone) VALUES ($1) ON CONFLICT DO NOTHING", [user.phone]);
+    const { rows: entitlements } = await client.query("SELECT * FROM phone_entitlements WHERE phone = $1 FOR UPDATE", [user.phone]);
+    const quote = quoteDuration({ durationDays: body.duration_days, freeEligible: entitlements[0].free_cotisations_used < 1, useFree: body.use_free === true });
+    if (!quote || (body.use_free && !quote.isFree)) throw new HTTPException(400, { message: "Offre gratuite déjà utilisée ou durée invalide (1 à 60 jours)" });
+    const { rows } = await client.query(`INSERT INTO cotisations (title,description,target_amount,deadline,owner_id,cover_url,slug,settings,duration_days,starts_at,platform_fee_amount,platform_fee_status,is_free_tier,status)
+      VALUES ($1,$2,$3,CURRENT_DATE + $4::int,$5,$6,$7,$8::jsonb,$4,CURRENT_DATE,$9,$10,$11,$12) RETURNING *`,
+      [title, description || null, target, quote.durationDays, session.id, cover, generateSlug(title), JSON.stringify(settings), quote.fee, quote.isFree ? "free" : "pending", quote.isFree, quote.isFree ? "active" : "pending_fee"]);
+    if (quote.isFree) await client.query("UPDATE phone_entitlements SET free_cotisations_used = free_cotisations_used + 1, updated_at = now() WHERE phone = $1", [user.phone]);
+    return rows[0];
+  });
+  if (cotisation.is_free_tier) return c.json({ cotisation, payment_required: false }, 201);
   try {
-    const phone = await getOwnerPhone(session.id);
-    if (!phone) return c.json({ error: "Profil introuvable" }, 400);
-    const freeEligible = await freeEligibleForPhone(phone);
-    const quote = quoteDuration({
-      durationDays: Number(duration_days),
-      freeEligible,
-      useFree: Boolean(use_free),
-    });
-    if (!quote) {
-      return c.json(
-        {
-          error: `Durée invalide (1–${MAX_DURATION_DAYS} jours)`,
-        },
-        400
-      );
-    }
-    if (use_free && !quote.isFree) {
-      return c.json(
-        {
-          error: `La cotisation gratuite est limitée à ${FREE_DURATION_DAYS} jours, ou déjà utilisée`,
-        },
-        400
-      );
-    }
-
-    const deadline = deadlineFromDuration(quote.durationDays);
-    const startsAt = new Date().toISOString().slice(0, 10);
-    const isFree = quote.isFree;
-    const status = isFree ? "active" : "pending_fee";
-    const feeStatus = isFree ? "free" : "pending";
-
-    const { rows } = await query(
-      `INSERT INTO cotisations
-        (title, description, target_amount, deadline, owner_id, cover_url, slug, settings,
-         duration_days, starts_at, platform_fee_amount, platform_fee_status, is_free_tier, status)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,$11,$12,$13,$14) RETURNING *`,
-      [
-        title.trim(),
-        description?.trim() || null,
-        Number(target_amount),
-        deadline,
-        session.id,
-        cover_url || null,
-        generateSlug(String(title)),
-        JSON.stringify(settings ?? {}),
-        quote.durationDays,
-        startsAt,
-        quote.fee,
-        feeStatus,
-        isFree,
-        status,
-      ]
-    );
-    const cotisation = rows[0];
-
-    if (isFree) {
-      await markFreeUsed(phone);
-      return c.json({ cotisation, payment_required: false });
-    }
-
-    const payment = await initializePlatformFeePaystack({
-      userId: session.id,
-      phone,
-      cotisationId: cotisation.id,
-      purpose: "create",
-      amount: quote.fee,
-      durationDays: quote.durationDays,
-      callbackPath: `/cotisation/${cotisation.id}/frais`,
-      metadata: {},
-    });
-    return c.json({
-      cotisation,
-      payment_required: true,
-      authorization_url: payment.authorization_url,
-      reference: payment.reference,
-      fee: quote.fee,
-    });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Erreur";
-    return c.json(
-      {
-        error: msg.includes("duplicate")
-          ? "Ce titre existe déjà. Essayez un autre."
-          : msg,
-      },
-      400
-    );
+    const payment = await initializePlatformFeePaystack({ userId: session.id, phone: session.phone, cotisationId: cotisation.id, purpose: "create", amount: Number(cotisation.platform_fee_amount), durationDays: cotisation.duration_days, callbackPath: `/cotisation/${cotisation.id}/frais` });
+    return c.json({ cotisation, payment_required: true, ...payment }, 201);
+  } catch {
+    // The saved cotisation can be resumed; never tell a client to create it again.
+    return c.json({ cotisation, payment_required: true, payment_error: "Cotisation enregistrée. Ouvrez-la pour reprendre le paiement des frais." }, 201);
   }
 });
 
@@ -404,405 +268,196 @@ app.get("/api/cotisations/billing-info", async (c) => {
   });
 });
 
-app.get("/api/cotisations/by-slug/:slug", async (c) => {
-  await autoCloseExpiredCotisations();
-  const { rows } = await query(
-    `SELECT c.*,
-            u.wave_phone AS owner_wave_phone,
-            u.wave_pay_link AS owner_wave_pay_link,
-            u.name AS owner_name
-     FROM cotisations c
-     JOIN users u ON u.id = c.owner_id
-     WHERE c.slug = $1`,
-    [c.req.param("slug")]
-  );
-  if (!rows[0]) return c.json({ error: "Introuvable" }, 404);
-  return c.json({ cotisation: rows[0] });
-});
+function publicCotisation(cot: Record<string, any>) {
+  const settings = cot.settings ?? {};
+  return {
+    id: cot.id, slug: cot.slug, title: cot.title, description: cot.description,
+    cover_url: cot.cover_url, status: cot.status, deadline: cot.deadline, created_at: cot.created_at,
+    settings, owner_name: cot.owner_name,
+    owner_wave_phone: cot.owner_wave_payout_mode === "business" ? null : cot.owner_wave_phone,
+    owner_wave_pay_link: cot.owner_wave_payout_mode === "phone" ? null : cot.owner_wave_pay_link,
+    owner_wave_payout_mode: cot.owner_wave_payout_mode,
+    current_amount: settings.show_progress === false ? 0 : cot.current_amount,
+    target_amount: settings.show_target_amount === false ? 0 : cot.target_amount,
+    progress_percent: settings.show_progress === false ? 0 : Math.min(100, Number(cot.current_amount) / Number(cot.target_amount) * 100),
+  };
+}
 
-app.get("/api/cotisations/:id", async (c) => {
-  await autoCloseExpiredCotisations();
-  const { rows } = await query(
-    `SELECT c.*,
-            u.wave_phone AS owner_wave_phone,
-            u.wave_pay_link AS owner_wave_pay_link,
-            u.name AS owner_name
-     FROM cotisations c
-     JOIN users u ON u.id = c.owner_id
-     WHERE c.id = $1`,
-    [c.req.param("id")]
-  );
-  if (!rows[0]) return c.json({ error: "Introuvable" }, 404);
-  return c.json({ cotisation: rows[0] });
-});
+for (const route of ["/api/cotisations/by-slug/:slug", "/api/cotisations/:id"]) {
+  app.get(route, async c => {
+    const slug = c.req.param("slug");
+    const value = slug || c.req.param("id");
+    const { rows } = await query(`SELECT c.*, u.wave_phone AS owner_wave_phone, u.wave_pay_link AS owner_wave_pay_link, u.wave_payout_mode AS owner_wave_payout_mode, u.name AS owner_name FROM cotisations c JOIN users u ON u.id = c.owner_id WHERE ${slug ? "c.slug" : "c.id::text"} = $1`, [value]);
+    const cot = rows[0];
+    if (!cot) return c.json({ error: "Introuvable" }, 404);
+    const session = await requireUser(c);
+    const owner = session?.id === cot.owner_id;
+    if (!owner && cot.status === "pending_fee") return c.json({ error: "Introuvable" }, 404);
+    // Enforce expiration at every read, independently of the maintenance timer.
+    if (cot.status === "active") {
+      const { rows: expired } = await query("UPDATE cotisations SET status = 'closed' WHERE id = $1 AND status = 'active' AND deadline < CURRENT_DATE RETURNING status", [cot.id]);
+      if (expired[0]) cot.status = expired[0].status;
+    }
+    return c.json({ cotisation: owner ? cot : publicCotisation(cot) });
+  });
+}
 
-app.patch("/api/cotisations/:id", async (c) => {
+app.patch("/api/cotisations/:id", async c => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
-  const id = c.req.param("id");
-  const { rows: owned } = await query(
-    `SELECT id FROM cotisations WHERE id = $1 AND owner_id = $2`,
-    [id, session.id]
-  );
-  if (!owned[0]) return c.json({ error: "Forbidden" }, 403);
   const body = await c.req.json();
-  // La deadline ne se modifie que via prolongation payante
-  const { rows } = await query(
-    `UPDATE cotisations SET
-       title = COALESCE($1, title),
-       description = COALESCE($2, description),
-       target_amount = COALESCE($3, target_amount),
-       cover_url = COALESCE($4, cover_url),
-       status = COALESCE($5, status),
-       settings = COALESCE($6::jsonb, settings)
-     WHERE id = $7
-     RETURNING *`,
-    [
-      body.title?.trim() ?? null,
-      body.description !== undefined
-        ? body.description?.trim() || null
-        : null,
-      body.target_amount != null ? Number(body.target_amount) : null,
-      body.cover_url !== undefined ? body.cover_url || null : null,
-      body.status ?? null,
-      body.settings != null ? JSON.stringify(body.settings) : null,
-      id,
-    ]
-  );
-  return c.json({ cotisation: rows[0] });
+  if (body.deadline !== undefined || body.duration_days !== undefined || body.platform_fee_status !== undefined) return c.json({ error: "La durée se modifie uniquement par une prolongation payante" }, 400);
+  const cotisation = await transaction(async client => {
+    const { rows } = await client.query("SELECT *, deadline < CURRENT_DATE AS expired FROM cotisations WHERE id::text = $1 AND owner_id = $2 FOR UPDATE", [c.req.param("id"), session.id]);
+    const cot = rows[0];
+    if (!cot) throw new HTTPException(403, { message: "Forbidden" });
+    if (body.status !== undefined && body.status !== cot.status) {
+      if (!["active", "closed"].includes(body.status) || cot.status === "pending_fee") throw new HTTPException(400, { message: "Transition de statut interdite" });
+      if (body.status === "active" && (cot.expired || !["free", "paid", "waived", "none"].includes(cot.platform_fee_status))) throw new HTTPException(400, { message: "Payez les frais ou prolongez la cotisation avant de la réactiver" });
+    }
+    const target = body.target_amount === undefined ? Number(cot.target_amount) : amountField(body.target_amount);
+    let status = body.status ?? cot.status;
+    if (status === "active" && Number(cot.current_amount) >= target) status = "completed";
+    const { rows: updated } = await client.query(`UPDATE cotisations SET title=$1, description=$2, target_amount=$3, cover_url=$4, status=$5, settings=$6::jsonb WHERE id=$7 RETURNING *`, [
+      body.title === undefined ? cot.title : textField(body.title, "Titre", 160),
+      body.description === undefined ? cot.description : textField(body.description, "Description", 5000, false) || null,
+      target, body.cover_url === undefined ? cot.cover_url : optionalUrl(body.cover_url), status,
+      JSON.stringify(body.settings === undefined ? cot.settings : { ...cot.settings, ...settingsField(body.settings) }), cot.id]);
+    return updated[0];
+  });
+  return c.json({ cotisation });
 });
 
-app.get("/api/cotisations/:id/contributions", async (c) => {
+app.get("/api/cotisations/:id/contributions", async c => {
   const session = await requireUser(c);
-  const id = c.req.param("id");
-  const { rows: cots } = await query(
-    `SELECT owner_id FROM cotisations WHERE id = $1`,
-    [id]
-  );
-  if (!cots[0]) return c.json({ error: "Introuvable" }, 404);
-  const isOwner = session?.id === cots[0].owner_id;
-  const { rows } = await query(
-    isOwner
-      ? `SELECT * FROM contributions WHERE cotisation_id = $1 ORDER BY created_at DESC`
-      : `SELECT id, cotisation_id, contributor_name, amount, status, created_at,
-                contributor_phone, paystack_reference, payment_method
-         FROM contributions WHERE cotisation_id = $1 AND status = 'paid'
-         ORDER BY created_at DESC LIMIT 50`,
-    [id]
-  );
+  const { rows: cots } = await query("SELECT * FROM cotisations WHERE id::text = $1", [c.req.param("id")]);
+  const cot = cots[0];
+  if (!cot || (cot.status === "pending_fee" && session?.id !== cot.owner_id)) return c.json({ error: "Introuvable" }, 404);
+  if (session?.id === cot.owner_id) {
+    const { rows } = await query("SELECT * FROM contributions WHERE cotisation_id = $1 ORDER BY created_at DESC", [cot.id]);
+    return c.json({ contributions: rows });
+  }
+  const settings = cot.settings ?? {};
+  if (settings.show_contributors === false && settings.show_best_contributor === false) return c.json({ contributions: [] });
+  const { rows } = await query(`SELECT id, cotisation_id, contributor_name, amount, status, created_at FROM contributions WHERE cotisation_id = $1 AND status = 'paid' ORDER BY ${settings.show_contributors === false ? "amount DESC, created_at ASC LIMIT 1" : "created_at DESC LIMIT 100"}`, [cot.id]);
   return c.json({ contributions: rows });
 });
 
-app.post("/api/cotisations/:id/contributions", async (c) => {
-  const id = c.req.param("id");
+app.post("/api/cotisations/:id/contributions", async c => {
+  const session = await requireUser(c);
   const body = await c.req.json();
-  const {
-    contributor_name,
-    contributor_phone,
-    amount,
-    note,
-    payment_method,
-  } = body;
-
-  // Contribution manuelle (orga connecté)
-  const session = await requireUser(c);
-  if (payment_method === "manual") {
-    if (!session) return c.json({ error: "Unauthorized" }, 401);
-    const { rows: owned } = await query(
-      `SELECT id FROM cotisations WHERE id = $1 AND owner_id = $2`,
-      [id, session.id]
-    );
-    if (!owned[0]) return c.json({ error: "Forbidden" }, 403);
-    if (!contributor_name || !contributor_phone || !amount) {
-      return c.json({ error: "Champs requis manquants" }, 400);
+  const manual = body.payment_method === "manual";
+  const amount = amountField(body.amount);
+  const phone = phoneField(body.contributor_phone);
+  const note = textField(body.note, "Note", 500, false) || null;
+  const requestId = body.request_id;
+  if (requestId !== undefined && (typeof requestId !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(requestId))) return c.json({ error: "Identifiant de requête invalide" }, 400);
+  if (!manual) await rateLimit(`contribution:${clientAddress(c)}`, 60, 3600);
+  const result = await transaction(async client => {
+    const { rows: cots } = await client.query(`SELECT c.*, c.deadline < CURRENT_DATE AS expired, u.wave_payout_mode, u.wave_phone, u.wave_pay_link FROM cotisations c JOIN users u ON u.id=c.owner_id WHERE c.id::text=$1 FOR UPDATE OF c`, [c.req.param("id")]);
+    const cot = cots[0];
+    if (!cot) throw new HTTPException(404, { message: "Cotisation introuvable" });
+    if (manual && session?.id !== cot.owner_id) throw new HTTPException(403, { message: "Forbidden" });
+    if (requestId) {
+      const { rows } = await client.query("SELECT * FROM contributions WHERE cotisation_id = $1 AND request_id = $2", [cot.id, requestId]);
+      if (rows[0]) {
+        if (rows[0].contributor_phone !== phone || Number(rows[0].amount) !== amount || (rows[0].payment_method === "manual") !== manual) throw new HTTPException(409, { message: "Identifiant déjà utilisé" });
+        return rows[0];
+      }
     }
-    const { rows } = await query(
-      `INSERT INTO contributions
-        (cotisation_id, contributor_name, contributor_phone, amount, status, payment_method, note)
-       VALUES ($1,$2,$3,$4,'paid','manual',$5) RETURNING *`,
-      [
-        id,
-        contributor_name.trim(),
-        contributor_phone.trim(),
-        Number(amount),
-        note?.trim() || null,
-      ]
-    );
-    return c.json({ contribution: rows[0] });
-  }
-
-  // Wave P2P public : en attente de confirmation orga
-  if (!contributor_name || !contributor_phone || !amount) {
-    return c.json({ error: "Champs requis manquants" }, 400);
-  }
-  const { rows: cots } = await query<{
-    id: string;
-    status: string;
-    title: string;
-    owner_id: string;
-    owner_wave_phone: string | null;
-    owner_wave_pay_link: string | null;
-    settings: { min_amount?: number };
-  }>(
-    `SELECT c.id, c.status, c.title, c.owner_id, c.settings,
-            u.wave_phone AS owner_wave_phone,
-            u.wave_pay_link AS owner_wave_pay_link
-     FROM cotisations c
-     JOIN users u ON u.id = c.owner_id
-     WHERE c.id = $1`,
-    [id]
-  );
-  if (!cots[0]) return c.json({ error: "Cotisation introuvable" }, 404);
-  if (cots[0].status !== "active") {
-    return c.json({ error: "Cette cotisation n'accepte plus de contributions" }, 400);
-  }
-  if (!cots[0].owner_wave_phone && !cots[0].owner_wave_pay_link) {
-    return c.json(
-      {
-        error:
-          "L'organisateur n'a pas encore configuré Wave (lien ou numéro)",
-      },
-      400
-    );
-  }
-  const parsedAmount = Math.round(Number(amount));
-  if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
-    return c.json({ error: "Montant invalide" }, 400);
-  }
-  const minAmount = Number(cots[0].settings?.min_amount ?? 0) || 0;
-  if (minAmount > 0 && parsedAmount < minAmount) {
-    return c.json({ error: `Montant minimum : ${minAmount} FCFA` }, 400);
-  }
-
-  const { rows } = await query(
-    `INSERT INTO contributions
-      (cotisation_id, contributor_name, contributor_phone, amount, status, payment_method, note)
-     VALUES ($1,$2,$3,$4,'awaiting_confirmation','wave_p2p',$5) RETURNING *`,
-    [
-      id,
-      String(contributor_name).trim(),
-      String(contributor_phone).trim(),
-      parsedAmount,
-      note?.trim() || null,
-    ]
-  );
-
-  return c.json({
-    contribution: rows[0],
-    wave: {
-      phone: cots[0].owner_wave_phone,
-      pay_link: cots[0].owner_wave_pay_link,
-      amount: parsedAmount,
-      title: cots[0].title,
-    },
+    if (cot.status !== "active" || cot.expired) throw new HTTPException(400, { message: "Cette cotisation n'accepte plus de contributions" });
+    const settings = cot.settings ?? {};
+    const name = textField(body.contributor_name, "Nom", 100, !settings.anonymous_allowed) || "Anonyme";
+    if (amount < Number(settings.min_amount ?? 0)) throw new HTTPException(400, { message: `Montant minimum : ${settings.min_amount} FCFA` });
+    const mode = cot.wave_payout_mode || (cot.wave_pay_link ? "business" : "phone");
+    if (!manual && !(mode === "business" ? cot.wave_pay_link : cot.wave_phone)) throw new HTTPException(400, { message: "L'organisateur doit configurer Wave" });
+    const { rows } = await client.query(`INSERT INTO contributions (cotisation_id, contributor_name, contributor_phone, amount, status, payment_method, note, request_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`, [cot.id, name, phone, amount, manual ? "paid" : "awaiting_confirmation", manual ? "manual" : mode === "business" ? "wave_business" : "wave_p2p", note, requestId ?? null]);
+    if (!manual) await client.query("INSERT INTO notifications (user_id,title,body,cotisation_id) VALUES ($1,$2,$3,$4)", [cot.owner_id, "Contribution à vérifier", `${name} signale un paiement de ${amount} FCFA. Vérifiez sa réception dans Wave.`, cot.id]);
+    return rows[0];
   });
+  return c.json({ contribution: manual ? result : { id: result.id, status: result.status, amount: result.amount } }, 201);
 });
 
-app.post("/api/contributions/:id/confirm", async (c) => {
+for (const action of ["confirm", "reject"] as const) {
+  app.post(`/api/contributions/:id/${action}`, async c => {
+    const session = await requireUser(c);
+    if (!session) return c.json({ error: "Unauthorized" }, 401);
+    const contribution = await transaction(async client => {
+      const { rows } = await client.query(`SELECT c.*, cot.owner_id FROM contributions c JOIN cotisations cot ON cot.id = c.cotisation_id WHERE c.id::text = $1 FOR UPDATE OF c`, [c.req.param("id")]);
+      const row = rows[0];
+      if (!row) throw new HTTPException(404, { message: "Introuvable" });
+      if (row.owner_id !== session.id) throw new HTTPException(403, { message: "Forbidden" });
+      const target = action === "confirm" ? "paid" : "rejected";
+      if (row.status === target) return row;
+      if (row.status !== "awaiting_confirmation" || !["wave_business", "wave_p2p"].includes(row.payment_method)) throw new HTTPException(400, { message: "Cette contribution ne peut plus être modifiée" });
+      const { rows: updated } = await client.query("UPDATE contributions SET status = $2 WHERE id = $1 RETURNING *", [row.id, target]);
+      return updated[0];
+    });
+    return c.json({ contribution });
+  });
+}
+
+app.get("/api/notifications", async c => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
-  const id = c.req.param("id");
-  const { rows: found } = await query<{
-    id: string;
-    status: string;
-    owner_id: string;
-  }>(
-    `SELECT c.id, c.status, cot.owner_id
-     FROM contributions c
-     JOIN cotisations cot ON cot.id = c.cotisation_id
-     WHERE c.id = $1`,
-    [id]
-  );
-  if (!found[0]) return c.json({ error: "Introuvable" }, 404);
-  if (found[0].owner_id !== session.id) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
-  if (found[0].status === "paid") {
-    const { rows } = await query(`SELECT * FROM contributions WHERE id = $1`, [
-      id,
-    ]);
-    return c.json({ contribution: rows[0] });
-  }
-  if (found[0].status !== "awaiting_confirmation" && found[0].status !== "pending") {
-    return c.json({ error: "Cette contribution ne peut plus être confirmée" }, 400);
-  }
-  const { rows } = await query(
-    `UPDATE contributions SET status = 'paid', payment_method = COALESCE(payment_method, 'wave_p2p')
-     WHERE id = $1 RETURNING *`,
-    [id]
-  );
-  return c.json({ contribution: rows[0] });
+  const { rows } = await query("SELECT * FROM notifications WHERE user_id=$1 ORDER BY created_at DESC LIMIT 100", [session.id]);
+  return c.json({ notifications: rows });
+});
+app.post("/api/notifications/read", async c => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const { id } = await c.req.json();
+  await query("UPDATE notifications SET read_at=now() WHERE user_id=$1 AND read_at IS NULL AND ($2::text IS NULL OR id::text=$2)", [session.id, id ?? null]);
+  return c.json({ ok: true });
 });
 
-app.post("/api/contributions/:id/reject", async (c) => {
-  const session = await requireUser(c);
-  if (!session) return c.json({ error: "Unauthorized" }, 401);
-  const id = c.req.param("id");
-  const { rows: found } = await query<{
-    id: string;
-    status: string;
-    owner_id: string;
-  }>(
-    `SELECT c.id, c.status, cot.owner_id
-     FROM contributions c
-     JOIN cotisations cot ON cot.id = c.cotisation_id
-     WHERE c.id = $1`,
-    [id]
-  );
-  if (!found[0]) return c.json({ error: "Introuvable" }, 404);
-  if (found[0].owner_id !== session.id) {
-    return c.json({ error: "Forbidden" }, 403);
-  }
-  if (found[0].status === "paid") {
-    return c.json({ error: "Impossible de refuser une contribution déjà confirmée" }, 400);
-  }
-  const { rows } = await query(
-    `UPDATE contributions SET status = 'rejected'
-     WHERE id = $1 RETURNING *`,
-    [id]
-  );
-  return c.json({ contribution: rows[0] });
-});
 
 // ── Paystack ────────────────────────────────────────────
-app.post("/api/paystack/initialize", async (c) => {
-  try {
-    const { cotisation_id, amount, contributor_name, contributor_phone } =
-      await c.req.json();
-    if (!cotisation_id || !amount || !contributor_name || !contributor_phone) {
-      return c.json({ error: "Champs requis manquants" }, 400);
-    }
-    let quote;
-    try {
-      quote = feesFromNet(Number(amount));
-    } catch {
-      return c.json({ error: "Montant invalide" }, 400);
-    }
-    const { rows: cots } = await query<{
-      owner_id: string;
-      slug: string;
-      status: string;
-    }>(`SELECT owner_id, slug, status FROM cotisations WHERE id = $1`, [
-      cotisation_id,
-    ]);
-    if (!cots[0]) return c.json({ error: "Cotisation introuvable" }, 404);
-    if (cots[0].status !== "active") {
-      return c.json({ error: "Cette cotisation n'accepte plus de paiements" }, 400);
-    }
-    const { rows: owners } = await query<{
-      paystack_subaccount_id: string | null;
-    }>(`SELECT paystack_subaccount_id FROM users WHERE id = $1`, [
-      cots[0].owner_id,
-    ]);
-    const contributionId = randomUUID();
-    const cleanPhone = String(contributor_phone).replace(/[^0-9]/g, "");
-    const appUrl = (
-      process.env.APP_URL ||
-      process.env.NEXT_PUBLIC_APP_URL ||
-      "https://mastercota.com"
-    ).replace(/\/$/, "");
-    const payload: Record<string, unknown> = {
-      email: `${cleanPhone}@mastercota.com`,
-      amount: Math.round(quote.gross * 100),
-      reference: contributionId,
-      callback_url: `${appUrl}/c/${cots[0].slug}/retour?ref=${contributionId}`,
-      metadata: {
-        type: "contribution",
-        net_amount: quote.net,
-        fee: quote.fee,
-        gross_amount: quote.gross,
-        cotisation_id,
-        slug: cots[0].slug,
-      },
-    };
-    if (owners[0]?.paystack_subaccount_id) {
-      payload.subaccount = owners[0].paystack_subaccount_id;
-      payload.bearer = "subaccount";
-    }
-    const { ok, data } = await paystackFetch("/transaction/initialize", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-    if (!ok) {
-      return c.json(
-        { error: data.message || "Paystack initialize failed" },
-        400
-      );
-    }
-    await query(
-      `INSERT INTO contributions
-        (id, cotisation_id, contributor_name, contributor_phone, amount, status, paystack_reference)
-       VALUES ($1,$2,$3,$4,$5,'pending',$1)`,
-      [
-        contributionId,
-        cotisation_id,
-        contributor_name,
-        contributor_phone,
-        quote.net,
-      ]
-    );
-    return c.json({
-      authorization_url: data.data.authorization_url,
-      reference: contributionId,
-      net: quote.net,
-      gross: quote.gross,
-      fee: quote.fee,
-    });
-  } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : "Erreur" }, 500);
-  }
-});
+// Contributions go directly to Wave; keep historical verification only.
+app.post("/api/paystack/initialize", c => c.json({ error: "Mettez l'application à jour pour contribuer via Wave" }, 410));
 
-app.post("/api/paystack/webhook", async (c) => {
-  const signature = c.req.header("x-paystack-signature");
+async function applyCharge(charge: { reference: string; status: string; amount: number; currency: string; channel?: string }) {
+  const { rows: fees } = await query("SELECT id FROM platform_payments WHERE paystack_reference=$1", [charge.reference]);
+  if (fees[0]) return activatePlatformPayment(charge.reference, charge);
+  const { rows } = await query("UPDATE contributions SET status='paid', payment_method=$2 WHERE paystack_reference=$1 AND status='pending' AND amount * 100=$3 AND $4='XOF' RETURNING id", [charge.reference, charge.channel || "mobile_money", charge.amount, charge.currency]);
+  if (rows[0]) return { ok: true };
+  const { rows: paid } = await query("SELECT id FROM contributions WHERE paystack_reference=$1 AND status='paid' AND amount * 100=$2 AND $3='XOF'", [charge.reference, charge.amount, charge.currency]);
+  return paid[0] ? { ok: true } : { ok: false, error: "Paiement inconnu ou incohérent" };
+}
+app.post("/api/paystack/webhook", async c => {
+  const signature = c.req.header("x-paystack-signature") ?? "";
   const secret = process.env.PAYSTACK_SECRET_KEY;
-  if (!signature || !secret) {
-    return c.json({ error: "Missing signature/secret" }, 400);
-  }
-  const bodyText = await c.req.text();
-  const hash = createHmac("sha512", secret).update(bodyText).digest("hex");
-  if (hash !== signature) return c.json({ error: "Invalid signature" }, 401);
-  const event = JSON.parse(bodyText);
+  if (!secret || !/^[a-f0-9]{128}$/i.test(signature)) return c.json({ error: "Signature invalide" }, 401);
+  const text = await c.req.text();
+  const hash = createHmac("sha512", secret).update(text).digest();
+  if (!timingSafeEqual(hash, Buffer.from(signature, "hex"))) return c.json({ error: "Signature invalide" }, 401);
+  const event = JSON.parse(text);
   if (event.event === "charge.success" && event.data?.status === "success") {
-    const reference = event.data.reference as string;
-    const metaType = event.data.metadata?.type;
-    if (metaType === "platform_fee") {
-      await activatePlatformPayment(reference);
-    } else {
-      await query(
-        `UPDATE contributions SET status = 'paid', payment_method = $1
-         WHERE paystack_reference = $2 AND status <> 'paid'`,
-        [event.data.channel || "mobile_money", reference]
-      );
-    }
+    const result = await applyCharge(event.data);
+    if (!result.ok) return c.json({ error: result.error }, 503);
   }
   return c.json({ received: true });
 });
 
-app.get("/api/platform-payments/verify/:reference", async (c) => {
+app.get("/api/platform-payments/verify/:reference", async c => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
   const reference = c.req.param("reference");
-  const { ok, data } = await paystackFetch(
-    `/transaction/verify/${encodeURIComponent(reference)}`
-  );
-  if (!ok) {
-    return c.json({ error: data.message || "Vérification impossible" }, 400);
+  const { rows: owned } = await query("SELECT * FROM platform_payments WHERE paystack_reference=$1 AND user_id=$2", [reference, session.id]);
+  if (!owned[0]) return c.json({ error: "Introuvable" }, 404);
+  let status = owned[0].status === "paid" ? "success" : "pending";
+  if (owned[0].status !== "paid") {
+    await rateLimit(`verify-fee:${session.id}`, 120, 600);
+    const { ok, data } = await paystackFetch(`/transaction/verify/${encodeURIComponent(reference)}`);
+    if (!ok) return c.json({ error: "Vérification temporairement indisponible" }, 502);
+    status = data.data?.status;
+    if (status === "success") {
+      const result = await activatePlatformPayment(reference, data.data);
+      if (!result.ok) return c.json({ error: result.error }, 409);
+    }
   }
-  const status = data.data?.status as string | undefined;
-  if (status === "success") {
-    const result = await activatePlatformPayment(reference);
-    if (!result.ok) return c.json({ error: result.error }, 404);
-  }
-  const { rows } = await query(
-    `SELECT pp.*, c.slug, c.title, c.status AS cotisation_status
-     FROM platform_payments pp
-     LEFT JOIN cotisations c ON c.id = pp.cotisation_id
-     WHERE pp.paystack_reference = $1`,
-    [reference]
-  );
-  return c.json({
-    paystack_status: status,
-    payment: rows[0] ?? null,
-  });
+  const { rows } = await query("SELECT pp.*, c.slug, c.title, c.status AS cotisation_status FROM platform_payments pp LEFT JOIN cotisations c ON c.id=pp.cotisation_id WHERE pp.paystack_reference=$1", [reference]);
+  return c.json({ paystack_status: status, payment: rows[0] });
 });
 
 app.post("/api/cotisations/:id/extend", async (c) => {
@@ -903,81 +558,24 @@ app.post("/api/cotisations/:id/pay-fee", async (c) => {
   }
 });
 
-app.get("/api/paystack/verify/:reference", async (c) => {
+app.get("/api/paystack/verify/:reference", async c => {
+  await rateLimit(`verify-legacy:${clientAddress(c)}`, 60, 600);
   const reference = c.req.param("reference");
-  const { ok, data } = await paystackFetch(
-    `/transaction/verify/${encodeURIComponent(reference)}`
-  );
-  if (!ok) {
-    return c.json({ error: data.message || "Vérification impossible" }, 400);
+  const { rows } = await query("SELECT id,status,amount FROM contributions WHERE paystack_reference=$1", [reference]);
+  if (!rows[0]) return c.json({ error: "Introuvable" }, 404);
+  const { ok, data } = await paystackFetch(`/transaction/verify/${encodeURIComponent(reference)}`);
+  if (!ok) return c.json({ error: "Vérification temporairement indisponible" }, 502);
+  if (data.data?.status === "success") {
+    const result = await applyCharge(data.data);
+    if (!result.ok) return c.json({ error: result.error }, 409);
+    rows[0].status = "paid";
   }
-  const status = data.data?.status as string | undefined;
-  if (status === "success") {
-    await query(
-      `UPDATE contributions SET status = 'paid',
-         payment_method = COALESCE($1, payment_method)
-       WHERE paystack_reference = $2 AND status <> 'paid'`,
-      [data.data?.channel || "mobile_money", reference]
-    );
-  }
-  const { rows } = await query(
-    `SELECT c.*, cot.slug, cot.title AS cotisation_title
-     FROM contributions c
-     JOIN cotisations cot ON cot.id = c.cotisation_id
-     WHERE c.paystack_reference = $1`,
-    [reference]
-  );
-  return c.json({
-    paystack_status: status,
-    contribution: rows[0] ?? null,
-  });
+  return c.json({ paystack_status: data.data?.status, contribution: rows[0] });
 });
+app.post("/api/paystack/verify-account", c => c.json({ error: "Configurez Wave depuis votre profil" }, 410));
+app.post("/api/paystack/subaccount", c => c.json({ error: "Configurez Wave depuis votre profil" }, 410));
 
-app.post("/api/paystack/verify-account", async (c) => {
-  const session = await requireUser(c);
-  if (!session) return c.json({ error: "Unauthorized" }, 401);
-  const { account_number, bank_code } = await c.req.json();
-  if (!account_number || !bank_code) {
-    return c.json({ error: "account_number and bank_code required" }, 400);
-  }
-  const qs = new URLSearchParams({
-    account_number: String(account_number),
-    bank_code: String(bank_code),
-  });
-  const { ok, data } = await paystackFetch(`/bank/resolve?${qs}`);
-  if (!ok) return c.json({ error: data.message || "Numéro invalide" }, 400);
-  return c.json({ account_name: data.data?.account_name ?? "" });
-});
 
-app.post("/api/paystack/subaccount", async (c) => {
-  const session = await requireUser(c);
-  if (!session) return c.json({ error: "Unauthorized" }, 401);
-  const { business_name, settlement_bank, account_number } = await c.req.json();
-  if (!business_name || !settlement_bank || !account_number) {
-    return c.json({ error: "Champs requis manquants" }, 400);
-  }
-  const { ok, data } = await paystackFetch("/subaccount", {
-    method: "POST",
-    body: JSON.stringify({
-      business_name,
-      settlement_bank,
-      account_number,
-      percentage_charge: 1.0,
-    }),
-  });
-  if (!ok) {
-    return c.json(
-      { error: data.message || "Création sous-compte échouée" },
-      400
-    );
-  }
-  const code = data.data.subaccount_code as string;
-  await query(`UPDATE users SET paystack_subaccount_id = $1 WHERE id = $2`, [
-    code,
-    session.id,
-  ]);
-  return c.json({ subaccount_code: code });
-});
 
 // ── Profile / site / pages ──────────────────────────────
 app.get("/api/profile", async (c) => {
@@ -993,18 +591,32 @@ app.patch("/api/profile", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
   const body = await c.req.json();
+
   let wavePhone: string | null | undefined = undefined;
+  let wavePayLink: string | null | undefined = undefined;
+  let waveMode: "business" | "phone" | null | undefined = undefined;
+
+  if (body.wave_payout_mode !== undefined) {
+    const m = body.wave_payout_mode;
+    if (m === null || m === "") {
+      waveMode = null;
+    } else if (m === "business" || m === "phone") {
+      waveMode = m;
+    } else {
+      return c.json({ error: "Mode Wave invalide (business ou phone)" }, 400);
+    }
+  }
+
   if (body.wave_phone !== undefined) {
     if (body.wave_phone === null || body.wave_phone === "") {
       wavePhone = null;
     } else {
-      wavePhone = normalizeWavePhone(String(body.wave_phone));
+      wavePhone = phoneField(normalizeWavePhone(String(body.wave_phone)));
       if (!wavePhone) {
         return c.json({ error: "Numéro Wave invalide" }, 400);
       }
     }
   }
-  let wavePayLink: string | null | undefined = undefined;
   if (body.wave_pay_link !== undefined) {
     if (body.wave_pay_link === null || body.wave_pay_link === "") {
       wavePayLink = null;
@@ -1014,27 +626,69 @@ app.patch("/api/profile", async (c) => {
         return c.json(
           {
             error:
-              "Lien Wave invalide — collez un lien pay.wave.com/m/…",
+              "Lien Wave Business invalide. Collez https://pay.wave.com/m/M_…/c/ci/",
           },
           400
         );
       }
     }
   }
+
+  // Si on change de mode, on valide le champ requis et on peut vider l’autre
+  if (waveMode === "business") {
+    const link =
+      wavePayLink !== undefined
+        ? wavePayLink
+        : (
+            await query<{ wave_pay_link: string | null }>(
+              `SELECT wave_pay_link FROM users WHERE id = $1`,
+              [session.id]
+            )
+          ).rows[0]?.wave_pay_link;
+    if (!link) {
+      return c.json(
+        { error: "Ajoutez votre lien Wave Business pour ce mode" },
+        400
+      );
+    }
+    if (wavePhone === undefined) wavePhone = null;
+  }
+  if (waveMode === "phone") {
+    const phone =
+      wavePhone !== undefined
+        ? wavePhone
+        : (
+            await query<{ wave_phone: string | null }>(
+              `SELECT wave_phone FROM users WHERE id = $1`,
+              [session.id]
+            )
+          ).rows[0]?.wave_phone;
+    if (!phone) {
+      return c.json(
+        { error: "Ajoutez votre numéro Wave pour ce mode" },
+        400
+      );
+    }
+    if (wavePayLink === undefined) wavePayLink = null;
+  }
+
   const { rows } = await query(
     `UPDATE users SET
        name = COALESCE($1, name),
        avatar_url = COALESCE($2, avatar_url),
        wave_phone = CASE WHEN $3::boolean THEN $4 ELSE wave_phone END,
-       wave_pay_link = CASE WHEN $5::boolean THEN $6 ELSE wave_pay_link END
-     WHERE id = $7 RETURNING *`,
+       wave_pay_link = CASE WHEN $5::boolean THEN $6 ELSE wave_pay_link END,
+       wave_payout_mode = CASE WHEN $7::boolean THEN $8 ELSE wave_payout_mode END
+     WHERE id = $9 RETURNING *`,
     [
-      body.name ?? null,
-      body.avatar_url ?? null,
+      body.name === undefined ? null : textField(body.name, "Nom", 100),
+      body.avatar_url === undefined ? null : optionalUrl(body.avatar_url),
       wavePhone !== undefined,
       wavePhone ?? null,
       wavePayLink !== undefined,
       wavePayLink ?? null,
+      waveMode !== undefined,
+      waveMode,
       session.id,
     ]
   );
@@ -1070,7 +724,3 @@ app.get("/api/pages", async (c) => {
 });
 
 app.route("/api/admin", adminRoutes);
-
-const port = Number(process.env.PORT ?? 4000);
-console.log(`mastercota-backend on :${port}`);
-serve({ fetch: app.fetch, port, hostname: "0.0.0.0" });

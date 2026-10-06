@@ -23,28 +23,28 @@ export type CmsPage = {
 
 export type SiteChrome = {
   config: SiteConfig & { landing?: LandingContent };
-  headerLinks: { href: string; label: string }[];
+  headerLinks: { href: string; label: string; shortLabel?: string }[];
   footerLinks: { href: string; label: string }[];
 };
 
 const defaultLanding: LandingContent = {
-  hero_title: "Cotisez ensemble, facilement",
+  hero_title: "Une cotisation WhatsApp. L’argent arrive sur votre Wave.",
   hero_subtitle:
-    "Créez une cotisation, partagez un lien, recevez via Mobile Money. Pensé pour la Côte d'Ivoire.",
-  cta_primary: "Créer une cotisation",
-  cta_secondary: "Comment ça marche",
+    "Créez une page, partagez le lien. Vos proches paient via Wave. Mastercota prend 0 % sur ce qu’ils envoient.",
+  cta_primary: "Créer ma cotisation (gratuit 35 jours)",
+  cta_secondary: "Voir les frais",
   features: [
     {
-      title: "Lien public",
-      body: "Partagez votre page sur WhatsApp. Contribution sans compte.",
+      title: "Lien WhatsApp",
+      body: "Partagez votre page. Vos proches contribuent sans créer de compte.",
     },
     {
-      title: "Mobile Money",
-      body: "Wave, MTN, Orange — confirmation automatique.",
+      title: "Argent sur Wave",
+      body: "Les contributions vont directement sur votre Wave. Mastercota ne garde rien.",
     },
     {
-      title: "Suivi en direct",
-      body: "Progression et contributeurs mis à jour en continu.",
+      title: "Suivi simple",
+      body: "Vous confirmez chaque paiement. Le total de la cotisation se met à jour.",
     },
   ],
 };
@@ -124,14 +124,39 @@ export async function getSiteChrome(): Promise<SiteChrome> {
     label: p.nav_label || p.title,
   });
 
+  /** 3 onglets produit dans le header. */
+  const productHeader = [
+    { href: "/", label: "Accueil", shortLabel: "Accueil" },
+    {
+      href: "/comment-ca-marche",
+      label: "Comment ça marche",
+      shortLabel: "Guide",
+    },
+    { href: "/frais", label: "Frais", shortLabel: "Frais" },
+  ];
+
+  const footerDefaults = [
+    { href: "/", label: "Accueil" },
+    { href: "/comment-ca-marche", label: "Comment ça marche" },
+    { href: "/frais", label: "Frais" },
+  ];
+
+  const cmsFooter = pages
+    .filter((p) => p.nav_placement === "footer" || p.nav_placement === "both")
+    .map(toLink);
+
+  // Dédupliquer footer par href
+  const footerSeen = new Set<string>();
+  const footerLinks = [...footerDefaults, ...cmsFooter].filter((l) => {
+    if (footerSeen.has(l.href)) return false;
+    footerSeen.add(l.href);
+    return true;
+  });
+
   return {
     config,
-    headerLinks: pages
-      .filter((p) => p.nav_placement === "header" || p.nav_placement === "both")
-      .map(toLink),
-    footerLinks: pages
-      .filter((p) => p.nav_placement === "footer" || p.nav_placement === "both")
-      .map(toLink),
+    headerLinks: productHeader,
+    footerLinks,
   };
 }
 

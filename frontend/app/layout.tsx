@@ -1,19 +1,22 @@
 import type { Metadata } from "next";
-import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
 import "./globals.css";
 
-const jakarta = Plus_Jakarta_Sans({
+const jakarta = localFont({
+  src: "../public/fonts/plus-jakarta-sans-latin.woff2",
   variable: "--font-sans",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700", "800"],
+  weight: "400 800",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "../public/fonts/geist-mono-latin.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -22,6 +25,10 @@ export const metadata: Metadata = {
     template: `%s · ${APP_NAME}`,
   },
   description: APP_TAGLINE,
+  icons: {
+    icon: [{ url: "/logo-mark.svg", type: "image/svg+xml" }],
+    apple: "/logo-mark.svg",
+  },
 };
 
 export default function RootLayout({

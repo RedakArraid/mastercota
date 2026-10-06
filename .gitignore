@@ -62,3 +62,12 @@ frontend/.next/
 frontend/out/
 backend/node_modules/
 backend/dist/
+
+# Signing and local verification artifacts
+android/key.properties
+*.jks
+*.keystore
+backups/
+frontend/playwright-report/
+frontend/test-results/
+frontend/.next-*/

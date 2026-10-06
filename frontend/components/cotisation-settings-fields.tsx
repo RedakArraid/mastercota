@@ -150,7 +150,7 @@ export function CotisationSettingsFields({
           onChange={(e) =>
             onChange({ ...value, share_message: e.target.value })
           }
-          placeholder="Ex. Soutenez notre projet — merci !"
+          placeholder="Ex. Soutenez notre projet, merci !"
         />
       </div>
     </div>

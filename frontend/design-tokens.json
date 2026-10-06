@@ -21,7 +21,7 @@
     "radius": "0.75rem"
   },
   "business": {
-    "commissionRate": 0.01,
+    "commissionRate": 0,
     "currency": "FCFA",
     "defaultCountryCode": "+225"
   }

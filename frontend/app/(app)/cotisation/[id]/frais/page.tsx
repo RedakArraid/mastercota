@@ -18,6 +18,7 @@ function FeeReturnInner() {
     "loading"
   );
   const [message, setMessage] = useState("Vérification du paiement…");
+  const [attempt, setAttempt] = useState(0);
   const [fee, setFee] = useState<number | null>(null);
 
   useEffect(() => {
@@ -42,18 +43,17 @@ function FeeReturnInner() {
           setFee(Number(data.payment.amount));
         }
         if (
-          data.paystack_status === "success" ||
           data.payment?.status === "paid"
         ) {
           setState("ok");
           setMessage(
             data.payment?.purpose === "extend"
               ? "Prolongation activée"
-              : "Frais réglés — cotisation active"
+              : "Frais réglés, cotisation active"
           );
         } else {
           setState("pending");
-          setMessage("Paiement en cours de confirmation…");
+          setMessage(["failed", "abandoned"].includes(data.paystack_status ?? "") ? "Paiement non effectué. Reprenez le paiement depuis la cotisation." : "Paiement en cours de confirmation…");
         }
       } catch (e) {
         if (cancelled) return;
@@ -64,7 +64,13 @@ function FeeReturnInner() {
     return () => {
       cancelled = true;
     };
-  }, [ref]);
+  }, [ref, attempt]);
+
+  useEffect(() => {
+    if (state !== "pending" || attempt >= 10) return;
+    const timer = setTimeout(() => setAttempt(n => n + 1), 3000);
+    return () => clearTimeout(timer);
+  }, [state, attempt]);
 
   return (
     <div className="mx-auto flex min-h-[60vh] max-w-md flex-col justify-center gap-4 px-6 py-12 text-center">
@@ -80,6 +86,7 @@ function FeeReturnInner() {
         <p className="text-sm font-medium">{formatAmount(fee)}</p>
       ) : null}
       <div className="flex flex-col gap-2">
+        {state !== "ok" && state !== "loading" ? <Button onClick={() => { setState("loading"); setAttempt(n => n + 1); }}>Vérifier à nouveau</Button> : null}
         {state === "ok" || state === "pending" ? (
           <Button asChild size="lg">
             <Link href={`/cotisation/${id}`}>Voir la cotisation</Link>

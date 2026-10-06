@@ -74,7 +74,7 @@ export default function ProfilePage() {
         <p className="text-sm font-medium uppercase tracking-widest text-primary">
           Compte
         </p>
-        <h1 className="mt-1 text-3xl font-extrabold text-ink">Profil</h1>
+        <h1 className="mt-1 text-2xl font-extrabold text-ink sm:text-3xl">Profil</h1>
         <p className="mt-2 text-muted-foreground">
           Gérez votre identité et vos paramètres de versement.
         </p>
@@ -88,7 +88,7 @@ export default function ProfilePage() {
           <Label>Téléphone</Label>
           <Input value={profile?.phone ?? "…"} disabled />
           <p className="text-xs text-muted-foreground">
-            Identifiant WhatsApp — non modifiable.
+            Identifiant WhatsApp, non modifiable.
           </p>
         </div>
         <div className="space-y-2">
@@ -106,15 +106,18 @@ export default function ProfilePage() {
       </form>
 
       <div className="rounded-2xl border border-border bg-card p-6">
-        <h2 className="mb-2 font-semibold">Compte Wave</h2>
+        <h2 className="mb-2 font-semibold">Recevoir via Wave</h2>
         <p className="mb-1 text-sm text-muted-foreground">
-          {profile?.wave_pay_link || profile?.wave_phone
-            ? "Les contributeurs paient via Wave en direct (lien automatique ou numéro)."
-            : "Ajoutez votre lien Wave pour un paiement automatique avec montant prérempli."}
+          {profile?.wave_payout_mode === "phone" ||
+          (!profile?.wave_pay_link && profile?.wave_phone)
+            ? "Mode numéro Wave : les contributeurs envoient manuellement."
+            : profile?.wave_pay_link
+              ? "Mode Wave Business : paiement en 1 clic avec montant prérempli."
+              : "Deux options : Wave Business (recommandé) ou numéro Wave perso."}
         </p>
         {profile?.wave_pay_link ? (
           <p className="mb-2 break-all text-xs text-muted-foreground">
-            Lien : {profile.wave_pay_link}
+            {profile.wave_pay_link}
           </p>
         ) : null}
         {profile?.wave_phone ? (

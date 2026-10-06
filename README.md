@@ -1,105 +1,102 @@
 # Mastercota
 
-> Plateforme de cotisations communautaires pour l'Afrique francophone.  
-> **Flutter · Next.js · Hono · PostgreSQL · OpenWA · Paystack**
+Plateforme de cotisations : web Next.js, application Flutter, API Hono et PostgreSQL.
 
----
+Les contributions arrivent directement sur le Wave de l’organisateur, par lien Business ou transfert vers son numéro. Le contributeur signale son paiement ; l’organisateur vérifie dans Wave, puis confirme ou refuse. Mastercota ne vérifie pas automatiquement les transferts Wave et ne prélève aucune commission sur les contributions.
 
-## Structure
+L’organisateur paie les frais de durée via Paystack : première cotisation de 35 jours gratuite par numéro, puis 2 000 FCFA pour 1–15 jours, 4 000 pour 16–35 jours ou 10 000 pour 36–60 jours. Une prolongation de 10 jours coûte 2 000 FCFA, avec une limite totale de 60 jours. Une cotisation payante n’est publiée qu’après confirmation du paiement ; sa durée commence à l’activation.
 
-```
-mastercota/
-  frontend/     # Next.js 15 + shadcn (UI web)
-  backend/      # API Hono (auth, cotisations, Paystack, CMS)
-  ios/          # Flutter iOS
-  android/      # Flutter Android
-  lib/          # Code Dart partagé Flutter
-  design-tokens.json
-  docker-compose.yml
+## Démarrage local
+
+Node 22+, PostgreSQL 16+, Flutter 3.35+ et Dart 3.9+.
+
+### Avec Docker
+
+```bash
+docker compose -f docker-compose.local.yml up -d --build
 ```
 
----
+Web : http://localhost:3000. API : http://localhost:4000. Le code local `123456` fonctionne après une demande de code. Aucun WhatsApp n’est envoyé. Les frais payants exigent une clé Paystack de test via `PAYSTACK_TEST_SECRET_KEY`. Sans clé, la cotisation est conservée et son paiement peut être repris ultérieurement. Ce fichier Compose est réservé au développement.
 
-## Stack
-
-| Couche | Technologie |
-|---|---|
-| Mobile | Flutter 3.x (`ios/` + `android/` + `lib/`) |
-| Frontend | Next.js 15 + shadcn (`frontend/`) |
-| Backend | Hono + PostgreSQL (`backend/`) |
-| OTP | OpenWA (WhatsApp) |
-| Paiement | Paystack |
-
----
-
-## Dev local
-
-### Prérequis
-
-- Flutter 3.x, Node 22+, PostgreSQL 16+
-- Instance OpenWA + compte Paystack
-
-### 1. Backend
+### Sans Docker pour les applications
 
 ```bash
 cp backend/.env.example backend/.env
-# renseigner DATABASE_URL, JWT_SECRET, Paystack, OpenWA
-psql "$DATABASE_URL" -f backend/db/schema.sql
-psql "$DATABASE_URL" -f backend/db/migrate-pages.sql
-cd backend && npm install && npm run dev   # :4000
-```
-
-### 2. Frontend
-
-```bash
 cp frontend/.env.example frontend/.env.local
-# BACKEND_URL=http://127.0.0.1:4000
-cd frontend && npm install && npm run dev   # :3000
+npm ci --prefix backend
+npm ci --prefix frontend
+npm run db:migrate --prefix backend
+npm run dev --prefix backend
+# Dans un autre terminal :
+npm run dev --prefix frontend
 ```
 
-Le frontend proxy `/api/*` vers le backend (`next.config.ts`).
-
-### 3. Mobile
+Renseigner `DATABASE_URL` dans `backend/.env`. Utiliser le même `JWT_SECRET` dans les deux applications et `APP_URL=http://localhost:3000` côté API. Les requêtes web `/api/*` sont transmises au backend.
 
 ```bash
 flutter pub get
-flutter run -d ios   # API_BASE_URL=https://mastercota.com par défaut
+flutter run --dart-define=API_BASE_URL=http://127.0.0.1:4000 --dart-define=APP_BASE_URL=http://localhost:3000
 ```
 
----
+Sur émulateur Android, utiliser `http://10.0.2.2:4000` pour l’API et `http://10.0.2.2:3000` pour `APP_BASE_URL`. Sur téléphone physique, utiliser une API HTTPS accessible depuis l’appareil. Le paiement des frais ouvre le navigateur : revenir ensuite dans l’application et actualiser la cotisation pour vérifier son activation.
 
-## Production (VPS)
+## Vérifications reproductibles
+
+Une base de test distincte est obligatoire. Les tests effacent uniquement la base explicitement nommée `mastercota_test`.
 
 ```bash
-cd /root/mastercota
-cp .env.example .env   # Postgres, JWT, OpenWA, Paystack
-docker compose up -d --build
+docker run -d --name mastercota-test-db \
+  -e POSTGRES_USER=mastercota_test \
+  -e POSTGRES_PASSWORD=mastercota_local_test \
+  -e POSTGRES_DB=mastercota_test \
+  -p 127.0.0.1:55432:5432 postgres:16-alpine
+export TEST_DATABASE_URL=postgresql://mastercota_test:mastercota_local_test@127.0.0.1:55432/mastercota_test
+DATABASE_URL="$TEST_DATABASE_URL" npm run db:migrate --prefix backend
+npm run build --prefix backend
+npm test --prefix backend
+npm run lint --prefix frontend
+npm run build --prefix frontend
+(cd frontend && npx playwright install chromium)
+npm run test:e2e --prefix frontend
+flutter analyze
+flutter test
 ```
 
-Webhook Paystack : `https://mastercota.com/api/paystack/webhook`
+Les tests API utilisent PostgreSQL réel. Paystack est simulé et aucun message WhatsApp ni paiement réel n’est déclenché. Les tests navigateur démarrent une API isolée sur 4001 et le web sur 3100. Ne pas lancer simultanément tests API et tests navigateur contre la même base. L’intégration continue exécute ces vérifications sur chaque push et PR.
 
----
+Les polices web sont incluses dans `frontend/public/fonts` avec leurs licences : la compilation ne dépend plus de Google Fonts. Les audits npm des dépendances de production sont sans alerte au 6 octobre 2026. L’audit complet signale encore `braces`, utilisé par les outils ESLint de développement, sans correction compatible proposée ; il doit rester suivi lors des mises à jour.
 
-## Auth OTP (OpenWA)
+## Production
 
+1. Renseigner `.env` à partir de `.env.example` : mot de passe PostgreSQL, secret JWT aléatoire de 32 caractères minimum, `NEXT_PUBLIC_APP_URL` HTTPS, clé Paystack et paramètres OpenWA. Ne jamais définir `OTP_DEV_CODE` ou `OTP_DEV_LOG` en production : l’API refuse alors de démarrer.
+2. Connecter la session OpenWA utilisée pour les OTP. `ADMIN_PHONES` contient les numéros internationaux autorisés à devenir administrateurs lors de leur connexion.
+3. Préparer les réseaux externes Traefik `traefik_network` et OpenWA `openwa-network`, les DNS et les certificats HTTPS.
+4. Sauvegarder la base existante avec `scripts/backup.sh` avant mise à jour.
+5. Exécuter `docker compose up -d --build`. Le service `migrate` applique les migrations une fois, sous verrou ; le backend démarre après sa réussite. Les migrations fonctionnent également sur une base déjà initialisée.
+6. Configurer le webhook Paystack : `https://mastercota.com/api/paystack/webhook`.
+7. Exécuter `scripts/check-health.sh`, puis valider connexion WhatsApp, cotisation gratuite, paiement de frais, retour du navigateur, contribution Wave et confirmation par l’organisateur.
+
+`TRUST_PROXY=true` suppose un backend accessible uniquement derrière le proxy de confiance qui fixe `X-Real-IP`. Ne pas exposer le port backend directement en production. Les sessions mobiles utilisent Keychain/Keystore ; la déconnexion révoque toutes les sessions du compte. Les codes expirent au bout de 10 minutes avec 5 essais maximum ; les limites d’envoi sont persistées dans PostgreSQL.
+
+Les montants Paystack sont en XOF multipliés par 100, comme spécifié dans la [documentation officielle](https://paystack.com/docs/api/). La signature, la référence, le montant et la devise sont vérifiés avant activation. Les confirmations répétées sont traitées une fois. Les tentatives de paiement existantes sont réutilisées ; une interruption réseau ne supprime pas leur référence.
+
+## Sauvegarde et exploitation
+
+```bash
+scripts/backup.sh
+scripts/check-restore.sh backups/mastercota-YYYYMMDDTHHMMSSZ.dump
+scripts/check-health.sh
+docker compose logs --tail=100 backend migrate
 ```
-App → POST /api/auth/send-otp → OpenWA WhatsApp
-App → POST /api/auth/verify-otp → JWT (cookie mc_session / Bearer)
-```
 
-## Paiement
+Le test de restauration crée une base distincte et ne remplace jamais la principale. Programmer la sauvegarde quotidienne, copier les sauvegardes hors du serveur et surveiller `/ready` (API + accès base), le processus OpenWA et les erreurs backend. Ces scripts préparent l’exploitation ; leur planification et les alertes doivent être configurées sur le serveur réellement utilisé.
 
-```
-Contributeur → POST /api/paystack/initialize → Checkout
-Webhook → POST /api/paystack/webhook → contribution paid
-```
+Les anciens paiements Paystack de contribution peuvent encore être vérifiés ; les nouveaux utilisent Wave. Un paiement supplémentaire historique pour un service déjà activé crée une notification de support et ne réapplique pas ce service. Le support doit examiner les éventuels remboursements dans le tableau de bord Paystack.
 
----
+## Livraison mobile
 
-## Modèle économique
+Android : copier `android/key.properties.example` vers `android/key.properties`, renseigner le keystore de publication puis exécuter `flutter build appbundle --release --dart-define=API_BASE_URL=https://mastercota.com`. La compilation release refuse une signature manquante au lieu d’utiliser la clé debug. Les fichiers de signature sont exclus de Git.
 
-Frais de service **1%** sur chaque contribution.
+iOS : sélectionner l’équipe Apple et les profils de distribution dans Xcode, puis `flutter build ipa --release --dart-define=API_BASE_URL=https://mastercota.com`. La capacité Keychain est déclarée. Vérifier sur un appareil réel l’OTP, les deux modes Wave et le retour de paiement avant distribution.
 
-## Licence
-
-Propriétaire — © 2025 Mastercota
+Les textes légaux, l’identité de l’éditeur et les coordonnées de support doivent être renseignés avec les informations réelles via le CMS avant publication. Aucune identité d’entreprise ou validation réglementaire n’est inventée dans le dépôt.

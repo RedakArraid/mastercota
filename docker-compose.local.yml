@@ -1,0 +1,49 @@
+name: mastercota-local
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mastercota
+      POSTGRES_PASSWORD: mastercota_local_only
+      POSTGRES_DB: mastercota
+    ports: ["127.0.0.1:55433:5432"]
+    volumes: ["local_pg:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mastercota"]
+      interval: 2s
+      timeout: 5s
+      retries: 20
+  migrate:
+    build: ./backend
+    command: ["node", "scripts/migrate.mjs"]
+    environment:
+      DATABASE_URL: postgres://mastercota:mastercota_local_only@db:5432/mastercota
+    depends_on:
+      db: { condition: service_healthy }
+  backend:
+    build: ./backend
+    ports: ["127.0.0.1:4000:4000"]
+    environment:
+      NODE_ENV: development
+      DATABASE_URL: postgres://mastercota:mastercota_local_only@db:5432/mastercota
+      JWT_SECRET: local-only-mastercota-secret-not-for-production
+      APP_URL: http://localhost:3000
+      OPENWA_ENABLED: "false"
+      OTP_DEV_CODE: "123456"
+      PAYSTACK_SECRET_KEY: ${PAYSTACK_TEST_SECRET_KEY:-}
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        BACKEND_URL: http://backend:4000
+        NEXT_PUBLIC_APP_URL: http://localhost:3000
+    ports: ["127.0.0.1:3000:3000"]
+    environment:
+      BACKEND_URL: http://backend:4000
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      JWT_SECRET: local-only-mastercota-secret-not-for-production
+    depends_on: [backend]
+volumes:
+  local_pg:

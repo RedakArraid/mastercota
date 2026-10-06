@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
+import { Logo } from "@/components/logo";
 import { getPageBySlug, mdToHtml } from "@/lib/site";
 
 type Props = { params: Promise<{ slug: string }> };
@@ -21,9 +22,7 @@ export default async function DynamicCmsPage({ params }: Props) {
 
   return (
     <article className="mx-auto max-w-3xl px-4 py-14 md:px-6 md:py-20">
-      <p className="text-xs font-semibold uppercase tracking-widest text-primary">
-        Mastercota
-      </p>
+      <Logo href="/" size="sm" className="mb-6" />
       <h1 className="mt-3 text-4xl font-extrabold tracking-tight text-ink">
         {page.title}
       </h1>

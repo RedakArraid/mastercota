@@ -18,6 +18,7 @@ import {
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Logo, LogoMark } from "@/components/logo";
 
 const NAV = [
   {
@@ -90,9 +91,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[radial-gradient(ellipse_at_top,_#1a3360_0%,_#0b162c_70%)] p-6">
         <div className="w-full max-w-md rounded-2xl border border-white/10 bg-white/95 p-8 shadow-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.22em] text-[#da9810]">
-            Mastercota
-          </p>
+          <Logo href="/" size="sm" className="mb-4" />
           <h1 className="mt-2 text-2xl font-bold text-[#143268]">
             Administration
           </h1>
@@ -111,11 +110,11 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
     <aside className="flex h-full w-[260px] flex-col bg-[#0f1f3d] text-white">
       <div className="border-b border-white/10 px-5 py-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#da9810] text-sm font-extrabold text-[#143268]">
-            M
-          </div>
+          <LogoMark size="sm" variant="light" />
           <div>
-            <p className="text-sm font-bold tracking-tight">Mastercota</p>
+            <p className="text-sm font-bold tracking-tight">
+              Master<span className="text-[#F4B829]">cota</span>
+            </p>
             <p className="text-[11px] text-white/50">Console admin</p>
           </div>
         </div>

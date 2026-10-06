@@ -10,8 +10,12 @@ export async function api<T = unknown>(
       ...(init?.headers ?? {}),
     },
     credentials: "include",
+    signal: init?.signal ?? AbortSignal.timeout(30000),
   });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && !path.startsWith("/api/auth/")) {
+    window.location.assign(`/auth/phone?next=${encodeURIComponent(window.location.pathname + window.location.search)}`);
+  }
   if (!res.ok) {
     throw new Error(
       (data as { error?: string }).error || `Erreur ${res.status}`

@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import ContributeForm from "@/components/contribute-form";
+import { Logo } from "@/components/logo";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
@@ -86,6 +87,9 @@ export default async function PublicContributionPage({ params }: Props) {
     <div className="relative">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_rgb(218_152_16_/_18%),_transparent_55%)]" />
       <div className="relative mx-auto flex max-w-lg flex-col px-4 py-10 md:py-14">
+        <div className="mb-6 flex justify-center">
+          <Logo href="/" size="sm" />
+        </div>
         <section className="mb-8 space-y-4 text-center">
           <Badge variant="secondary" className="mx-auto">
             {statusText}
@@ -116,7 +120,7 @@ export default async function PublicContributionPage({ params }: Props) {
           {best ? (
             <p className="rounded-xl bg-secondary/70 px-4 py-2 text-sm">
               Meilleur contributeur :{" "}
-              <span className="font-semibold">{best.contributor_name}</span> —{" "}
+              <span className="font-semibold">{best.contributor_name}</span> ·{" "}
               {formatAmount(Number(best.amount))}
             </p>
           ) : null}

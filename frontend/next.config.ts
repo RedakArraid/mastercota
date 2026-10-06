@@ -5,6 +5,8 @@ const backend =
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  experimental: { cpus: 2 },
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   async rewrites() {
     return [
       {

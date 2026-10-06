@@ -42,21 +42,37 @@ export default function CreateCotisationPage() {
     defaultSettingsForm()
   );
   const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [billingError, setBillingError] = useState(false);
   const [useFree, setUseFree] = useState(true);
   const [durationDays, setDurationDays] = useState(35);
   const [loading, setLoading] = useState(false);
   const [hasWave, setHasWave] = useState<boolean | null>(null);
 
   useEffect(() => {
-    api<{ user: { wave_phone?: string | null; wave_pay_link?: string | null } }>(
-      "/api/profile"
-    )
-      .then((p) =>
-        setHasWave(Boolean(p.user?.wave_phone || p.user?.wave_pay_link))
-      )
-      .catch(() => setHasWave(null));
+    let active = true;
+    api<{
+      user: {
+        wave_pay_link?: string | null;
+        wave_phone?: string | null;
+        wave_payout_mode?: "business" | "phone" | null;
+      };
+    }>("/api/profile")
+      .then((p) => {
+        if (!active) return;
+        setHasWave(
+          Boolean(
+            (p.user?.wave_payout_mode === "phone" && p.user?.wave_phone) ||
+              (p.user?.wave_payout_mode === "business" &&
+                p.user?.wave_pay_link) ||
+              (!p.user?.wave_payout_mode &&
+                (p.user?.wave_pay_link || p.user?.wave_phone))
+          )
+        );
+      })
+      .catch(() => { if (active) setHasWave(null); });
     api<BillingInfo>("/api/cotisations/billing-info")
       .then((info) => {
+        if (!active) return;
         setBilling(info);
         if (info.freeEligible) {
           setUseFree(true);
@@ -66,7 +82,8 @@ export default function CreateCotisationPage() {
           setDurationDays(15);
         }
       })
-      .catch(() => setBilling(null));
+      .catch(() => { if (active) setBillingError(true); });
+    return () => { active = false; };
   }, []);
 
   const quote = useMemo(() => {
@@ -124,35 +141,39 @@ export default function CreateCotisationPage() {
   }
 
   return (
-    <div className="mx-auto max-w-xl space-y-8">
+    <div className="mx-auto max-w-xl space-y-6 sm:space-y-8">
       <div>
         <p className="text-sm font-medium uppercase tracking-widest text-primary">
-          Nouvelle caisse
+          Nouvelle cotisation
         </p>
-        <h1 className="mt-1 text-3xl font-extrabold text-ink">
+        <h1 className="mt-1 text-2xl font-extrabold text-ink sm:text-3xl">
           Créer une cotisation
         </h1>
-        <p className="mt-2 text-muted-foreground">
-          0 % sur les contributions. Vous payez uniquement les frais de
-          durée Mastercota (1re gratuite).
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground sm:text-base">
+          Une cotisation = une page publique avec un objectif et une durée. 0&nbsp;%
+          sur l’argent reçu via Wave. Vous payez uniquement les frais de durée
+          Mastercota (1re cotisation gratuite 35&nbsp;jours par téléphone).
         </p>
       </div>
 
       {hasWave === false ? (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-          <p className="font-medium text-ink">Configurez Wave</p>
-          <p className="mt-1 text-muted-foreground">
-            Ajoutez votre lien de paiement Wave pour un envoi automatique avec
-            montant prérempli.
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm">
+          <p className="font-medium text-ink">
+            Important : configurez Wave avant de partager
+          </p>
+          <p className="mt-2 leading-relaxed text-muted-foreground">
+            Sans Wave Business ou numéro Wave, vos proches ne pourront pas vous
+            payer. Prenez 2 minutes pour choisir un mode dans Profil → Recevoir
+            via Wave.
           </p>
           <Button asChild variant="secondary" size="sm" className="mt-3">
-            <Link href="/profile/payout">Configurer Wave</Link>
+            <Link href="/profile/payout">Configurer Wave maintenant</Link>
           </Button>
         </div>
       ) : null}
 
       <form onSubmit={onSubmit} className="space-y-6">
-        <section className="space-y-5 rounded-2xl border border-border bg-card p-6">
+        <section className="space-y-5 rounded-2xl border border-border bg-card p-4 sm:p-6">
           <h2 className="text-lg font-semibold text-ink">Informations</h2>
           <div className="space-y-2">
             <Label htmlFor="title">Titre</Label>
@@ -187,7 +208,7 @@ export default function CreateCotisationPage() {
           </div>
         </section>
 
-        <section className="space-y-4 rounded-2xl border border-border bg-card p-6">
+        <section className="space-y-4 rounded-2xl border border-border bg-card p-4 sm:p-6">
           <div>
             <h2 className="text-lg font-semibold text-ink">Durée & frais</h2>
             <p className="mt-1 text-sm text-muted-foreground">
@@ -198,6 +219,7 @@ export default function CreateCotisationPage() {
           {billing?.freeEligible ? (
             <button
               type="button"
+              disabled={loading}
               onClick={() => {
                 setUseFree(true);
                 setDurationDays(FREE_DURATION_DAYS);
@@ -214,11 +236,13 @@ export default function CreateCotisationPage() {
                 {FREE_DURATION_DAYS} jours · 0 {CURRENCY} · liée à votre numéro
               </p>
             </button>
-          ) : (
+          ) : billing ? (
             <p className="rounded-xl bg-secondary/60 px-4 py-3 text-sm text-muted-foreground">
               Votre cotisation gratuite a déjà été utilisée sur ce numéro.
             </p>
-          )}
+          ) : <p className="text-sm text-muted-foreground" role={billingError ? "alert" : undefined}>
+            {billingError ? "Offres indisponibles. Actualisez la page pour réessayer." : "Chargement des offres…"}
+          </p>}
 
           <div className="grid gap-3 sm:grid-cols-3">
             {(billing?.presets ?? DURATION_PRESETS).map((p) => {
@@ -227,12 +251,14 @@ export default function CreateCotisationPage() {
                 <button
                   key={p.days}
                   type="button"
+                  disabled={!billing || loading}
+                  aria-pressed={selected}
                   onClick={() => {
                     setUseFree(false);
                     setDurationDays(p.days);
                   }}
                   className={cn(
-                    "rounded-2xl border px-3 py-4 text-left transition",
+                    "rounded-2xl border px-3 py-4 text-left transition disabled:cursor-wait disabled:opacity-50",
                     selected
                       ? "border-primary bg-primary/10"
                       : "border-border hover:border-primary/40"
@@ -263,7 +289,7 @@ export default function CreateCotisationPage() {
           ) : null}
         </section>
 
-        <section className="rounded-2xl border border-border bg-card p-6">
+        <section className="rounded-2xl border border-border bg-card p-4 sm:p-6">
           <h2 className="mb-2 text-lg font-semibold text-ink">Page publique</h2>
           <p className="mb-4 text-sm text-muted-foreground">
             Contrôlez ce que voient les personnes qui contribuent via votre lien.

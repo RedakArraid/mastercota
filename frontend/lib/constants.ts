@@ -1,5 +1,5 @@
 export const APP_NAME = "Mastercota";
-export const APP_TAGLINE = "Cotisez ensemble, facilement";
+export const APP_TAGLINE = "Une cotisation WhatsApp. L’argent sur votre Wave.";
 
 export const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "https://mastercota.com";
@@ -11,7 +11,7 @@ export const PAYSTACK_PUBLIC_KEY =
 export const DEFAULT_COUNTRY_CODE = "+225";
 export { DEFAULT_COUNTRY_ISO, PAYSTACK_COUNTRIES } from "@/lib/countries";
 /** @deprecated utiliser SERVICE_RATE / feesFromNet */
-export const COMMISSION_RATE = 0.01;
+export const COMMISSION_RATE = 0;
 export const CURRENCY = "FCFA";
 
 export const PAYOUT_PROVIDERS = [

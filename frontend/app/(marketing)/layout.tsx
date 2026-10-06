@@ -9,9 +9,9 @@ export default async function MarketingLayout({
   const { config, headerLinks, footerLinks } = await getSiteChrome();
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh flex-col overflow-x-clip">
       <SiteHeader links={headerLinks} />
-      <main className="flex-1">{children}</main>
+      <main className="min-w-0 flex-1">{children}</main>
       <SiteFooter
         links={footerLinks}
         supportEmail={config.email_support}

@@ -47,7 +47,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  MasterCotaLogo(size: 28, animationProgress: 1.0),
+                  const MasterCotaLogo(size: 28, animationProgress: 1.0),
                   TextButton(
                     onPressed: () => context.go('/auth/phone'),
                     child: Text(
@@ -72,14 +72,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     eyebrow: '01 sur 03',
                     title: 'Créez en',
                     titleAccent: '30 secondes.',
-                    body: 'Titre, objectif, date — votre cagnotte est immédiatement prête à partager.',
+                    body: 'Titre, objectif, date : votre cotisation est prête à partager.',
                     illustration: _Illus1(),
                   ),
                   _Slide(
                     eyebrow: '02 sur 03',
                     title: 'Partagez un lien,',
                     titleAccent: 'la cagnotte démarre.',
-                    body: 'Vos proches paient via Wave, Orange Money ou MTN — sans s\'inscrire.',
+                    body: 'Vos proches paient via Wave, sans s\'inscrire.',
                     illustration: _Illus2(),
                   ),
                   _Slide(
@@ -117,9 +117,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           );
                         }),
                       ),
-                      AppButton(
-                        label: _current == 2 ? 'Commencer →' : 'Continuer →',
-                        onPressed: _next,
+                      SizedBox(
+                        width: 160,
+                        child: AppButton(
+                          label: _current == 2 ? 'Commencer →' : 'Continuer →',
+                          onPressed: _next,
+                        ),
                       ),
                     ],
                   ),
@@ -239,12 +242,12 @@ class _Illus1 extends StatelessWidget {
           const SizedBox(height: 18),
           ClipRRect(
             borderRadius: BorderRadius.circular(999),
-            child: SizedBox(
+            child: const SizedBox(
               height: 4,
               child: LinearProgressIndicator(
                 value: 0.75,
                 backgroundColor: AppColors.paper2,
-                valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accentBright),
+                valueColor: AlwaysStoppedAnimation<Color>(AppColors.accentBright),
               ),
             ),
           ),
@@ -308,9 +311,9 @@ class _Illus2 extends StatelessWidget {
           alignment: Alignment.centerRight,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.ink,
-              borderRadius: const BorderRadius.only(
+              borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(16),
                 topRight: Radius.circular(16),
                 bottomLeft: Radius.circular(16),

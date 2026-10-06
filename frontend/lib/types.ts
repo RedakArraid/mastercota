@@ -16,6 +16,7 @@ export type Cotisation = {
   cover_url: string | null;
   target_amount: number;
   current_amount: number;
+  progress_percent?: number;
   deadline: string;
   owner_id: string;
   status: "pending_fee" | "active" | "closed" | "completed" | string;
@@ -30,6 +31,7 @@ export type Cotisation = {
   extension_count?: number;
   owner_wave_phone?: string | null;
   owner_wave_pay_link?: string | null;
+  owner_wave_payout_mode?: "business" | "phone" | null;
   owner_name?: string | null;
 };
 
@@ -60,6 +62,7 @@ export type UserProfile = {
   paystack_subaccount_id: string | null;
   wave_phone?: string | null;
   wave_pay_link?: string | null;
+  wave_payout_mode?: "business" | "phone" | null;
   role?: string;
   created_at: string;
 };

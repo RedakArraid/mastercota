@@ -79,6 +79,9 @@ type TopCotisation = {
 const STATUS_FR: Record<string, string> = {
   paid: "Payé",
   pending: "En attente",
+  awaiting_confirmation: "À confirmer",
+  rejected: "Refusé",
+  pending_fee: "Frais en attente",
   failed: "Échoué",
   active: "Active",
   closed: "Clôturée",

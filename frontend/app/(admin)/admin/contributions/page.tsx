@@ -51,7 +51,7 @@ export default function AdminContributionsPage() {
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        {["", "paid", "pending", "failed"].map((s) => (
+        {["", "paid", "awaiting_confirmation", "pending", "rejected", "failed"].map((s) => (
           <Button
             key={s || "all"}
             size="sm"

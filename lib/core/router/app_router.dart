@@ -15,8 +15,9 @@ import '../services/api_service.dart';
 import '../widgets/navigation_shell.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
-  return GoRouter(
+  final router = GoRouter(
     initialLocation: '/splash',
+    refreshListenable: ApiService.authChanges,
     redirect: (BuildContext context, GoRouterState state) {
       final isLoggedIn = ApiService.isAuthenticated;
       final location = state.matchedLocation;
@@ -24,8 +25,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       if (location == '/splash') return null;
       if (location.startsWith('/c/')) return null;
 
-      final isAuthRoute = location.startsWith('/auth') ||
-          location == '/onboarding';
+      final isAuthRoute =
+          location.startsWith('/auth') || location == '/onboarding';
 
       if (!isLoggedIn && !isAuthRoute) return '/auth/phone';
       if (isLoggedIn && isAuthRoute) return '/home';
@@ -52,7 +53,7 @@ final routerProvider = Provider<GoRouter>((ref) {
           return OtpScreen(phone: phone);
         },
       ),
-      
+
       // Navigation Shell wrapping Dashboard (Home) and Profile
       ShellRoute(
         builder: (ctx, state, child) => NavigationShell(
@@ -107,4 +108,6 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
     ),
   );
+  ref.onDispose(router.dispose);
+  return router;
 });

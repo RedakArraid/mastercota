@@ -8,7 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../providers/cotisation_provider.dart';
 import '../models/cotisation_model.dart';
 import '../widgets/contribution_dialog.dart';
+import '../widgets/owner_controls.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_text_styles.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -24,16 +26,14 @@ class CotisationDetailScreen extends ConsumerStatefulWidget {
       _CotisationDetailScreenState();
 }
 
-class _CotisationDetailScreenState
-    extends ConsumerState<CotisationDetailScreen>
+class _CotisationDetailScreenState extends ConsumerState<CotisationDetailScreen>
     with SingleTickerProviderStateMixin {
   int _tabIndex = 0;
 
   @override
   Widget build(BuildContext context) {
     final cotAsync = ref.watch(cotisationByIdProvider(widget.cotisationId));
-    final contrAsync =
-        ref.watch(contributionsProvider(widget.cotisationId));
+    final contrAsync = ref.watch(contributionsProvider(widget.cotisationId));
     final formatter = NumberFormat('#,###', 'fr_FR');
 
     return Scaffold(
@@ -64,9 +64,10 @@ class _CotisationDetailScreenState
 
                     // Big number card
                     _BigNumberCard(cot: cot, formatter: formatter),
+                    OwnerControls(cot: cot),
 
                     // Share strip
-                    _ShareStrip(cot: cot),
+                    if (!cot.isPendingFee) _ShareStrip(cot: cot),
 
                     // Tabs
                     _TabRow(
@@ -85,8 +86,7 @@ class _CotisationDetailScreenState
                         contrAsync: contrAsync,
                         formatter: formatter,
                       ),
-                    if (_tabIndex == 2)
-                      _SettingsTab(cot: cot),
+                    if (_tabIndex == 2) SettingsEditor(cot: cot),
 
                     const SizedBox(height: 32),
                   ],
@@ -98,7 +98,9 @@ class _CotisationDetailScreenState
                 bottom: 24,
                 left: 16,
                 right: 16,
-                child: _ActionBar(cot: cot),
+                child: cot.isPendingFee
+                    ? const SizedBox.shrink()
+                    : _ActionBar(cot: cot),
               ),
             ],
           );
@@ -127,8 +129,7 @@ class _TopBar extends StatelessWidget {
 
   void _share(BuildContext context) {
     HapticFeedback.mediumImpact();
-    final url =
-        'https://mastercota.com/c/${cot.slug}';
+    final url = '${AppConstants.appBaseUrl}/c/${cot.slug}';
     final msg = cot.settings.shareMessage?.isNotEmpty == true
         ? '${cot.settings.shareMessage}\n$url'
         : 'Contribuez à "${cot.title}" sur MasterCota !\n$url';
@@ -210,7 +211,9 @@ class _EditorialHero extends StatelessWidget {
   Widget build(BuildContext context) {
     // Status eyebrow
     final String eyebrow;
-    if (cot.isCompleted) {
+    if (cot.isPendingFee) {
+      eyebrow = 'Frais en attente';
+    } else if (cot.isCompleted) {
       eyebrow = 'Terminé';
     } else if (cot.isActive) {
       eyebrow = 'En cours · J−${cot.daysRemaining}';
@@ -298,135 +301,149 @@ class _BigNumberCard extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 18),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.paper,
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(color: AppColors.line),
-        ),
-        padding: const EdgeInsets.all(22),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Labels row
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('COLLECTÉ', style: AppTextStyles.caption),
-                Text('OBJECTIF', style: AppTextStyles.caption),
-              ],
-            ),
-            const SizedBox(height: 6),
-            // Amounts row
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${formatter.format(cot.currentAmount)} F',
-                  style: AppTextStyles.mono.copyWith(
-                    fontSize: 38,
-                    letterSpacing: -0.03 * 38,
-                    color: AppColors.ink,
-                  ),
+      child:
+          Container(
+                decoration: BoxDecoration(
+                  color: AppColors.paper,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: AppColors.line),
                 ),
-                Text(
-                  '${formatter.format(cot.targetAmount)} F',
-                  style: AppTextStyles.mono.copyWith(
-                    fontSize: 14,
-                    color: AppColors.ink3,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            // 4px progress bar
-            ClipRRect(
-              borderRadius: BorderRadius.circular(999),
-              child: TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: progress.clamp(0.0, 1.0)),
-                duration: const Duration(milliseconds: 900),
-                curve: Curves.easeOutCubic,
-                builder: (_, v, __) => SizedBox(
-                  height: 4,
-                  child: LinearProgressIndicator(
-                    value: v,
-                    backgroundColor: AppColors.paper2,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      cot.isCompleted
-                          ? AppColors.forest
-                          : AppColors.accentBright,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            // Footer row: % atteint + jours restants
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text.rich(TextSpan(
-                  style: AppTextStyles.bodySmall.copyWith(
-                    color: AppColors.ink2,
-                  ),
+                padding: const EdgeInsets.all(22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextSpan(
-                      text: '${(progress * 100).toStringAsFixed(0)}%',
-                      style: AppTextStyles.mono.copyWith(
-                        color: AppColors.ink,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w500,
+                    // Labels row
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('COLLECTÉ', style: AppTextStyles.caption),
+                        Text('OBJECTIF', style: AppTextStyles.caption),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // Amounts row
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.baseline,
+                      textBaseline: TextBaseline.alphabetic,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          '${formatter.format(cot.currentAmount)} F',
+                          style: AppTextStyles.mono.copyWith(
+                            fontSize: 38,
+                            letterSpacing: -0.03 * 38,
+                            color: AppColors.ink,
+                          ),
+                        ),
+                        Text(
+                          '${formatter.format(cot.targetAmount)} F',
+                          style: AppTextStyles.mono.copyWith(
+                            fontSize: 14,
+                            color: AppColors.ink3,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    // 4px progress bar
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: TweenAnimationBuilder<double>(
+                        tween: Tween(begin: 0, end: progress.clamp(0.0, 1.0)),
+                        duration: const Duration(milliseconds: 900),
+                        curve: Curves.easeOutCubic,
+                        builder: (_, v, __) => SizedBox(
+                          height: 4,
+                          child: LinearProgressIndicator(
+                            value: v,
+                            backgroundColor: AppColors.paper2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              cot.isCompleted
+                                  ? AppColors.forest
+                                  : AppColors.accentBright,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    const TextSpan(text: ' atteint'),
+                    const SizedBox(height: 10),
+                    // Footer row: % atteint + jours restants
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text.rich(
+                          TextSpan(
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: AppColors.ink2,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: '${(progress * 100).toStringAsFixed(0)}%',
+                                style: AppTextStyles.mono.copyWith(
+                                  color: AppColors.ink,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                              const TextSpan(text: ' atteint'),
+                            ],
+                          ),
+                        ),
+                        Text(
+                          '$daysLeft j restants',
+                          style: AppTextStyles.mono.copyWith(
+                            fontSize: 11,
+                            color: AppColors.ink3,
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Mini stats grid
+                    const SizedBox(height: 18),
+                    Container(
+                      padding: const EdgeInsets.only(top: 16),
+                      decoration: const BoxDecoration(
+                        border: Border(top: BorderSide(color: AppColors.line)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          _MiniStat(
+                            value: '${(progress * 100).toStringAsFixed(0)}%',
+                            label: 'Atteint',
+                          ),
+                          Container(
+                            width: 1,
+                            height: 28,
+                            color: AppColors.line,
+                          ),
+                          _MiniStat(
+                            value: formatter.format(
+                              (cot.targetAmount - cot.currentAmount).clamp(
+                                0,
+                                double.infinity,
+                              ),
+                            ),
+                            label: 'Restant F',
+                          ),
+                          Container(
+                            width: 1,
+                            height: 28,
+                            color: AppColors.line,
+                          ),
+                          _MiniStat(
+                            value: '$daysLeft',
+                            label: 'Jours restants',
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
-                )),
-                Text(
-                  '$daysLeft j restants',
-                  style: AppTextStyles.mono.copyWith(
-                    fontSize: 11,
-                    color: AppColors.ink3,
-                  ),
                 ),
-              ],
-            ),
-            // Mini stats grid
-            const SizedBox(height: 18),
-            Container(
-              padding: const EdgeInsets.only(top: 16),
-              decoration: const BoxDecoration(
-                border: Border(top: BorderSide(color: AppColors.line)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  _MiniStat(
-                    value: '${(progress * 100).toStringAsFixed(0)}%',
-                    label: 'Atteint',
-                  ),
-                  Container(width: 1, height: 28, color: AppColors.line),
-                  _MiniStat(
-                    value: formatter.format(
-                        (cot.targetAmount - cot.currentAmount).clamp(0, double.infinity)),
-                    label: 'Restant F',
-                  ),
-                  Container(width: 1, height: 28, color: AppColors.line),
-                  _MiniStat(
-                    value: '$daysLeft',
-                    label: 'Jours restants',
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ).animate().fadeIn(delay: 100.ms).slideY(
-            begin: 0.1,
-            end: 0,
-            curve: Curves.easeOutCubic,
-          ),
+              )
+              .animate()
+              .fadeIn(delay: 100.ms)
+              .slideY(begin: 0.1, end: 0, curve: Curves.easeOutCubic),
     );
   }
 }
@@ -452,10 +469,7 @@ class _MiniStat extends StatelessWidget {
         const SizedBox(height: 2),
         Text(
           label,
-          style: AppTextStyles.caption.copyWith(
-            fontSize: 10,
-            letterSpacing: 0,
-          ),
+          style: AppTextStyles.caption.copyWith(fontSize: 10, letterSpacing: 0),
         ),
       ],
     );
@@ -471,7 +485,7 @@ class _ShareStrip extends StatelessWidget {
   const _ShareStrip({required this.cot});
 
   Future<void> _openWhatsApp(BuildContext context, CotisationModel cot) async {
-    final link = 'https://mastercota.com/c/${cot.slug}';
+    final link = '${AppConstants.appBaseUrl}/c/${cot.slug}';
     final msg = cot.settings.shareMessage?.isNotEmpty == true
         ? '${cot.settings.shareMessage}\n$link'
         : 'Contribuez à "${cot.title}" sur MasterCota !\n$link';
@@ -490,16 +504,13 @@ class _ShareStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final link = 'mastercota.com/c/${cot.slug}';
+    final link = '${Uri.parse(AppConstants.appBaseUrl).host}/c/${cot.slug}';
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
       child: Container(
         padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
         decoration: BoxDecoration(
-          border: Border.all(
-            color: AppColors.line,
-            style: BorderStyle.solid,
-          ),
+          border: Border.all(color: AppColors.line, style: BorderStyle.solid),
           borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
@@ -600,10 +611,7 @@ class _TabRow extends StatelessWidget {
 class _ActivityStream extends StatelessWidget {
   final AsyncValue<List<ContributionModel>> contrAsync;
   final NumberFormat formatter;
-  const _ActivityStream({
-    required this.contrAsync,
-    required this.formatter,
-  });
+  const _ActivityStream({required this.contrAsync, required this.formatter});
 
   @override
   Widget build(BuildContext context) {
@@ -627,10 +635,10 @@ class _ActivityStream extends StatelessWidget {
               final idx = entry.key;
               final c = entry.value;
               return _ActivityRow(
-                index: idx + 1,
-                contribution: c,
-                formatter: formatter,
-              )
+                    index: idx + 1,
+                    contribution: c,
+                    formatter: formatter,
+                  )
                   .animate(delay: Duration(milliseconds: 40 * idx))
                   .fadeIn(duration: 280.ms)
                   .slideY(begin: 0.06, end: 0, curve: Curves.easeOutQuad);
@@ -685,7 +693,7 @@ class _ActivityRow extends StatelessWidget {
           Container(
             width: 28,
             height: 28,
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: AppColors.paper2,
               shape: BoxShape.circle,
             ),
@@ -730,13 +738,17 @@ class _ActivityRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  timeLabel,
+                  '${c.statusLabel} · $timeLabel',
                   style: AppTextStyles.caption.copyWith(
                     color: AppColors.ink4,
                     fontSize: 10,
                     letterSpacing: 0,
                   ),
                 ),
+                if (c.note?.isNotEmpty == true) ...[
+                  const SizedBox(height: 4),
+                  Text(c.note!, style: AppTextStyles.bodySmall),
+                ],
               ],
             ),
           ),
@@ -763,7 +775,7 @@ class _ActionBar extends StatelessWidget {
   const _ActionBar({required this.cot});
 
   Future<void> _whatsApp(BuildContext context) async {
-    final link = 'https://mastercota.com/c/${cot.slug}';
+    final link = '${AppConstants.appBaseUrl}/c/${cot.slug}';
     final msg = cot.settings.shareMessage?.isNotEmpty == true
         ? '${cot.settings.shareMessage}\n$link'
         : 'Contribuez à "${cot.title}" sur MasterCota !\n$link';
@@ -827,9 +839,7 @@ class _ActionBar extends StatelessWidget {
                 ),
                 child: Center(
                   child: Text(
-                    cot.isActive
-                        ? 'Relancer les retardataires'
-                        : 'Partager',
+                    cot.isActive ? 'Ajouter une contribution' : 'Partager',
                     style: AppTextStyles.bodyMedium.copyWith(
                       color: Colors.white,
                       fontSize: 14,
@@ -858,7 +868,8 @@ class _ContributorsList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return contrAsync.when(
-      data: (list) {
+      data: (all) {
+        final list = all.where((c) => c.isPaid).toList();
         if (list.isEmpty) {
           return Padding(
             padding: const EdgeInsets.fromLTRB(20, 32, 20, 0),
@@ -870,8 +881,7 @@ class _ContributorsList extends StatelessWidget {
             ),
           );
         }
-        final sorted = [...list]
-          ..sort((a, b) => b.amount.compareTo(a.amount));
+        final sorted = [...list]..sort((a, b) => b.amount.compareTo(a.amount));
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
@@ -884,9 +894,7 @@ class _ContributorsList extends StatelessWidget {
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
                 decoration: BoxDecoration(
-                  color: isTop
-                      ? AppColors.accentSoft
-                      : AppColors.paper,
+                  color: isTop ? AppColors.accentSoft : AppColors.paper,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(
                     color: isTop ? AppColors.accentLine : AppColors.line,
@@ -942,8 +950,10 @@ class _ContributorsList extends StatelessWidget {
       ),
       error: (e, _) => Padding(
         padding: const EdgeInsets.all(20),
-        child: Text('Erreur : $e',
-            style: AppTextStyles.bodySmall.copyWith(color: AppColors.error)),
+        child: Text(
+          'Erreur : $e',
+          style: AppTextStyles.bodySmall.copyWith(color: AppColors.error),
+        ),
       ),
     );
   }
@@ -952,111 +962,3 @@ class _ContributorsList extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────────
 // Réglages tab — affichage en lecture seule des paramètres
 // ─────────────────────────────────────────────────────────────────────────────
-
-class _SettingsTab extends StatelessWidget {
-  final CotisationModel cot;
-  const _SettingsTab({required this.cot});
-
-  @override
-  Widget build(BuildContext context) {
-    final s = cot.settings;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.paper,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.line),
-        ),
-        clipBehavior: Clip.hardEdge,
-        child: Column(
-          children: [
-            _SettingRow(
-              label: 'Contributions anonymes',
-              value: s.anonymousAllowed ? 'Autorisées' : 'Désactivées',
-              active: s.anonymousAllowed,
-            ),
-            _SettingRow(
-              label: 'Barre de progression',
-              value: s.showProgress ? 'Visible' : 'Masquée',
-              active: s.showProgress,
-            ),
-            _SettingRow(
-              label: 'Montant cible visible',
-              value: s.showTargetAmount ? 'Visible' : 'Masqué',
-              active: s.showTargetAmount,
-            ),
-            _SettingRow(
-              label: 'Meilleur contributeur',
-              value: s.showBestContributor ? 'Affiché' : 'Masqué',
-              active: s.showBestContributor,
-            ),
-            _SettingRow(
-              label: 'Liste des contributeurs',
-              value: s.showContributors ? 'Visible' : 'Masquée',
-              active: s.showContributors,
-            ),
-            if (s.minAmount > 0)
-              _SettingRow(
-                label: 'Contribution minimum',
-                value: '${s.minAmount.toStringAsFixed(0)} F',
-                active: true,
-                last: true,
-              )
-            else
-              const _SettingRow(
-                label: 'Contribution minimum',
-                value: 'Aucune',
-                active: false,
-                last: true,
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingRow extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool active;
-  final bool last;
-  const _SettingRow({
-    required this.label,
-    required this.value,
-    required this.active,
-    this.last = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        border: last
-            ? null
-            : const Border(bottom: BorderSide(color: AppColors.line)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: AppTextStyles.bodyMedium.copyWith(
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-          Text(
-            value,
-            style: AppTextStyles.caption.copyWith(
-              color: active ? AppColors.forest : AppColors.ink3,
-              letterSpacing: 0,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

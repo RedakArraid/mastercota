@@ -79,7 +79,7 @@ adminRoutes.get("/stats", async (c) => {
     query<{ n: string; paid: string; pending: string; failed: string; week: string }>(
       `SELECT count(*)::text AS n,
               count(*) FILTER (WHERE status = 'paid')::text AS paid,
-              count(*) FILTER (WHERE status = 'pending')::text AS pending,
+              count(*) FILTER (WHERE status IN ('pending', 'awaiting_confirmation'))::text AS pending,
               count(*) FILTER (WHERE status = 'failed')::text AS failed,
               count(*) FILTER (WHERE status = 'paid' AND created_at > now() - interval '7 days')::text AS week
        FROM contributions`

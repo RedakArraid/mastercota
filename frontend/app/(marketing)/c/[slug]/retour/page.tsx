@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/logo";
 import { api } from "@/lib/api";
 import { formatAmount } from "@/lib/format";
 
@@ -75,6 +76,7 @@ function RetourInner() {
   if (state === "ok") {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center px-6 py-16 text-center">
+        <Logo href="/" size="sm" className="mb-6" />
         <CheckCircle2 className="size-14 text-emerald-600" />
         <h1 className="mt-6 text-3xl font-extrabold text-ink">Merci !</h1>
         <p className="mt-3 text-muted-foreground">
@@ -93,7 +95,7 @@ function RetourInner() {
             <Link href={`/c/${slug}`}>Retour à la cotisation</Link>
           </Button>
           <Button asChild variant="secondary">
-            <Link href="/">Accueil Mastercota</Link>
+            <Link href="/">Accueil</Link>
           </Button>
         </div>
       </div>

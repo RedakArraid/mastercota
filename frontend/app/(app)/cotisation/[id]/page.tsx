@@ -183,14 +183,8 @@ export default function CotisationDetailPage() {
   }
 
   async function resumeFeePayment() {
-    if (!cotisation?.platform_fee_reference) {
-      toast.error("Référence de paiement introuvable");
-      return;
-    }
     setPayingFee(true);
     try {
-      // Re-create payment by calling extend-like recreate: use create flow again via extend endpoint not available
-      // Owner re-inits by posting extend with purpose - for pending create, call billing resume
       const data = await api<{
         authorization_url?: string;
         payment_required?: boolean;
@@ -294,7 +288,7 @@ export default function CotisationDetailPage() {
     const country = getCountryByIso(mCountryIso);
     if (!isValidNational(country, mPhone)) {
       toast.error(
-        `Numéro invalide — ${country.nationalLength} chiffres (${country.name})`
+        `Numéro invalide (${country.nationalLength} chiffres, ${country.name})`
       );
       return;
     }
@@ -358,7 +352,7 @@ export default function CotisationDetailPage() {
           ← Retour
         </Button>
         <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-3xl font-extrabold text-ink">{cotisation.title}</h1>
+          <h1 className="text-2xl font-extrabold text-ink sm:text-3xl">{cotisation.title}</h1>
           <Badge variant="secondary">{statusLabel(cotisation.status)}</Badge>
         </div>
         {cotisation.description ? (
@@ -394,14 +388,14 @@ export default function CotisationDetailPage() {
         </div>
       ) : null}
 
-      {!cotisation.owner_wave_phone &&
-      !cotisation.owner_wave_pay_link &&
+      {!cotisation.owner_wave_pay_link &&
+      !cotisation.owner_wave_phone &&
       cotisation.status !== "pending_fee" ? (
         <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-          <p className="font-medium text-ink">Wave requis</p>
+          <p className="font-medium text-ink">Wave non configuré</p>
           <p className="mt-1 text-muted-foreground">
-            Ajoutez votre lien de paiement Wave pour activer le paiement
-            automatique.
+            Ajoutez un lien Wave Business ou votre numéro pour recevoir les
+            contributions.
           </p>
           <Button asChild size="sm" variant="secondary" className="mt-3">
             <Link href="/profile/payout">Configurer Wave</Link>
@@ -423,7 +417,7 @@ export default function CotisationDetailPage() {
         {showBest ? (
           <p className="mt-3 rounded-xl bg-secondary/60 px-3 py-2 text-sm">
             Meilleur contributeur :{" "}
-            <span className="font-semibold">{best.contributor_name}</span> —{" "}
+            <span className="font-semibold">{best.contributor_name}</span> ·{" "}
             {formatAmount(Number(best.amount))}
           </p>
         ) : null}
@@ -550,8 +544,7 @@ export default function CotisationDetailPage() {
                     <p className="hidden font-semibold sm:block">
                       {formatAmount(Number(c.amount))}
                     </p>
-                    {c.status === "awaiting_confirmation" ||
-                    c.status === "pending" ? (
+                    {c.status === "awaiting_confirmation" ? (
                       <>
                         <Button
                           size="sm"

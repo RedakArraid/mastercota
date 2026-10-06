@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,14 +17,17 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen> {
+  Timer? _timer;
+  @override
+  void dispose() { _timer?.cancel(); super.dispose(); }
+
   @override
   void initState() {
     super.initState();
-    _navigate();
+    _timer = Timer(const Duration(milliseconds: 2400), _navigate);
   }
 
-  Future<void> _navigate() async {
-    await Future.delayed(const Duration(milliseconds: 2400));
+  void _navigate() {
     if (!mounted) return;
     if (ApiService.isAuthenticated) {
       context.go('/home');
@@ -43,7 +47,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                MasterCotaLogo(size: 80, animationProgress: 1.0)
+                const MasterCotaLogo(size: 80, animationProgress: 1.0)
                     .animate()
                     .fadeIn(duration: 600.ms)
                     .scale(begin: const Offset(0.85, 0.85), duration: 600.ms, curve: Curves.easeOutBack),

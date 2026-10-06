@@ -167,7 +167,7 @@ class _StatusBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (completed) {
-      return _Chip(
+      return const _Chip(
         label: 'Atteint',
         color: AppColors.forest,
         bg: AppColors.forestSoft,

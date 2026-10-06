@@ -1,14 +1,14 @@
 -- Migration incrémentale (DB déjà initialisée)
 ALTER TABLE site_config
   ADD COLUMN IF NOT EXISTS landing jsonb NOT NULL DEFAULT '{
-    "hero_title": "Cotisez ensemble, facilement",
-    "hero_subtitle": "Créez une cotisation, partagez un lien, recevez via Mobile Money.",
-    "cta_primary": "Créer une cotisation",
-    "cta_secondary": "Voir comment ça marche",
+    "hero_title": "Une cotisation WhatsApp. L’argent arrive sur votre Wave.",
+    "hero_subtitle": "Créez une page, partagez le lien. Vos proches paient via Wave. Mastercota prend 0 % sur ce qu’ils envoient.",
+    "cta_primary": "Créer ma cotisation (gratuit 35 jours)",
+    "cta_secondary": "Voir les frais",
     "features": [
-      {"title": "Lien public", "body": "Partagez /c/votre-slug sur WhatsApp."},
-      {"title": "Mobile Money", "body": "Wave, MTN, Orange — confirmation auto."},
-      {"title": "Suivi en direct", "body": "Progression mise à jour en continu."}
+      {"title": "Lien WhatsApp", "body": "Partagez votre page. Vos proches contribuent sans créer de compte."},
+      {"title": "Argent sur Wave", "body": "Les contributions vont directement sur votre Wave. Mastercota ne garde rien."},
+      {"title": "Suivi simple", "body": "Vous confirmez chaque paiement. Le total de la cotisation se met à jour."}
     ]
   }'::jsonb;
 
@@ -32,17 +32,17 @@ VALUES
   (
     'comment-ca-marche',
     'Comment ça marche',
-    'Créez, partagez, collectez.',
-    E'## 1. Créez votre cotisation\n\nIndiquez un objectif et une date limite.\n\n## 2. Partagez le lien\n\nEnvoyez le lien public sur WhatsApp.\n\n## 3. Recevez\n\nMobile Money et carte — tableau de bord mis à jour automatiquement.',
+    'Créez, partagez, collectez via Wave.',
+    E'## 1. Créez votre cotisation\n\nIndiquez un objectif et une durée.\n\n## 2. Partagez le lien\n\nEnvoyez le lien public sur WhatsApp.\n\n## 3. Recevez sur Wave\n\nVos proches paient via Wave. Vous confirmez. Mastercota : 0 % sur les contributions.',
     'Comment ça marche',
-    'header',
+    'none',
     10
   ),
   (
     'cgu',
     'Conditions générales',
     'Règles d''utilisation.',
-    E'## CGU\n\nEn utilisant Mastercota vous acceptez ces conditions.\n\n### Commission\n1 % sur chaque contribution.',
+    E'## CGU\n\nEn utilisant Mastercota vous acceptez ces conditions.\n\n### Contributions\n\n0 % Mastercota sur les montants envoyés. L''argent va sur Wave de l''organisateur.\n\n### Frais de durée\n\nL''organisateur paie pour garder la page active (1re cotisation gratuite 35 jours).',
     'CGU',
     'footer',
     20
@@ -51,7 +51,7 @@ VALUES
     'confidentialite',
     'Confidentialité',
     'Traitement des données.',
-    E'## Confidentialité\n\nTéléphone pour auth OTP WhatsApp. Paiements via un prestataire sécurisé.',
+    E'## Confidentialité\n\nTéléphone pour auth OTP WhatsApp. Contributions via Wave. Frais de durée via prestataire sécurisé.',
     'Confidentialité',
     'footer',
     30
@@ -60,7 +60,7 @@ VALUES
     'mentions-legales',
     'Mentions légales',
     'Informations légales.',
-    E'## Mentions légales\n\nMastercota — support@mastercota.com',
+    E'## Mentions légales\n\nMastercota, support@mastercota.com',
     'Mentions légales',
     'footer',
     40

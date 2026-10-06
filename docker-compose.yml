@@ -5,16 +5,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-mastercota}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mastercota}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis}
       POSTGRES_DB: ${POSTGRES_DB:-mastercota}
     volumes:
       - mastercota_pg:/var/lib/postgresql/data
-      - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
-      - ./backend/db/migrate-pages.sql:/docker-entrypoint-initdb.d/02-pages.sql:ro
-      - ./backend/db/migrate-admin.sql:/docker-entrypoint-initdb.d/03-admin.sql:ro
-      - ./backend/db/migrate-billing.sql:/docker-entrypoint-initdb.d/04-billing.sql:ro
-      - ./backend/db/migrate-wave-p2p.sql:/docker-entrypoint-initdb.d/05-wave.sql:ro
-      - ./backend/db/migrate-wave-link.sql:/docker-entrypoint-initdb.d/06-wave-link.sql:ro
     networks:
       - mastercota_internal
     healthcheck:
@@ -22,6 +16,19 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  migrate:
+    build: ./backend
+    image: mastercota-backend:latest
+    command: ["node", "scripts/migrate.mjs"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-mastercota}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis}@db:5432/${POSTGRES_DB:-mastercota}
+    networks:
+      - mastercota_internal
 
   backend:
     build:
@@ -33,18 +40,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     environment:
       NODE_ENV: production
       PORT: 4000
-      DATABASE_URL: postgres://${POSTGRES_USER:-mastercota}:${POSTGRES_PASSWORD:-mastercota}@db:5432/${POSTGRES_DB:-mastercota}
-      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: postgres://${POSTGRES_USER:-mastercota}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD requis}@db:5432/${POSTGRES_DB:-mastercota}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
       PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY}
       APP_URL: ${NEXT_PUBLIC_APP_URL:-https://mastercota.com}
       OPENWA_BASE_URL: ${OPENWA_BASE_URL:-http://openwa-api:2785}
       OPENWA_API_KEY: ${OPENWA_API_KEY}
       OPENWA_SESSION_ID: ${OPENWA_SESSION_ID}
       OPENWA_ENABLED: ${OPENWA_ENABLED:-true}
-      OTP_DEV_CODE: ${OTP_DEV_CODE:-}
+      TRUST_PROXY: "true"
       ADMIN_PHONES: ${ADMIN_PHONES:-}
     networks:
       - mastercota_internal
@@ -57,7 +66,7 @@ services:
           "--quiet",
           "--tries=1",
           "--spider",
-          "http://127.0.0.1:4000/health",
+          "http://127.0.0.1:4000/ready",
         ]
       interval: 20s
       timeout: 5s
@@ -80,7 +89,7 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
-      JWT_SECRET: ${JWT_SECRET}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
       BACKEND_URL: http://backend:4000
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-https://mastercota.com}
       NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: ${NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY}

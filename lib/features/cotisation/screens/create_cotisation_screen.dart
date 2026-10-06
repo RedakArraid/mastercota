@@ -1,17 +1,19 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../providers/cotisation_provider.dart';
-import '../../auth/providers/auth_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../../../core/utils/fees.dart';
+import '../../auth/providers/auth_provider.dart';
+import '../models/cotisation_model.dart';
+import '../providers/cotisation_provider.dart';
+import '../widgets/settings_fields.dart';
 
 class CreateCotisationScreen extends ConsumerStatefulWidget {
   const CreateCotisationScreen({super.key});
-
   @override
   ConsumerState<CreateCotisationScreen> createState() =>
       _CreateCotisationScreenState();
@@ -19,821 +21,241 @@ class CreateCotisationScreen extends ConsumerStatefulWidget {
 
 class _CreateCotisationScreenState
     extends ConsumerState<CreateCotisationScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _titleController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final _amountController = TextEditingController();
-  DateTime? _deadline;
-  bool _isLoading = false;
+  final _form = GlobalKey<FormState>();
+  final _title = TextEditingController();
+  final _description = TextEditingController();
+  final _amount = TextEditingController();
+  CotisationSettings _settings = const CotisationSettings();
+  bool _busy = false, _ready = false, _free = false, _eligible = false;
+  int _days = 35;
+  String? _error, _draftKey;
+  int get _fee => _free ? 0 : PlatformPricing.feeForDuration(_days) ?? 0;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
-  // Toggle states
-  bool _allowAnonymous = true;
-  bool _showProgress = true;
-  bool _showTopContributor = false;
+  Future<void> _load() async {
+    try {
+      final billing = await ApiService.get('/api/cotisations/billing-info');
+      final profile = await ref.read(userProfileProvider.future);
+      _draftKey = 'cotisation_draft_${profile?['id']}';
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_draftKey!);
+      if (!mounted) return;
+      setState(() {
+        _eligible = billing['freeEligible'] == true;
+        _free = _eligible;
+        if (raw != null) {
+          try {
+            final draft = jsonDecode(raw) as Map<String, dynamic>;
+            _title.text = draft['title'] ?? '';
+            _description.text = draft['description'] ?? '';
+            _amount.text = draft['amount'] ?? '';
+            _days = (draft['days'] as int?) ?? 35;
+            _free = _eligible && draft['free'] == true;
+            _settings = CotisationSettings.fromJson(
+                draft['settings'] as Map<String, dynamic>?);
+          } catch (_) {/* Ignore obsolete local draft formats. */}
+        }
+        _ready = true;
+        _error = null;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    }
+  }
 
   @override
   void dispose() {
-    _titleController.dispose();
-    _descriptionController.dispose();
-    _amountController.dispose();
+    _title.dispose();
+    _description.dispose();
+    _amount.dispose();
     super.dispose();
   }
 
-  Future<void> _pickDate() async {
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: now.add(const Duration(days: 7)),
-      firstDate: now.add(const Duration(days: 1)),
-      lastDate: now.add(const Duration(days: 365)),
-      builder: (ctx, child) => Theme(
-        data: ThemeData.light().copyWith(
-          colorScheme: const ColorScheme.light(
-              primary: AppColors.ink, onPrimary: Colors.white),
-        ),
-        child: child!,
-      ),
-    );
-    if (picked != null) setState(() => _deadline = picked);
+  void _message(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  Future<void> _saveDraft() async {
+    if (_draftKey == null) return;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+        _draftKey!,
+        jsonEncode({
+          'title': _title.text,
+          'description': _description.text,
+          'amount': _amount.text,
+          'days': _days,
+          'free': _free,
+          'settings': _settings.toJson()
+        }));
+    _message('Brouillon enregistré sur cet appareil');
   }
 
   Future<void> _create() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_deadline == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Choisissez une date limite'),
-          backgroundColor: AppColors.warning,
-        ),
-      );
-      return;
-    }
-
-    // ── Vérification compte de versement ──
-    final profile = ref.read(userProfileProvider).valueOrNull;
-    final subaccountId = profile?['paystack_subaccount_id'] as String?;
-    if (subaccountId == null || subaccountId.isEmpty) {
-      if (!mounted) return;
-      await _showNoSubaccountDialog();
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    // Reset l'état d'erreur précédent pour permettre une nouvelle tentative
-    ref.read(cotisationNotifierProvider.notifier).reset();
-
-    final raw = _amountController.text.trim().replaceAll(RegExp(r'\s'), '');
-    final result =
-        await ref.read(cotisationNotifierProvider.notifier).createCotisation(
-              title: _titleController.text.trim(),
-              description: _descriptionController.text.trim().isEmpty
-                  ? null
-                  : _descriptionController.text.trim(),
-              targetAmount: double.parse(raw),
-              deadline: _deadline!,
-            );
-
+    if (!_form.currentState!.validate() || !_ready || _busy) return;
+    setState(() => _busy = true);
+    final result = await ref
+        .read(cotisationNotifierProvider.notifier)
+        .createCotisation(
+            title: _title.text.trim(),
+            description: _description.text.trim(),
+            targetAmount: double.parse(_amount.text.trim()),
+            durationDays: _free ? 35 : _days,
+            useFree: _free,
+            settings: _settings);
     if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    if (result.id != null) {
-      // Invalider le cache de la liste pour qu'elle se rafraîchisse
-      ref.invalidate(userCotisationsProvider);
-      context.go('/cotisation/${result.id}');
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.error ?? 'Erreur lors de la création. Réessayez.'),
-          backgroundColor: AppColors.error,
-          duration: const Duration(seconds: 5),
-        ),
-      );
+    setState(() => _busy = false);
+    if (result.id == null) {
+      _message(result.error ?? 'Création impossible');
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    if (_draftKey != null) await prefs.remove(_draftKey!);
+    ref.invalidate(userCotisationsProvider);
+    if (!mounted) return;
+    context.go('/cotisation/${result.id}');
+    if (result.authorizationUrl != null) {
+      try {
+        await launchUrl(Uri.parse(result.authorizationUrl!),
+            mode: LaunchMode.externalApplication);
+      } catch (_) {
+        _message('Reprenez le paiement depuis la cotisation');
+      }
     }
   }
 
-  Future<void> _showNoSubaccountDialog() async {
-    await showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(28),
-          decoration: BoxDecoration(
-            color: AppColors.paper,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.line),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Icon
-              Container(
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                      color: AppColors.warning.withValues(alpha: 0.3), width: 2),
-                ),
-                child: const Icon(
-                  Icons.account_balance_wallet_rounded,
-                  color: AppColors.warning,
-                  size: 40,
-                ),
-              ).animate().scale(duration: 400.ms, curve: Curves.elasticOut),
-
-              const SizedBox(height: 20),
-
-              Text(
-                'Compte de versement requis',
-                style: AppTextStyles.headlineMedium
-                    .copyWith(fontWeight: FontWeight.w800),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                'Pour créer une cotisation et recevoir les paiements, vous devez d\'abord configurer votre compte de versement (Mobile Money ou banque).',
-                textAlign: TextAlign.center,
-                style: AppTextStyles.bodyMedium.copyWith(
-                  color: AppColors.textSecondary,
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                      color: AppColors.primary.withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline_rounded,
-                        color: AppColors.primary, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Les contributeurs paient les frais de service (~3 %). Vous recevez le montant annoncé dans la cotisation.',
-                        style: AppTextStyles.caption.copyWith(
-                          color: AppColors.primary,
-                          height: 1.4,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 28),
-
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    context.push('/profile/payout');
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16)),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    elevation: 0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.account_balance_wallet_rounded, size: 18),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Configurer mon compte',
-                        style: AppTextStyles.labelLarge
-                            .copyWith(color: Colors.black, fontSize: 15),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: Text(
-                  'Plus tard',
-                  style: AppTextStyles.bodyMedium
-                      .copyWith(color: AppColors.textSecondary),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Field2 underline wrapper ──────────────────────────────────
-  Widget _field2({
-    required String label,
-    String? hint,
-    required Widget child,
-  }) {
-    return Container(
-      decoration: const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(color: AppColors.line, width: 1),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                label.toUpperCase(),
-                style: AppTextStyles.caption,
-              ),
-              if (hint != null)
-                Text(
-                  hint,
-                  style: AppTextStyles.caption.copyWith(fontSize: 10),
-                ),
-            ],
-          ),
-          child,
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-
-  // ── Toggle row ─────────────────────────────────────────────────
-  Widget _toggleRow({
-    required String label,
-    required bool value,
-    required ValueChanged<bool> onChanged,
-    bool last = false,
-  }) {
-    return Container(
-      decoration: last
-          ? null
-          : const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: AppColors.line, width: 1),
-              ),
-            ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              label,
-              style: AppTextStyles.bodyMedium.copyWith(
-                color: AppColors.ink,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          Switch.adaptive(
-            value: value,
-            onChanged: onChanged,
-            activeColor: AppColors.accent,
-          ),
-        ],
-      ),
-    );
+  void _preview() {
+    if (!_form.currentState!.validate()) return;
+    showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+                title: Text(_title.text),
+                content: SingleChildScrollView(
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(_description.text),
+                      const SizedBox(height: 16),
+                      Text('Objectif : ${_amount.text} FCFA'),
+                      Text('Durée : ${_free ? 35 : _days} jours'),
+                      Text('Frais organisateur : $_fee FCFA'),
+                      const Text(
+                          'Les contributions arrivent sur votre Wave. Vous confirmez leur réception.')
+                    ])),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Fermer'))
+                ]));
   }
 
   @override
-  Widget build(BuildContext context) {
-    final topPadding = MediaQuery.of(context).padding.top;
-
-    return Scaffold(
-      backgroundColor: AppColors.cream,
-      body: Stack(
-        children: [
-          // ── Scrollable content ──────────────────────────────────
-          SingleChildScrollView(
-            padding: EdgeInsets.only(bottom: 120, top: topPadding),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Header ──────────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-                    child: Row(
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: AppColors.cream,
+        appBar: AppBar(title: const Text('Créer une cotisation'), actions: [
+          IconButton(
+              tooltip: 'Enregistrer le brouillon',
+              onPressed: _ready && !_busy ? _saveDraft : null,
+              icon: const Icon(Icons.save_outlined))
+        ]),
+        body: !_ready
+            ? Center(
+                child: _error == null
+                    ? const CircularProgressIndicator()
+                    : Column(mainAxisSize: MainAxisSize.min, children: [
+                        Text(_error!, textAlign: TextAlign.center),
+                        TextButton(
+                            onPressed: _load, child: const Text('Réessayer'))
+                      ]))
+            : Form(
+                key: _form,
+                child: ListView(padding: const EdgeInsets.all(20), children: [
+                  Text('Un projet, un lien, vos proches.',
+                      style: Theme.of(context).textTheme.headlineSmall),
+                  const SizedBox(height: 12),
+                  const Text(
+                      'Configurez votre réception Wave avant de publier. Aucun pourcentage Mastercota sur les contributions.'),
+                  TextButton(
+                      onPressed: () => context.push('/profile/payout'),
+                      child: const Text('Configurer Wave')),
+                  TextFormField(
+                      controller: _title,
+                      maxLength: 160,
+                      decoration: const InputDecoration(labelText: 'Titre'),
+                      validator: (s) => s == null || s.trim().isEmpty
+                          ? 'Indiquez un titre'
+                          : null),
+                  TextFormField(
+                      controller: _description,
+                      maxLength: 5000,
+                      maxLines: 3,
+                      decoration:
+                          const InputDecoration(labelText: 'Description')),
+                  TextFormField(
+                      controller: _amount,
+                      keyboardType: TextInputType.number,
+                      decoration:
+                          const InputDecoration(labelText: 'Objectif en FCFA'),
+                      validator: (s) {
+                        final n = int.tryParse(s?.trim() ?? '');
+                        return n == null || n <= 0 || n > 1000000000
+                            ? 'Montant entier entre 1 et 1 000 000 000'
+                            : null;
+                      }),
+                  const SizedBox(height: 24),
+                  if (_eligible)
+                    SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('Première cotisation gratuite'),
+                        subtitle: const Text('35 jours, une fois par numéro'),
+                        value: _free,
+                        onChanged: (v) => setState(() {
+                              _free = v;
+                              if (v) _days = 35;
+                            })),
+                  if (!_free)
+                    DropdownButtonFormField<int>(
+                        initialValue: _days,
+                        decoration: const InputDecoration(labelText: 'Durée'),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 15, child: Text('15 jours · 2 000 FCFA')),
+                          DropdownMenuItem(
+                              value: 35, child: Text('35 jours · 4 000 FCFA')),
+                          DropdownMenuItem(
+                              value: 60, child: Text('60 jours · 10 000 FCFA'))
+                        ],
+                        onChanged: (v) => setState(() => _days = v ?? 35)),
+                  const SizedBox(height: 16),
+                  Text('Frais à payer : $_fee FCFA',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 16),
+                  ExpansionTile(
+                      title: const Text('Affichage public'),
                       children: [
-                        // Close button
-                        GestureDetector(
-                          onTap: () => context.canPop()
-                              ? context.pop()
-                              : context.go('/home'),
-                          child: Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: AppColors.paper,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: AppColors.line),
-                            ),
-                            child: const Center(
-                              child: Text(
-                                '✕',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: AppColors.ink,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-
-                        // Center eyebrow
-                        Expanded(
-                          child: Center(
-                            child: Text(
-                              'NOUVELLE CAGNOTTE',
-                              style: AppTextStyles.caption,
-                            ),
-                          ),
-                        ),
-
-                        // Draft button
-                        GestureDetector(
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Brouillons — bientôt disponible'),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          },
-                          child: SizedBox(
-                            width: 68,
-                            child: Text(
-                              'Brouillon',
-                              textAlign: TextAlign.end,
-                              style: AppTextStyles.bodyMedium.copyWith(
-                                color: AppColors.ink3,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // ── Title section ────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        RichText(
-                          text: TextSpan(
-                            children: [
-                              TextSpan(
-                                text: 'Créez votre\n',
-                                style: GoogleFonts.dmSans(
-                                  fontSize: 30,
-                                  fontWeight: FontWeight.w500,
-                                  color: AppColors.ink,
-                                  letterSpacing: -0.75,
-                                  height: 1.05,
-                                ),
-                              ),
-                              TextSpan(
-                                text: 'cagnotte.',
-                                style: AppTextStyles.serifItalic.copyWith(
-                                  fontSize: 30,
-                                  letterSpacing: -0.75,
-                                  height: 1.05,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          'Quelques infos suffisent. Vous pourrez tout ajuster plus tard.',
-                          style: AppTextStyles.bodyMedium.copyWith(
-                            fontSize: 13,
-                            color: AppColors.ink2,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // ── Form fields ──────────────────────────────────
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 28, 24, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        // Titre field
-                        _field2(
-                          label: 'Titre',
-                          child: TextFormField(
-                            controller: _titleController,
-                            style: AppTextStyles.bodyLarge.copyWith(
-                              fontSize: 16,
-                              color: AppColors.ink,
-                            ),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              contentPadding: EdgeInsets.only(top: 8, bottom: 4),
-                              isDense: true,
-                            ),
-                            validator: (v) => v?.trim().isEmpty == true
-                                ? 'Ce champ est requis'
-                                : null,
-                          ),
-                        ),
-
-                        const SizedBox(height: 22),
-
-                        // Description field
-                        _field2(
-                          label: 'Description',
-                          hint: '180 car. max',
-                          child: TextFormField(
-                            controller: _descriptionController,
-                            maxLines: 2,
-                            maxLength: 180,
-                            style: AppTextStyles.bodyLarge.copyWith(
-                              fontSize: 16,
-                              color: AppColors.ink,
-                            ),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              contentPadding: EdgeInsets.only(top: 8, bottom: 4),
-                              isDense: true,
-                              counterText: '',
-                            ),
-                          ),
-                        ),
-
-                        const SizedBox(height: 22),
-
-                        // Objectif — big mono number
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'OBJECTIF',
-                              style: AppTextStyles.caption,
-                            ),
-                            Container(
-                              margin: const EdgeInsets.only(top: 10),
-                              padding: const EdgeInsets.only(bottom: 12),
-                              decoration: const BoxDecoration(
-                                border: Border(
-                                  bottom: BorderSide(
-                                      color: AppColors.ink, width: 1),
-                                ),
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.baseline,
-                                textBaseline: TextBaseline.alphabetic,
-                                children: [
-                                  Expanded(
-                                    child: TextFormField(
-                                      controller: _amountController,
-                                      keyboardType: TextInputType.number,
-                                      inputFormatters: [
-                                        FilteringTextInputFormatter.digitsOnly,
-                                      ],
-                                      style: AppTextStyles.mono.copyWith(
-                                        fontSize: 36,
-                                        fontWeight: FontWeight.w500,
-                                        color: AppColors.ink,
-                                        letterSpacing: -0.72,
-                                      ),
-                                      decoration: const InputDecoration(
-                                        border: InputBorder.none,
-                                        enabledBorder: InputBorder.none,
-                                        focusedBorder: InputBorder.none,
-                                        contentPadding: EdgeInsets.zero,
-                                        isDense: true,
-                                      ),
-                                      validator: (v) {
-                                        if (v?.trim().isEmpty == true) {
-                                          return 'Ce champ est requis';
-                                        }
-                                        final n = double.tryParse(
-                                            v!.trim().replaceAll(RegExp(r'\s'), ''));
-                                        if (n == null || n <= 0) {
-                                          return 'Montant invalide';
-                                        }
-                                        return null;
-                                      },
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'FCFA',
-                                    style: AppTextStyles.mono.copyWith(
-                                      fontSize: 14,
-                                      color: AppColors.ink3,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Preset chips
-                            SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              padding: const EdgeInsets.only(top: 12),
-                              child: Row(
-                                children: [
-                                  for (final preset in [
-                                    ('50 000', '50000'),
-                                    ('100 000', '100000'),
-                                    ('250 000', '250000'),
-                                    ('500 000', '500000'),
-                                    ('1 M', '1000000'),
-                                  ]) ...[
-                                    GestureDetector(
-                                      onTap: () {
-                                        _amountController.text = preset.$2;
-                                      },
-                                      child: Container(
-                                        margin: const EdgeInsets.only(right: 8),
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 12, vertical: 6),
-                                        decoration: BoxDecoration(
-                                          color: Colors.transparent,
-                                          borderRadius: BorderRadius.circular(999),
-                                          border: Border.all(color: AppColors.line),
-                                        ),
-                                        child: Text(
-                                          '${preset.$1} F',
-                                          style: AppTextStyles.mono.copyWith(
-                                            fontSize: 11,
-                                            color: AppColors.ink2,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 22),
-
-                        // Échéance + Visibilité — 2-column
-                        Row(
-                          children: [
-                            // Échéance
-                            Expanded(
-                              child: _field2(
-                                label: 'Échéance',
-                                child: GestureDetector(
-                                  onTap: _pickDate,
-                                  behavior: HitTestBehavior.opaque,
-                                  child: Padding(
-                                    padding: const EdgeInsets.only(top: 8),
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                          _deadline != null
-                                              ? '${_deadline!.day} ${_monthName(_deadline!.month)}'
-                                              : '—',
-                                          style: AppTextStyles.mono.copyWith(
-                                            fontSize: 16,
-                                            color: _deadline != null
-                                                ? AppColors.ink
-                                                : AppColors.ink3,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 6),
-                                        const Text(
-                                          '▼',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            color: AppColors.ink3,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            // Visibilité
-                            Expanded(
-                              child: _field2(
-                                label: 'Visibilité',
-                                child: Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        'Publique',
-                                        style: AppTextStyles.bodyLarge.copyWith(
-                                          fontSize: 16,
-                                          color: AppColors.ink,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      const Text(
-                                        '▼',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          color: AppColors.ink3,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 22),
-
-                        // Toggle options
-                        Container(
-                          decoration: BoxDecoration(
-                            color: AppColors.paper,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.line),
-                          ),
-                          clipBehavior: Clip.hardEdge,
-                          child: Column(
-                            children: [
-                              _toggleRow(
-                                label: 'Dons anonymes autorisés',
-                                value: _allowAnonymous,
-                                onChanged: (v) =>
-                                    setState(() => _allowAnonymous = v),
-                              ),
-                              _toggleRow(
-                                label: 'Afficher la barre de progression',
-                                value: _showProgress,
-                                onChanged: (v) =>
-                                    setState(() => _showProgress = v),
-                              ),
-                              _toggleRow(
-                                label: 'Mettre en avant le meilleur contributeur',
-                                value: _showTopContributor,
-                                onChanged: (v) =>
-                                    setState(() => _showTopContributor = v),
-                                last: true,
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 22),
-
-                        // Fee note
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: AppColors.accentSoft,
-                            border: Border.all(color: AppColors.accentLine),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text.rich(
-                            TextSpan(
-                              style: AppTextStyles.bodySmall.copyWith(
-                                fontSize: 12,
-                                color: AppColors.accentDark,
-                                height: 1.5,
-                              ),
-                              children: const [
-                                TextSpan(
-                                  text: 'Frais : ~3 % ',
-                                  style: TextStyle(fontWeight: FontWeight.w500),
-                                ),
-                                TextSpan(
-                                  text:
-                                      'payés par le contributeur. Aucun frais de création, aucun abonnement.',
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          // ── Sticky CTA bar ──────────────────────────────────────
-          Positioned(
-            bottom: 24,
-            left: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.ink,
-                borderRadius: BorderRadius.circular(18),
-              ),
-              child: Row(
-                children: [
-                  // Aperçu ghost button
-                  SizedBox(
-                    height: 50,
-                    child: TextButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Aperçu — bientôt disponible'),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.paper,
-                        padding: const EdgeInsets.symmetric(horizontal: 18),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      child: Text(
-                        'Aperçu',
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          color: AppColors.paper,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  // Create button
-                  Expanded(
-                    child: SizedBox(
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _create,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          foregroundColor: Colors.white,
-                          elevation: 0,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: _isLoading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : Text(
-                                'Créer la cagnotte →',
-                                style: AppTextStyles.bodyMedium.copyWith(
-                                  color: Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _monthName(int month) {
-    const months = [
-      'jan', 'fév', 'mar', 'avr', 'mai', 'juin',
-      'juil', 'août', 'sep', 'oct', 'nov', 'déc',
-    ];
-    return months[month - 1];
-  }
+                        SettingsFields(
+                            value: _settings,
+                            onChanged: (s) => setState(() => _settings = s))
+                      ]),
+                  const SizedBox(height: 24),
+                  OutlinedButton(
+                      onPressed: _busy ? null : _preview,
+                      child: const Text('Aperçu')),
+                  FilledButton(
+                      onPressed: _busy ? null : _create,
+                      child: Text(_busy
+                          ? 'Création…'
+                          : _free
+                              ? 'Créer gratuitement'
+                              : 'Créer et payer les frais')),
+                ])),
+      );
 }

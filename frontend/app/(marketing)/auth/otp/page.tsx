@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Logo } from "@/components/logo";
+import { Enter } from "@/components/motion";
 import { api } from "@/lib/api";
 
 function OtpForm() {
@@ -46,7 +48,7 @@ function OtpForm() {
         body: JSON.stringify({ phone, token }),
       });
       const next = searchParams.get("next");
-      if (next?.startsWith("/")) {
+      if (next?.startsWith("/") && !next.startsWith("//") && !next.includes("\\")) {
         router.replace(next);
       } else if (data.user?.role === "admin" && typeof window !== "undefined") {
         const host = window.location.hostname;
@@ -84,41 +86,57 @@ function OtpForm() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col px-6 py-12 md:py-16">
-      <h1 className="mb-2 text-3xl font-extrabold text-ink">Code WhatsApp</h1>
-      <p className="mb-8 text-muted-foreground">
-        Entrez le code envoyé au{" "}
-        <span className="font-medium text-foreground">{phone || "…"}</span>
-      </p>
-      <form onSubmit={onSubmit} className="space-y-6">
-        <div className="space-y-2">
-          <Label htmlFor="otp">Code à 6 chiffres</Label>
-          <Input
-            id="otp"
-            inputMode="numeric"
-            maxLength={6}
-            value={token}
-            onChange={(e) =>
-              setToken(e.target.value.replace(/\D/g, "").slice(0, 6))
-            }
-            placeholder="••••••"
-            className="text-center text-2xl tracking-[0.4em]"
-            required
-          />
-        </div>
-        <Button type="submit" size="lg" className="w-full" disabled={loading}>
-          {loading ? "Vérification…" : "Valider"}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="w-full"
-          disabled={countdown > 0}
-          onClick={resend}
-        >
-          {countdown > 0 ? `Renvoyer (${countdown}s)` : "Renvoyer le code"}
-        </Button>
-      </form>
+    <div className="mx-auto flex w-full max-w-md flex-col px-4 py-10 sm:px-6 sm:py-12 md:py-16">
+      <Enter>
+        <Logo href="/" size="md" />
+      </Enter>
+      <Enter delayMs={140} className="mt-8">
+        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">
+          Étape 2 sur 2 · Vérification
+        </p>
+        <h1 className="mt-3 text-2xl font-extrabold text-ink sm:text-3xl">
+          Code reçu sur WhatsApp
+        </h1>
+        <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+          Ouvrez WhatsApp sur le numéro{" "}
+          <span className="font-semibold text-foreground">{phone || "…"}</span>
+          . Saisissez le code à 6 chiffres ci-dessous. Prenez votre temps, le
+          code reste valable quelques minutes.
+        </p>
+      </Enter>
+      <Enter delayMs={280} className="mt-8">
+        <form onSubmit={onSubmit} className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="otp">Code à 6 chiffres</Label>
+            <Input
+              id="otp"
+              inputMode="numeric"
+              maxLength={6}
+              value={token}
+              onChange={(e) =>
+                setToken(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
+              placeholder="••••••"
+              className="text-center text-2xl tracking-[0.4em]"
+              required
+            />
+          </div>
+          <Button type="submit" size="lg" className="w-full" disabled={loading}>
+            {loading ? "Vérification…" : "Valider et entrer"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            disabled={countdown > 0}
+            onClick={resend}
+          >
+            {countdown > 0
+              ? `Renvoyer le code dans ${countdown}s`
+              : "Je n’ai rien reçu, renvoyer"}
+          </Button>
+        </form>
+      </Enter>
     </div>
   );
 }

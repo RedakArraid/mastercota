@@ -1,4 +1,4 @@
-/** Wave P2P helpers — côté API */
+/** Wave Business helpers — côté API */
 
 export function digitsOnly(phone: string) {
   return String(phone || "").replace(/\D/g, "");
@@ -10,21 +10,30 @@ export function normalizeWavePhone(phone: string): string | null {
   if (d.length < 8) return null;
   if (raw.startsWith("+")) return `+${d}`;
   if (d.startsWith("225") && d.length >= 13) return `+${d}`;
-  if (d.length === 10 && d.startsWith("0")) return `+225${d.slice(1)}`;
-  if (d.length === 9) return `+225${d}`;
+  if (d.length === 10 && d.startsWith("0")) return `+225${d}`;
   return `+${d}`;
 }
 
+/**
+ * Accepte un lien Wave Business :
+ * https://pay.wave.com/m/M_xxx…  ou  …/m/M_xxx/c/ci/
+ */
 export function normalizeWavePayLink(raw: string): string | null {
   const t = String(raw || "").trim();
   if (!t) return null;
   try {
     const url = new URL(t.startsWith("http") ? t : `https://${t}`);
-    if (!url.hostname.endsWith("wave.com")) return null;
-    if (!url.pathname.includes("/m/")) return null;
-    url.search = "";
-    url.hash = "";
-    return url.toString().replace(/\/$/, "");
+    const host = url.hostname.toLowerCase();
+    if (url.protocol !== "https:" || host !== "pay.wave.com" || url.username || url.password || url.port) return null;
+
+    const match = url.pathname.match(
+      /^\/m\/(M_[A-Za-z0-9_-]+)(?:\/c\/([a-z]{2}))?\/?$/i
+    );
+    if (!match) return null;
+
+    const merchantId = match[1];
+    const country = (match[2] || "ci").toLowerCase();
+    return `https://pay.wave.com/m/${merchantId}/c/${country}/`;
   } catch {
     return null;
   }

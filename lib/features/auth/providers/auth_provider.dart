@@ -1,16 +1,18 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../services/api_service.dart';
+import '../../../core/services/api_service.dart';
+import '../../cotisation/providers/cotisation_provider.dart';
 
-final authStateProvider = StateProvider<bool>((ref) => ApiService.isAuthenticated);
+final authStateProvider = Provider<bool>((ref) {
+  void changed() => ref.invalidateSelf();
+  ApiService.authChanges.addListener(changed);
+  ref.onDispose(() => ApiService.authChanges.removeListener(changed));
+  return ApiService.isAuthenticated;
+});
 
 final userProfileProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  if (!ApiService.isAuthenticated) return null;
-  try {
-    final res = await ApiService.get('/api/profile');
-    return res['user'] as Map<String, dynamic>?;
-  } catch (_) {
-    return null;
-  }
+  if (!ref.watch(authStateProvider)) return null;
+  final res = await ApiService.get('/api/profile');
+  return res['user'] as Map<String, dynamic>?;
 });
 
 class AuthNotifier extends StateNotifier<AsyncValue<void>> {
@@ -32,15 +34,17 @@ class AuthNotifier extends StateNotifier<AsyncValue<void>> {
   Future<bool> verifyOtp(String phone, String token) async {
     state = const AsyncValue.loading();
     try {
-      final res = await ApiService.post('/api/auth/verify-otp', body: {
-        'phone': phone,
-        'token': token,
-      });
+      final res = await ApiService.post(
+        '/api/auth/verify-otp',
+        body: {'phone': phone, 'token': token},
+      );
       final jwt = res['token'] as String?;
       if (jwt == null) throw Exception('Token manquant');
       await ApiService.setToken(jwt);
-      _ref.read(authStateProvider.notifier).state = true;
       _ref.invalidate(userProfileProvider);
+      _ref.invalidate(userCotisationsProvider);
+      _ref.invalidate(cotisationByIdProvider);
+      _ref.invalidate(contributionsProvider);
       state = const AsyncValue.data(null);
       return true;
     } catch (e, st) {
@@ -54,21 +58,26 @@ class AuthNotifier extends StateNotifier<AsyncValue<void>> {
       await ApiService.post('/api/auth/logout');
     } catch (_) {}
     await ApiService.setToken(null);
-    _ref.read(authStateProvider.notifier).state = false;
     _ref.invalidate(userProfileProvider);
+    _ref.invalidate(userCotisationsProvider);
+    _ref.invalidate(cotisationByIdProvider);
+    _ref.invalidate(contributionsProvider);
     state = const AsyncValue.data(null);
   }
 
   Future<void> updateProfile({String? name, String? avatarUrl}) async {
-    await ApiService.patch('/api/profile', body: {
-      if (name != null) 'name': name,
-      if (avatarUrl != null) 'avatar_url': avatarUrl,
-    });
+    await ApiService.patch(
+      '/api/profile',
+      body: {
+        if (name != null) 'name': name,
+        if (avatarUrl != null) 'avatar_url': avatarUrl,
+      },
+    );
     _ref.invalidate(userProfileProvider);
   }
 }
 
 final authNotifierProvider =
     StateNotifierProvider<AuthNotifier, AsyncValue<void>>(
-  (ref) => AuthNotifier(ref),
-);
+      (ref) => AuthNotifier(ref),
+    );

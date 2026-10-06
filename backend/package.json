@@ -4,10 +4,11 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "node --env-file-if-exists=.env --import tsx --watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "db:migrate": "psql \"$DATABASE_URL\" -f db/schema.sql"
+    "start": "node --env-file-if-exists=.env dist/server.js",
+    "db:migrate": "node --env-file-if-exists=.env scripts/migrate.mjs",
+    "test": "tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.14.3",

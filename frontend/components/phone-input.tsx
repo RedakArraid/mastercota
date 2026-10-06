@@ -42,13 +42,13 @@ export function PhoneInput({
         onValueChange={onCountryChange}
         disabled={disabled}
       >
-        <SelectTrigger className="h-9 w-[138px] shrink-0">
+        <SelectTrigger className="h-10 w-[7.25rem] shrink-0 sm:h-9 sm:w-[138px]">
           <span className="flex items-center gap-1.5 text-sm">
             <span aria-hidden>{country.flag}</span>
             <span className="font-medium">{country.dial}</span>
           </span>
         </SelectTrigger>
-        <SelectContent align="start" className="max-h-72 min-w-[260px]">
+        <SelectContent align="start" className="max-h-72 w-[min(100vw-2rem,20rem)] min-w-[min(100vw-2rem,16rem)]">
           {PAYSTACK_COUNTRIES.map((c) => (
             <SelectItem key={c.iso} value={c.iso}>
               <span className="flex items-center gap-2">

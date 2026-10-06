@@ -18,12 +18,27 @@ class HomeScreen extends ConsumerWidget {
   static String _todayLabel() {
     final now = DateTime.now();
     const days = [
-      'Lundi', 'Mardi', 'Mercredi', 'Jeudi',
-      'Vendredi', 'Samedi', 'Dimanche'
+      'Lundi',
+      'Mardi',
+      'Mercredi',
+      'Jeudi',
+      'Vendredi',
+      'Samedi',
+      'Dimanche',
     ];
     const months = [
-      'jan.', 'fév.', 'mar.', 'avr.', 'mai', 'juin',
-      'juil.', 'août', 'sep.', 'oct.', 'nov.', 'déc.'
+      'jan.',
+      'fév.',
+      'mar.',
+      'avr.',
+      'mai',
+      'juin',
+      'juil.',
+      'août',
+      'sep.',
+      'oct.',
+      'nov.',
+      'déc.',
     ];
     return '${days[now.weekday - 1]} ${now.day} ${months[now.month - 1]}';
   }
@@ -72,14 +87,10 @@ class HomeScreen extends ConsumerWidget {
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Logo placeholder
-                          Container(
-                            width: 24,
-                            height: 24,
-                            decoration: BoxDecoration(
-                              color: AppColors.ink,
-                              borderRadius: BorderRadius.circular(6),
-                            ),
+                          Image.asset(
+                            'assets/images/logo.png',
+                            width: 28,
+                            height: 28,
                           ),
                           const SizedBox(height: 12),
                           // Date
@@ -100,7 +111,11 @@ class HomeScreen extends ConsumerWidget {
                                 letterSpacing: -0.02 * 28,
                               ),
                               children: [
-                                const TextSpan(text: 'Bonjour, '),
+                                TextSpan(
+                                  text: firstName == null
+                                      ? 'Bonjour'
+                                      : 'Bonjour, ',
+                                ),
                                 if (firstName != null)
                                   TextSpan(
                                     text: firstName,
@@ -151,11 +166,15 @@ class HomeScreen extends ConsumerWidget {
               SliverToBoxAdapter(
                 child: profileAsync.maybeWhen(
                   data: (profile) {
-                    final sub = profile?['paystack_subaccount_id'] as String?;
-                    if (sub != null && sub.isNotEmpty) {
+                    final wave = profile == null
+                        ? null
+                        : profile['wave_payout_mode'] == 'business'
+                        ? profile['wave_pay_link']
+                        : profile['wave_phone'];
+                    if (wave is String && wave.isNotEmpty) {
                       return const SizedBox.shrink();
                     }
-                    return _PayoutWarningBanner()
+                    return const _PayoutWarningBanner()
                         .animate()
                         .fadeIn(delay: 100.ms)
                         .slideY(begin: -0.1, end: 0, curve: Curves.easeOut);
@@ -187,21 +206,6 @@ class HomeScreen extends ConsumerWidget {
                           onTap: () => context.push('/cotisation/create'),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: _ActionButton(
-                          label: 'Scanner',
-                          primary: false,
-                          onTap: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Scanner QR — bientôt disponible'),
-                                behavior: SnackBarBehavior.floating,
-                              ),
-                            );
-                          },
-                        ),
-                      ),
                     ],
                   ),
                 ).animate().fadeIn(delay: 200.ms),
@@ -222,10 +226,6 @@ class HomeScreen extends ConsumerWidget {
                           fontSize: 22,
                           letterSpacing: -0.01 * 22,
                         ),
-                      ),
-                      Text(
-                        'VOIR TOUT',
-                        style: AppTextStyles.caption,
                       ),
                     ],
                   ),
@@ -264,27 +264,29 @@ class HomeScreen extends ConsumerWidget {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: List.generate(
                           3,
-                          (i) => Container(
-                            width: 6,
-                            height: 6,
-                            margin:
-                                const EdgeInsets.symmetric(horizontal: 4),
-                            decoration: BoxDecoration(
-                              color: i == 1
-                                  ? AppColors.accentBright
-                                  : AppColors.paper2,
-                              shape: BoxShape.circle,
-                            ),
-                          )
-                              .animate(
-                                delay: Duration(milliseconds: i * 150),
-                                onPlay: (c) => c.repeat(reverse: true),
-                              )
-                              .scaleXY(
-                                begin: 0.4,
-                                end: 1.2,
-                                duration: 600.ms,
-                              ),
+                          (i) =>
+                              Container(
+                                    width: 6,
+                                    height: 6,
+                                    margin: const EdgeInsets.symmetric(
+                                      horizontal: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: i == 1
+                                          ? AppColors.accentBright
+                                          : AppColors.paper2,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  )
+                                  .animate(
+                                    delay: Duration(milliseconds: i * 150),
+                                    onPlay: (c) => c.repeat(reverse: true),
+                                  )
+                                  .scaleXY(
+                                    begin: 0.4,
+                                    end: 1.2,
+                                    duration: 600.ms,
+                                  ),
                         ),
                       ),
                     ),
@@ -304,8 +306,9 @@ class HomeScreen extends ConsumerWidget {
                       ),
                       child: Text(
                         'Erreur : $e',
-                        style: AppTextStyles.bodySmall
-                            .copyWith(color: AppColors.error),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          color: AppColors.error,
+                        ),
                         textAlign: TextAlign.center,
                       ),
                     ),
@@ -331,106 +334,100 @@ class _HeroCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = list.fold<double>(0, (s, c) => s + c.currentAmount);
     final active = list.where((c) => c.isActive).length;
-    final contributors = list.length;
+    final completed = list.where((c) => c.isCompleted).length;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-      child: Stack(
-        clipBehavior: Clip.hardEdge,
-        children: [
-          // Base navy card
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.ink,
-              borderRadius: BorderRadius.circular(22),
-            ),
-            padding: const EdgeInsets.fromLTRB(24, 26, 24, 22),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Eyebrow
-                Text(
-                  'TOTAL COLLECTÉ',
-                  style: AppTextStyles.caption.copyWith(
-                    color: Colors.white.withValues(alpha: 0.55),
-                    fontSize: 10,
+      child:
+          Stack(
+                clipBehavior: Clip.hardEdge,
+                children: [
+                  // Base navy card
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.ink,
+                      borderRadius: BorderRadius.circular(22),
+                    ),
+                    padding: const EdgeInsets.fromLTRB(24, 26, 24, 22),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Eyebrow
+                        Text(
+                          'TOTAL COLLECTÉ',
+                          style: AppTextStyles.caption.copyWith(
+                            color: Colors.white.withValues(alpha: 0.55),
+                            fontSize: 10,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        // Big amount
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              formatter.format(total),
+                              style: AppTextStyles.mono.copyWith(
+                                fontSize: 44,
+                                color: Colors.white,
+                                letterSpacing: -0.03 * 44,
+                                height: 1,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'F',
+                              style: AppTextStyles.bodySmall.copyWith(
+                                color: Colors.white.withValues(alpha: 0.55),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 22),
+                        // Stats row
+                        Row(
+                          children: [
+                            _HeroStat(
+                              value: active.toString(),
+                              label: 'Actives',
+                            ),
+                            _HeroDivider(),
+                            _HeroStat(
+                              value: list.length.toString(),
+                              label: 'Créées',
+                            ),
+                            _HeroDivider(),
+                            _HeroStat(
+                              value: completed.toString(),
+                              label: 'Objectifs atteints',
+                              accent: true,
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 14),
-                // Big amount
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(
-                      formatter.format(total),
-                      style: AppTextStyles.mono.copyWith(
-                        fontSize: 44,
-                        color: Colors.white,
-                        letterSpacing: -0.03 * 44,
-                        height: 1,
+                  // Accent corner circle overlay
+                  Positioned(
+                    top: -40,
+                    right: -40,
+                    child: Container(
+                      width: 140,
+                      height: 140,
+                      decoration: BoxDecoration(
+                        color: AppColors.accent.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      'F',
-                      style: AppTextStyles.bodySmall.copyWith(
-                        color: Colors.white.withValues(alpha: 0.55),
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 22),
-                // Stats row
-                Row(
-                  children: [
-                    _HeroStat(
-                      value: active.toString(),
-                      label: 'Cagnottes actives',
-                    ),
-                    _HeroDivider(),
-                    _HeroStat(
-                      value: contributors.toString(),
-                      label: 'Contributeurs',
-                    ),
-                    _HeroDivider(),
-                    _HeroStat(
-                      value: _toK(total, formatter),
-                      label: 'À reverser',
-                      accent: true,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          // Accent corner circle overlay
-          Positioned(
-            top: -40,
-            right: -40,
-            child: Container(
-              width: 140,
-              height: 140,
-              decoration: BoxDecoration(
-                color: AppColors.accent.withValues(alpha: 0.15),
-                shape: BoxShape.circle,
-              ),
-            ),
-          ),
-        ],
-      ).animate()
-          .fadeIn(delay: 150.ms)
-          .slideY(begin: 0.06, end: 0, curve: Curves.easeOutCubic),
+                  ),
+                ],
+              )
+              .animate()
+              .fadeIn(delay: 150.ms)
+              .slideY(begin: 0.06, end: 0, curve: Curves.easeOutCubic),
     );
-  }
-
-  String _toK(double amount, NumberFormat fmt) {
-    if (amount >= 1000) {
-      final k = (amount / 1000).round();
-      return '${k} K';
-    }
-    return fmt.format(amount);
   }
 }
 
@@ -474,11 +471,11 @@ class _HeroStat extends StatelessWidget {
 class _HeroDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
-        width: 1,
-        height: 32,
-        margin: const EdgeInsets.symmetric(horizontal: 20),
-        color: Colors.white.withValues(alpha: 0.15),
-      );
+    width: 1,
+    height: 32,
+    margin: const EdgeInsets.symmetric(horizontal: 20),
+    color: Colors.white.withValues(alpha: 0.15),
+  );
 }
 
 class _HeroCardSkeleton extends StatelessWidget {
@@ -486,15 +483,16 @@ class _HeroCardSkeleton extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-      child: Container(
-        height: 150,
-        decoration: BoxDecoration(
-          color: AppColors.paper2,
-          borderRadius: BorderRadius.circular(22),
-        ),
-      )
-          .animate(onPlay: (c) => c.repeat(reverse: true))
-          .shimmer(duration: 1200.ms, color: AppColors.line),
+      child:
+          Container(
+                height: 150,
+                decoration: BoxDecoration(
+                  color: AppColors.paper2,
+                  borderRadius: BorderRadius.circular(22),
+                ),
+              )
+              .animate(onPlay: (c) => c.repeat(reverse: true))
+              .shimmer(duration: 1200.ms, color: AppColors.line),
     );
   }
 }
@@ -585,7 +583,7 @@ class _PayoutWarningBanner extends StatelessWidget {
             Container(
               width: 18,
               height: 18,
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: AppColors.warn,
                 shape: BoxShape.circle,
               ),
@@ -603,7 +601,7 @@ class _PayoutWarningBanner extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Configurez votre compte de versement pour recevoir les fonds.',
+                'Configurez Wave pour recevoir vos contributions.',
                 style: AppTextStyles.bodySmall.copyWith(
                   color: AppColors.warn,
                   height: 1.4,
@@ -611,7 +609,7 @@ class _PayoutWarningBanner extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            Icon(
+            const Icon(
               Icons.arrow_forward_ios_rounded,
               color: AppColors.warn,
               size: 12,
