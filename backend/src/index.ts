@@ -353,7 +353,9 @@ app.patch("/api/cotisations/:id", async c => {
     }
     if (status === 'active' && cot.expired) { status = 'closed'; closeReason = 'expired'; }
     if (status === "active" && Number(cot.current_amount) >= target) status = "completed";
-    const { rows: updated } = await client.query(`UPDATE cotisations SET title=$1, description=$2, target_amount=$3, cover_url=$4, status=$5, settings=$6::jsonb, close_reason=$8, edit_version=edit_version+1 WHERE id=$7 RETURNING *`, [
+    const { rows: updated } = await client.query(`UPDATE cotisations AS c SET title=$1, description=$2, target_amount=$3, cover_url=$4, status=$5, settings=$6::jsonb, close_reason=$8, edit_version=c.edit_version+1
+      FROM users AS u WHERE c.id=$7 AND u.id=c.owner_id
+      RETURNING c.*, u.wave_phone AS owner_wave_phone, u.wave_pay_link AS owner_wave_pay_link, u.wave_payout_mode AS owner_wave_payout_mode, u.name AS owner_name`, [
       body.title === undefined ? cot.title : textField(body.title, "Titre", 160),
       body.description === undefined ? cot.description : textField(body.description, "Description", 5000, false) || null,
       target, body.cover_url === undefined ? cot.cover_url : optionalUrl(body.cover_url), status,

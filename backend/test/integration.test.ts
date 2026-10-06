@@ -473,3 +473,28 @@ test('closing an expired extension review does not apply the service or bypass i
   assert.equal((await activatePlatformPayment(ext.body.reference,successfulCharge(ext.body.reference))).already,true);
   assert.equal((await query('SELECT extension_count FROM cotisations WHERE id=$1',[cotisation.id])).rows[0].extension_count,0);
 });
+
+test('cotisation edits and status transitions preserve the owner Wave fields returned by GET', async () => {
+  const owner=await user(); const {cotisation}=await create(owner);
+  const fields=['owner_name','owner_wave_phone','owner_wave_pay_link','owner_wave_payout_mode'];
+  for(const mode of ['phone','business']) {
+    const profile=await request('/api/profile','PATCH',{
+      name:`Organisateur ${mode}`,wave_payout_mode:mode,wave_phone:'+2250700000000',wave_pay_link:'https://pay.wave.com/m/M_test/c/ci/',
+    },owner.token);
+    assert.equal(profile.status,200,JSON.stringify(profile.body));
+    for(const change of [{title:`Collecte ${mode}`},{status:'closed'},{status:'active'}]) {
+      const before=(await request(`/api/cotisations/${cotisation.id}`,'GET',undefined,owner.token)).body.cotisation;
+      const updated=await request(`/api/cotisations/${cotisation.id}`,'PATCH',{...change,expected_edit_version:before.edit_version},owner.token);
+      assert.equal(updated.status,200,JSON.stringify(updated.body));
+      for(const field of fields) {
+        assert.ok(Object.hasOwn(updated.body.cotisation,field),`PATCH must include ${field}`);
+        assert.equal(updated.body.cotisation[field],before[field]);
+      }
+      assert.equal(updated.body.cotisation.owner_name,`Organisateur ${mode}`);
+      assert.equal(updated.body.cotisation.owner_wave_payout_mode,mode);
+      assert.ok(updated.body.cotisation[mode==='phone'?'owner_wave_phone':'owner_wave_pay_link']);
+      const after=(await request(`/api/cotisations/${cotisation.id}`,'GET',undefined,owner.token)).body.cotisation;
+      assert.deepEqual(updated.body.cotisation,after);
+    }
+  }
+});
