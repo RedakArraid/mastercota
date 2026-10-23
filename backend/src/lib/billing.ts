@@ -64,7 +64,7 @@ export async function activatePlatformPayment(reference: string, charge: Verifie
 }
 
 function completedCheckout(payment: Record<string, any>) {
-  return { payment_required: false as const, reference: payment.paystack_reference as string, application_status: payment.application_status as string, review_reason: payment.review_reason as string | null, review_resolved_at: payment.review_resolved_at, review_resolution_note: payment.review_resolution_note };
+  return { payment_required: false as const, provider: (payment.provider ?? 'paystack') as string, reference: (payment.provider_reference ?? payment.paystack_reference) as string, application_status: payment.application_status as string, review_reason: payment.review_reason as string | null, review_resolved_at: payment.review_resolved_at, review_resolution_note: payment.review_resolution_note };
 }
 
 export async function initializePlatformFeePaystack(options: {
@@ -117,11 +117,11 @@ export async function initializePlatformFeePaystack(options: {
       if (ext.newDeadline < cot.today) throw new Error('La prolongation serait déjà expirée. Créez une nouvelle cotisation.');
       metadata = { ...metadata, new_deadline: ext.newDeadline };
     }
-    if (existing?.authorization_url) return { payment_required: true as const, authorization_url: existing.authorization_url as string, reference: existing.paystack_reference as string };
+    if (existing?.authorization_url) return { payment_required: true as const, provider: 'paystack' as const, authorization_url: existing.authorization_url as string, reference: existing.paystack_reference as string };
     const reference = existing?.paystack_reference ?? randomUUID();
     const amount = options.purpose === 'create' ? Number(cot.platform_fee_amount) : EXTENSION_FEE;
     const duration = options.purpose === 'create' ? Number(cot.duration_days) : EXTENSION_DAYS;
-    if (!existing) await client.query(`INSERT INTO platform_payments (id,user_id,cotisation_id,purpose,amount,duration_days,status,paystack_reference,currency,metadata) VALUES ($1::uuid,$2,$3,$4,$5,$6,'pending',$1::text,'XOF',$7::jsonb)`, [reference, options.userId, cot.id, options.purpose, amount, duration, JSON.stringify(metadata)]);
+    if (!existing) await client.query(`INSERT INTO platform_payments (id,user_id,cotisation_id,purpose,amount,duration_days,status,paystack_reference,provider,provider_reference,currency,metadata) VALUES ($1::uuid,$2,$3,$4,$5,$6,'pending',$1::text,'paystack',$1::text,'XOF',$7::jsonb)`, [reference, options.userId, cot.id, options.purpose, amount, duration, JSON.stringify(metadata)]);
     await client.query(`UPDATE cotisations SET platform_fee_reference=$1 WHERE id=$2`, [reference, cot.id]);
     const { ok, data } = await paystackFetch('/transaction/initialize', { method: 'POST', body: JSON.stringify({
       email: `${options.phone.replace(/\D/g, '')}@mastercota.com`, amount: amount * 100, currency: 'XOF', reference,
@@ -134,7 +134,7 @@ export async function initializePlatformFeePaystack(options: {
     await client.query(`UPDATE platform_payments SET authorization_url=$2 WHERE id=$1`, [reference, url.toString()]);
     const { rows: paid } = await client.query(`SELECT * FROM platform_payments WHERE cotisation_id=$1 AND purpose=$2 AND status='paid' AND (application_status<>'review_required' OR review_resolved_at IS NULL) LIMIT 1`, [cot.id, options.purpose]);
     if (paid[0]) return completedCheckout(paid[0]);
-    return { payment_required: true as const, authorization_url: url.toString(), reference };
+    return { payment_required: true as const, provider: 'paystack' as const, authorization_url: url.toString(), reference };
   } finally {
     await client.query('SELECT pg_advisory_unlock(hashtextextended($1, 0))', [lock]).catch(() => {});
     client.release();
