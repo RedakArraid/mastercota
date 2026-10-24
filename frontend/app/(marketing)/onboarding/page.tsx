@@ -21,7 +21,7 @@ const slides = [
     title: "Connexion WhatsApp",
     lead: "Pas de mot de passe. Un code suffit.",
     body: "Vous entrez votre numéro. Mastercota envoie un code à 6 chiffres sur WhatsApp. Vous le saisissez et vous êtes connecté.",
-    detail: "Astuce : le même numéro que votre Wave simplifie la suite.",
+    detail: "Utilisez un numéro que vous contrôlez et gardez accès à WhatsApp pour recevoir vos codes de connexion.",
   },
   {
     icon: Wallet,
