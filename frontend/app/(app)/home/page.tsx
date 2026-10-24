@@ -142,10 +142,11 @@ export default async function HomePage() {
               <AlertCircle className="size-5" />
             </span>
             <div>
-              <p className="font-bold text-ink">Configurez votre réception Wave</p>
+              <p className="font-bold text-ink">Configurez la réception des contributions</p>
               <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                Vos contributeurs pourront vous payer dès que votre lien Wave
-                Business ou votre numéro Wave sera renseigné.
+                Indiquez où vos participants doivent envoyer leurs contributions.
+                Aujourd’hui, Mastercota prend en charge Wave Business ou votre
+                numéro Wave.
               </p>
             </div>
           </div>
