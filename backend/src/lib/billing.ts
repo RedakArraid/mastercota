@@ -220,6 +220,7 @@ export async function initializePlatformFeePispi(options: {
       else throw new Error('Un paiement via un autre moyen est déjà en cours. Terminez-le ou attendez sa résolution avant de choisir PI-SPI.');
     }
 
+    let existingStatus: string | null = null;
     if (existing) {
       try {
         const remote = await getPispiRequestToPay(existing.provider_reference);
@@ -236,12 +237,7 @@ export async function initializePlatformFeePispi(options: {
           );
           existing = undefined;
         } else {
-          return {
-            payment_required: true as const,
-            provider: 'pispi' as const,
-            provider_status: status,
-            reference: existing.provider_reference as string,
-          };
+          existingStatus = status;
         }
       } catch (error) {
         if (!(error instanceof PispiApiError) || error.status !== 404) {
@@ -267,6 +263,15 @@ export async function initializePlatformFeePispi(options: {
       if (!ext.ok) throw new Error(ext.error);
       if (ext.newDeadline < cot.today) throw new Error('La prolongation serait déjà expirée. Créez une nouvelle cotisation.');
       metadata = { ...metadata, new_deadline: ext.newDeadline };
+    }
+
+    if (existing && existingStatus) {
+      return {
+        payment_required: true as const,
+        provider: 'pispi' as const,
+        provider_status: existingStatus,
+        reference: existing.provider_reference as string,
+      };
     }
 
     const reference = existing?.provider_reference ?? randomUUID();
