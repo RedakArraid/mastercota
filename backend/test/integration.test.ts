@@ -79,6 +79,8 @@ beforeEach(async () => {
   charges.clear(); initializeCalls = 0; lostInitializeResponse = false; failVerification = false; waitForFullPool = false;
   pispiRequests.clear(); pispiTokenCalls = 0; resetPispiTokenCacheForTests();
   process.env.PLATFORM_PAYMENT_PRIMARY = 'paystack';
+  await query("UPDATE platform_payment_settings SET active_provider='paystack',updated_by=NULL,updated_at=now() WHERE id=1");
+  await query("DELETE FROM platform_payment_provider_events");
 });
 after(async () => { globalThis.fetch = originalFetch; await pool.end(); });
 async function user(phone = '+2250700000000') {
