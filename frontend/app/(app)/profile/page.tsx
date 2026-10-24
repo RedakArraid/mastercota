@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
 import { LogOut, ShieldCheck, Trash2, UserRound, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import type { SiteConfig, UserProfile } from "@/lib/types";
 
 export default function ProfilePage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [config, setConfig] = useState<SiteConfig | null>(null);
   const [name, setName] = useState("");
@@ -30,6 +31,10 @@ export default function ProfilePage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteText, setDeleteText] = useState("");
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.get("delete") === "1") setDeleteOpen(true);
+  }, [searchParams]);
 
   useEffect(() => {
     async function load() {
