@@ -85,6 +85,17 @@ Les prestataires externes peuvent conserver leurs propres traces de transaction 
 
 ## App Store Privacy Manifest
 
-Le code applicatif Mastercota n'ajoute pas volontairement de Required Reason API native.
+L'application iOS embarque `ios/Runner/PrivacyInfo.xcprivacy`.
 
-Les plugins Flutter doivent fournir leurs propres manifestes lorsque requis par Apple. Avant la première soumission App Store, générer l'archive Xcode et examiner le rapport de confidentialité agrégé. Toute API à raison obligatoire détectée dans le code applicatif doit être déclarée avec une raison Apple approuvée avant l'upload.
+Le manifeste déclare :
+- nom ;
+- numéro de téléphone ;
+- identifiant de compte ;
+- contenu utilisateur ;
+- historique des forfaits Mastercota.
+
+Ces catégories sont déclarées comme liées à l'utilisateur, utilisées pour la fonctionnalité de l'application et non utilisées pour le tracking.
+
+Les identifiants de carte ou de compte de paiement saisis directement chez un prestataire ne sont pas déclarés comme collectés par Mastercota, car ils ne sont pas accessibles au développeur.
+
+Le code applicatif Mastercota n'ajoute pas volontairement de Required Reason API native. Les plugins Flutter doivent fournir leurs propres manifestes lorsque requis par Apple. Avant chaque soumission App Store, générer l'archive Xcode et examiner le rapport de confidentialité agrégé. Toute API à raison obligatoire détectée dans le code applicatif doit être déclarée avec une raison Apple approuvée avant l'upload.
