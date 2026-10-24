@@ -69,7 +69,7 @@ export default async function LandingPage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
-                <Link href="/frais">{landing.cta_secondary}</Link>
+                <Link href="/comment-ca-marche">{landing.cta_secondary}</Link>
               </Button>
             </div>
 
@@ -131,7 +131,7 @@ export default async function LandingPage() {
                   {[
                     ["68 %", "atteint"],
                     ["42", "contributions"],
-                    ["0 %", "commission"],
+                    ["0 %", "Mastercota"],
                   ].map(([value, label]) => (
                     <div key={label} className="rounded-xl bg-white/[0.07] px-2 py-3">
                       <p className="text-sm font-bold text-gold-bright">{value}</p>
@@ -153,7 +153,7 @@ export default async function LandingPage() {
                   <Wallet className="size-4 text-primary" />
                   <p className="mt-2 text-sm font-bold text-ink">Suivi centralisé</p>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    Qui a payé, combien et où en est l’objectif.
+                    Qui a contribué, combien et où en est l’objectif.
                   </p>
                 </div>
               </div>
