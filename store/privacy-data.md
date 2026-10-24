@@ -72,7 +72,9 @@ Mastercota ne collecte pas les identifiants de carte ou secrets Mobile Money sai
 
 URL publique : https://mastercota.com/suppression-compte
 
-La suppression efface le compte, ses cotisations, les OTP, l'éligibilité liée au téléphone, les paiements Mastercota liés au compte via cascade et les notifications.
+La suppression efface le compte, ses cotisations, les OTP, le numéro de téléphone en clair utilisé pour l'éligibilité, les paiements Mastercota liés au compte via cascade et les notifications.
+
+Si la première cotisation offerte a déjà été utilisée, Mastercota conserve uniquement une empreinte HMAC du numéro pour empêcher qu'une suppression puis recréation du compte réinitialise cette offre. Cette empreinte ne contient pas le numéro en clair et est utilisée uniquement pour la prévention d'abus.
 
 Les contributions confirmées dans les cotisations d'autres organisateurs peuvent être conservées pour maintenir leur comptabilité, mais :
 - nom -> Compte supprimé ;
