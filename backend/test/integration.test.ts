@@ -132,6 +132,7 @@ test('OTP requires issuance, limits guesses, expires and cannot be reused', asyn
 test('account deletion removes owned data and anonymizes contributions kept in other cotisations', async () => {
   const owner = await user('+2250700000042');
   const other = await user('+2250500000042');
+  await create(owner);
   const owned = await create(owner, false);
   const otherCreated = await create(other);
 
