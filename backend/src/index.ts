@@ -26,6 +26,7 @@ import {
   activatePispiPlatformPayment,
   deadlineFromDuration,
   freeEligibleForPhone,
+  phoneEntitlementFingerprint,
   getOwnerPhone,
   initializePlatformFeePaystack,
   initializePlatformFeePispi,
@@ -216,7 +217,16 @@ app.post("/api/cotisations", async c => {
     if (!(mode === "business" ? user.wave_pay_link : user.wave_phone)) throw new HTTPException(400, { message: "Configurez votre réception Wave avant de créer une cotisation" });
     await client.query("INSERT INTO phone_entitlements (phone) VALUES ($1) ON CONFLICT DO NOTHING", [user.phone]);
     const { rows: entitlements } = await client.query("SELECT * FROM phone_entitlements WHERE phone = $1 FOR UPDATE", [user.phone]);
-    const quote = quoteDuration({ durationDays: body.duration_days, freeEligible: entitlements[0].free_cotisations_used < 1, useFree: body.use_free === true });
+    const fingerprint = phoneEntitlementFingerprint(user.phone);
+    const { rows: retainedFree } = await client.query(
+      "SELECT 1 FROM free_cotisation_history WHERE phone_fingerprint=$1",
+      [fingerprint]
+    );
+    const quote = quoteDuration({
+      durationDays: body.duration_days,
+      freeEligible: entitlements[0].free_cotisations_used < 1 && retainedFree.length === 0,
+      useFree: body.use_free === true,
+    });
     if (!quote || (body.use_free && !quote.isFree)) throw new HTTPException(400, { message: "Offre gratuite déjà utilisée ou durée invalide (1 à 60 jours)" });
     const { rows } = await client.query(`INSERT INTO cotisations (title,description,target_amount,deadline,owner_id,cover_url,slug,settings,duration_days,starts_at,platform_fee_amount,platform_fee_status,is_free_tier,status,request_id,request_payload)
       VALUES ($1,$2,$3,CURRENT_DATE + $4::int,$5,$6,$7,$8::jsonb,$4,CURRENT_DATE,$9,$10,$11,$12,$13,$14::jsonb) RETURNING *`,
@@ -906,8 +916,19 @@ app.delete("/api/profile", async c => {
       [user.phone]
     );
 
-    // Phone-based authentication and free-tier history are personal data too.
+    // Delete raw phone authentication data. If the free offer was already used,
+    // retain only a keyed fingerprint so deleting/recreating an account cannot reset eligibility.
     await client.query("DELETE FROM otp_codes WHERE phone=$1", [user.phone]);
+    const { rows: entitlements } = await client.query(
+      "SELECT free_cotisations_used FROM phone_entitlements WHERE phone=$1 FOR UPDATE",
+      [user.phone]
+    );
+    if (Number(entitlements[0]?.free_cotisations_used ?? 0) > 0) {
+      await client.query(
+        "INSERT INTO free_cotisation_history(phone_fingerprint) VALUES($1) ON CONFLICT DO NOTHING",
+        [phoneEntitlementFingerprint(user.phone)]
+      );
+    }
     await client.query("DELETE FROM phone_entitlements WHERE phone=$1", [user.phone]);
 
     // users -> cotisations / platform_payments / notifications are configured with cascading deletes.
