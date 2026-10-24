@@ -28,23 +28,23 @@ export type SiteChrome = {
 };
 
 const defaultLanding: LandingContent = {
-  hero_title: "Une cotisation WhatsApp. L’argent arrive sur votre Wave.",
+  hero_title: "Organisez votre cotisation. Gardez le suivi clair.",
   hero_subtitle:
-    "Créez une page, partagez le lien. Vos proches paient via Wave. Mastercota prend 0 % sur ce qu’ils envoient.",
-  cta_primary: "Créer ma cotisation (gratuit 35 jours)",
-  cta_secondary: "Voir les frais",
+    "Créez une page, partagez-la dans votre groupe et suivez les contributions au même endroit. L’argent va directement à l’organisateur : Mastercota prend 0 % sur les contributions.",
+  cta_primary: "Créer ma première cotisation",
+  cta_secondary: "Comment ça marche",
   features: [
     {
-      title: "Lien WhatsApp",
-      body: "Partagez votre page. Vos proches contribuent sans créer de compte.",
+      title: "Un lien pour le groupe",
+      body: "Partagez votre page dans WhatsApp ou ailleurs. Les participants contribuent sans créer de compte.",
     },
     {
-      title: "Argent sur Wave",
-      body: "Les contributions vont directement sur votre Wave. Mastercota ne garde rien.",
+      title: "Fonds versés directement",
+      body: "Les contributions sont envoyées directement à l’organisateur. Mastercota ne conserve pas l’argent collecté.",
     },
     {
-      title: "Suivi simple",
-      body: "Vous confirmez chaque paiement. Le total de la cotisation se met à jour.",
+      title: "Suivi et confirmation",
+      body: "Chaque transfert signalé reste visible jusqu’à sa confirmation par l’organisateur.",
     },
   ],
 };
