@@ -65,6 +65,19 @@ class AuthNotifier extends StateNotifier<AsyncValue<void>> {
     state = const AsyncValue.data(null);
   }
 
+  Future<void> deleteAccount() async {
+    await ApiService.delete(
+      '/api/profile',
+      body: const {'confirmation': 'SUPPRIMER'},
+    );
+    await ApiService.setToken(null);
+    _ref.invalidate(userProfileProvider);
+    _ref.invalidate(userCotisationsProvider);
+    _ref.invalidate(cotisationByIdProvider);
+    _ref.invalidate(contributionsProvider);
+    state = const AsyncValue.data(null);
+  }
+
   Future<void> updateProfile({String? name, String? avatarUrl}) async {
     await ApiService.patch(
       '/api/profile',
