@@ -62,6 +62,8 @@ jobs:
           keyPassword=$KEY_PASSWORD
           EOF
       - run: flutter pub get
+      - name: Generate app icons
+        run: dart run flutter_launcher_icons
       - run: flutter analyze
       - run: flutter test
       - name: Build signed Play Store bundle
@@ -175,6 +177,8 @@ jobs:
           </plist>
           EOF
       - run: flutter pub get
+      - name: Generate app icons
+        run: dart run flutter_launcher_icons
       - name: Build signed App Store IPA
         run: |
           flutter build ipa --release \
