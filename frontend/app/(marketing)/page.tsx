@@ -37,7 +37,7 @@ export default async function LandingPage() {
             </div>
 
             <div
-              className="mc-enter inline-flex items-center gap-2 rounded-full border border-primary/20 bg-white/75 px-3 py-1.5 text-xs font-bold text-ink shadow-sm backdrop-blur"
+              className="mc-enter inline-flex items-center gap-2 rounded-full border border-primary/20 bg-white/[0.07]5 px-3 py-1.5 text-xs font-bold text-ink shadow-sm backdrop-blur"
               style={{ ["--mc-delay" as string]: "80ms" }}
             >
               <Sparkles className="size-3.5 text-primary" />
@@ -97,7 +97,7 @@ export default async function LandingPage() {
             style={{ ["--mc-delay" as string]: "220ms" }}
           >
             <div className="absolute -inset-6 rounded-[2.5rem] bg-[radial-gradient(circle_at_50%_40%,rgb(244_184_41_/_22%),transparent_65%)] blur-2xl" />
-            <div className="relative overflow-hidden rounded-[2rem] border border-white/80 bg-white/92 p-4 shadow-[0_40px_90px_-46px_rgb(20_50_104_/_65%)] backdrop-blur sm:p-6">
+            <div className="relative overflow-hidden rounded-[2rem] border border-white/[0.08]0 bg-white/92 p-4 shadow-[0_40px_90px_-46px_rgb(20_50_104_/_65%)] backdrop-blur sm:p-6">
               <div className="rounded-[1.55rem] bg-[linear-gradient(145deg,#143268_0%,#204a86_100%)] p-5 text-white sm:p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -133,7 +133,7 @@ export default async function LandingPage() {
                     ["42", "contributions"],
                     ["0 %", "commission"],
                   ].map(([value, label]) => (
-                    <div key={label} className="rounded-xl bg-white/7 px-2 py-3">
+                    <div key={label} className="rounded-xl bg-white/[0.07] px-2 py-3">
                       <p className="text-sm font-bold text-gold-bright">{value}</p>
                       <p className="mt-0.5 text-[10px] text-white/45">{label}</p>
                     </div>
