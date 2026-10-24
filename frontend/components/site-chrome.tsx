@@ -87,8 +87,8 @@ export function SiteFooter({
         <div>
           <Logo href="/" size="sm" />
           <p className="mt-3 max-w-xs text-sm leading-relaxed text-muted-foreground">
-            Cotisations communautaires : 0&nbsp;% sur les contributions, argent
-            reçu directement sur Wave.
+            Cotisations communautaires : une page à partager, un suivi clair
+            et 0&nbsp;% prélevé par Mastercota sur les contributions.
           </p>
         </div>
         <div>
@@ -141,7 +141,7 @@ export function SiteFooter({
       <Separator />
       <div className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 text-xs text-muted-foreground sm:flex-row sm:flex-wrap sm:items-center sm:justify-between md:px-6">
         <span>© {new Date().getFullYear()} Mastercota</span>
-        <span>0&nbsp;% sur les dons · frais de durée pour l’organisateur</span>
+        <span>0&nbsp;% sur les contributions · forfait payé par l’organisateur</span>
       </div>
     </footer>
   );
