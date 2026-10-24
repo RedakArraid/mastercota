@@ -41,23 +41,24 @@ class NavigationShell extends StatelessWidget {
 
           // ── Pill nav bar (navy, gold active) ──────────────────
           Positioned(
-            left: 16,
-            right: 16,
-            bottom: 24,
+            left: 14,
+            right: 14,
+            bottom: 16,
             child: Container(
-              height: 60,
+              height: 68,
               decoration: BoxDecoration(
                 color: AppColors.ink,
                 borderRadius: BorderRadius.circular(100),
                 boxShadow: [
                   BoxShadow(
                     color: AppColors.ink.withValues(alpha: 0.25),
-                    blurRadius: 20,
-                    offset: const Offset(0, 8),
+                    blurRadius: 30,
+                    spreadRadius: -6,
+                    offset: const Offset(0, 14),
                   ),
                 ],
               ),
-              padding: const EdgeInsets.all(6),
+              padding: const EdgeInsets.all(7),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
@@ -67,7 +68,7 @@ class NavigationShell extends StatelessWidget {
                     onTap: () => _onItemTapped(context, 0),
                   ),
                   _NavItem(
-                    label: '＋ Créer',
+                    label: 'Créer',
                     isSelected: selected == 1,
                     onTap: () => _onItemTapped(context, 1),
                   ),
@@ -103,8 +104,8 @@ class _NavItem extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 0),
-        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 0),
+        height: 54,
         decoration: BoxDecoration(
           color: isSelected ? AppColors.accentBright : Colors.transparent,
           borderRadius: BorderRadius.circular(100),
@@ -113,8 +114,8 @@ class _NavItem extends StatelessWidget {
           child: Text(
             label,
             style: AppTextStyles.bodySmall.copyWith(
-              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.6),
-              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+              color: isSelected ? AppColors.ink : Colors.white.withValues(alpha: 0.62),
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
               fontSize: 13,
             ),
           ),
