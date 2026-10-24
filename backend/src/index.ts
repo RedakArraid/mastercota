@@ -608,17 +608,10 @@ app.get("/api/platform-payments/verify/:reference", async c => {
   });
 });
 
-function requestedPlatformProvider(body: Record<string, unknown>): PlatformPaymentProvider {
-  const requested = body.provider;
-  if (requested === undefined || requested === null || requested === "") return primaryPlatformPaymentProvider();
-  if (requested !== "pispi" && requested !== "paystack") throw new HTTPException(400, { message: "Fournisseur de paiement invalide" });
-  return requested;
-}
-
-function pispiPayerAlias(body: Record<string, unknown>): string {
-  const value = typeof body.payer_alias === "string" ? body.payer_alias.trim() : "";
+function paymentIdentifier(body: Record<string, unknown>): string {
+  const value = typeof body.payment_identifier === "string" ? body.payment_identifier.trim() : "";
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
-    throw new HTTPException(400, { message: "Alias PI-SPI payeur UUID requis" });
+    throw new HTTPException(400, { message: "Identifiant de paiement requis" });
   }
   return value;
 }
@@ -627,9 +620,9 @@ app.post("/api/cotisations/:id/extend", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
   const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-  const provider = requestedPlatformProvider(body);
+  const provider = await activePlatformPaymentProvider();
   try { assertPlatformPaymentProviderAvailable(provider); }
-  catch (e) { return c.json({ error: e instanceof Error ? e.message : "Paiement indisponible" }, 400); }
+  catch { return c.json({ error: "Paiement temporairement indisponible" }, 503); }
 
   const id = c.req.param("id");
   const { rows: owned } = await query<{
@@ -658,7 +651,7 @@ app.post("/api/cotisations/:id/extend", async (c) => {
           userId: session.id,
           cotisationId: id,
           purpose: "extend",
-          payerAlias: pispiPayerAlias(body),
+          payerAlias: paymentIdentifier(body),
           metadata: { new_deadline: ext.newDeadline },
         })
       : await (async () => {
@@ -676,13 +669,18 @@ app.post("/api/cotisations/:id/extend", async (c) => {
           });
         })();
     return c.json({
-      ...payment,
+      ...publicCheckout(payment),
       fee: ext.fee,
       extension_days: EXTENSION_DAYS,
       new_deadline: ext.newDeadline,
     });
   } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : "Erreur" }, 400);
+    const message = e instanceof Error ? e.message : "Erreur";
+    return c.json({
+      error: /autre moyen|prestataire|PI-SPI|Paystack/i.test(message)
+        ? "Un paiement est déjà en cours ou temporairement indisponible. Réessayez plus tard."
+        : message,
+    }, 400);
   }
 });
 
@@ -690,9 +688,9 @@ app.post("/api/cotisations/:id/pay-fee", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
   const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-  const provider = requestedPlatformProvider(body);
+  const provider = await activePlatformPaymentProvider();
   try { assertPlatformPaymentProviderAvailable(provider); }
-  catch (e) { return c.json({ error: e instanceof Error ? e.message : "Paiement indisponible" }, 400); }
+  catch { return c.json({ error: "Paiement temporairement indisponible" }, 503); }
 
   const id = c.req.param("id");
   const { rows: owned } = await query<{
@@ -719,7 +717,7 @@ app.post("/api/cotisations/:id/pay-fee", async (c) => {
           userId: session.id,
           cotisationId: id,
           purpose: "create",
-          payerAlias: pispiPayerAlias(body),
+          payerAlias: paymentIdentifier(body),
         })
       : await (async () => {
           const phone = await getOwnerPhone(session.id);
@@ -734,9 +732,14 @@ app.post("/api/cotisations/:id/pay-fee", async (c) => {
             callbackPath: `/cotisation/${id}/frais`,
           });
         })();
-    return c.json({ ...payment, fee });
+    return c.json({ ...publicCheckout(payment), fee });
   } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : "Erreur" }, 400);
+    const message = e instanceof Error ? e.message : "Erreur";
+    return c.json({
+      error: /autre moyen|prestataire|PI-SPI|Paystack/i.test(message)
+        ? "Un paiement est déjà en cours ou temporairement indisponible. Réessayez plus tard."
+        : message,
+    }, 400);
   }
 });
 
