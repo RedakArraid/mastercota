@@ -179,7 +179,9 @@ export default async function PublicContributionPage({ params }: Props) {
               <div className="rounded-2xl bg-white/75 px-3 py-3 text-sm">
                 <Users className="mx-auto size-4 text-primary" />
                 <p className="mt-1.5 font-semibold text-ink">
-                  {contributions.length} contribution{contributions.length > 1 ? "s" : ""}
+                  {showContributors
+                    ? `${contributions.length} contribution${contributions.length > 1 ? "s" : ""}`
+                    : "Suivi organisé"}
                 </p>
               </div>
             </div>
