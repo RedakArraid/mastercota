@@ -35,7 +35,7 @@ function FeeReturnInner() {
     (async () => {
       try {
         const data = await api<{
-          paystack_status?: string;
+          payment_status?: "pending" | "paid" | "failed";
           payment?: {
             status: string;
             amount: string | number;
@@ -66,7 +66,7 @@ function FeeReturnInner() {
         } else if (data.payment?.status === "paid" && data.payment.application_status === "review_required") {
           setState("review");
           setMessage("Votre paiement a été reçu, mais le service n’a pas pu être appliqué. Ne payez pas une seconde fois. Contactez le support avec la référence ci-dessous pour régulariser ce paiement.");
-        } else if (["failed", "abandoned", "reversed"].includes(data.paystack_status ?? "") || data.payment?.status === "failed") {
+        } else if (data.payment_status === "failed" || data.payment?.status === "failed") {
           setState("failed");
           setMessage("Paiement non effectué. Vous pouvez reprendre le paiement depuis la cotisation.");
         } else {
