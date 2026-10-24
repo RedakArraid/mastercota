@@ -117,8 +117,14 @@ Les anciens paiements Paystack de contribution peuvent encore être vérifiés ;
 
 ## Livraison mobile
 
-Android : copier `android/key.properties.example` vers `android/key.properties`, renseigner le keystore de publication puis exécuter `flutter build appbundle --release --dart-define=API_BASE_URL=https://mastercota.com`. La compilation release refuse une signature manquante au lieu d’utiliser la clé debug. Les fichiers de signature sont exclus de Git.
+Le projet produit Android et iOS à partir de la même application Flutter, avec les identifiants `app.mastercota.mastercota`.
 
-iOS : sélectionner l’équipe Apple et les profils de distribution dans Xcode, puis `flutter build ipa --release --dart-define=API_BASE_URL=https://mastercota.com`. La capacité Keychain est déclarée. Vérifier sur un appareil réel l’OTP, les deux modes Wave et le retour de paiement avant distribution.
+La CI vérifie désormais un AAB Android release et un build iOS Release sans signature, en plus de `flutter analyze` et `flutter test`. La workflow manuelle **Mobile Release** génère les binaires signés lorsque les secrets Google/Apple sont configurés. Elle peut ensuite envoyer Android vers **Google Play Internal Testing** et iOS vers **App Store Connect / TestFlight** ; elle ne publie jamais automatiquement une version grand public.
+
+Les liens publics `https://mastercota.com/c/...` sont préparés comme Android App Links et iOS Universal Links. Le site sert les fichiers `.well-known` requis à partir des identifiants de signature configurés en production.
+
+La suppression de compte est disponible dans l’application et sur le web, avec une ressource publique à `/suppression-compte`. Une page de support publique est disponible à `/p/support`.
+
+Procédure complète, secrets, recette appareils réels et checklist stores : [docs/mobile-release.md](docs/mobile-release.md).
 
 Les textes légaux, l’identité de l’éditeur et les coordonnées de support doivent être renseignés avec les informations réelles via le CMS avant publication. Aucune identité d’entreprise ou validation réglementaire n’est inventée dans le dépôt.

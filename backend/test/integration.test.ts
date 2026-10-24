@@ -75,7 +75,7 @@ globalThis.fetch = async (input, init) => {
   return charges.has(reference) ? Response.json({ status: true, data: charges.get(reference) }) : Response.json({ status: false, message: 'Transaction reference not found' }, { status: 404 });
 };
 beforeEach(async () => {
-  await query('TRUNCATE users, otp_codes, phone_entitlements, request_limits RESTART IDENTITY CASCADE');
+  await query('TRUNCATE users, otp_codes, phone_entitlements, free_cotisation_history, request_limits RESTART IDENTITY CASCADE');
   charges.clear(); initializeCalls = 0; lostInitializeResponse = false; failVerification = false; waitForFullPool = false;
   pispiRequests.clear(); pispiTokenCalls = 0; resetPispiTokenCacheForTests();
   process.env.PLATFORM_PAYMENT_PRIMARY = 'paystack';
@@ -127,6 +127,75 @@ test('OTP requires issuance, limits guesses, expires and cannot be reused', asyn
   assert.equal((await request('/api/auth/me', 'GET', undefined, login.body.token)).status, 200);
   await request('/api/auth/logout', 'POST', {}, login.body.token);
   assert.equal((await request('/api/auth/me', 'GET', undefined, login.body.token)).status, 401);
+});
+
+test('account deletion removes owned data and anonymizes contributions kept in other cotisations', async () => {
+  const owner = await user('+2250700000042');
+  const other = await user('+2250500000042');
+  await create(owner);
+  const owned = await create(owner, false);
+  const otherCreated = await create(other);
+
+  await query(
+    "INSERT INTO otp_codes(phone,code_hash,expires_at) VALUES($1,'x',now()+interval '10 minutes')",
+    [owner.phone]
+  );
+  const contribution = await request(
+    `/api/cotisations/${otherCreated.cotisation.id}/contributions`,
+    'POST',
+    {
+      request_id: randomUUID(),
+      contributor_name: 'Compte à supprimer',
+      contributor_phone: owner.phone,
+      amount: 5000,
+      payment_method: 'manual',
+      note: 'Information personnelle',
+    },
+    other.token
+  );
+  assert.equal(contribution.status, 201);
+
+  const refused = await request('/api/profile', 'DELETE', { confirmation: 'non' }, owner.token);
+  assert.equal(refused.status, 400);
+  assert.equal(Number((await query('SELECT count(*) FROM users WHERE id=$1', [owner.id])).rows[0].count), 1);
+
+  const deleted = await request('/api/profile', 'DELETE', { confirmation: 'SUPPRIMER' }, owner.token);
+  assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
+  assert.equal(deleted.body.ok, true);
+  assert.equal(Number((await query('SELECT count(*) FROM users WHERE id=$1', [owner.id])).rows[0].count), 0);
+  assert.equal(Number((await query('SELECT count(*) FROM cotisations WHERE owner_id=$1', [owner.id])).rows[0].count), 0);
+  assert.equal(Number((await query('SELECT count(*) FROM platform_payments WHERE user_id=$1', [owner.id])).rows[0].count), 0);
+  assert.equal(Number((await query('SELECT count(*) FROM phone_entitlements WHERE phone=$1', [owner.phone])).rows[0].count), 0);
+  assert.equal(Number((await query('SELECT count(*) FROM free_cotisation_history')).rows[0].count), 1);
+  assert.equal(Number((await query("SELECT count(*) FROM free_cotisation_history WHERE phone_fingerprint LIKE '%2250700000042%'")).rows[0].count), 0);
+  assert.equal(Number((await query('SELECT count(*) FROM otp_codes WHERE phone=$1', [owner.phone])).rows[0].count), 0);
+  assert.equal((await request('/api/auth/me', 'GET', undefined, owner.token)).status, 401);
+
+  const kept = (await query(
+    'SELECT contributor_name,contributor_phone,note,status,amount FROM contributions WHERE id=$1',
+    [contribution.body.contribution.id]
+  )).rows[0];
+  assert.equal(kept.contributor_name, 'Compte supprimé');
+  assert.match(kept.contributor_phone, /^deleted:/);
+  assert.equal(kept.note, null);
+  assert.equal(kept.status, 'paid');
+  assert.equal(Number(kept.amount), 5000);
+  assert.equal(
+    Number((await query('SELECT current_amount FROM cotisations WHERE id=$1', [otherCreated.cotisation.id])).rows[0].current_amount),
+    5000
+  );
+  assert.ok(owned.cotisation.id);
+
+  const recreated = await user(owner.phone);
+  const repeatFree = await request('/api/cotisations', 'POST', {
+    request_id: randomUUID(),
+    title: 'Nouvelle offre gratuite',
+    target_amount: 10000,
+    duration_days: 35,
+    use_free: true,
+  }, recreated.token);
+  assert.equal(repeatFree.status, 400);
+  assert.match(repeatFree.body.error, /gratuite|utilisée/i);
 });
 
 test('production rejects development OTP and weak secrets; Wave preserves CI leading zero', () => {

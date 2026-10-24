@@ -1,5 +1,13 @@
 name: Verify
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
   web-api:
     runs-on: ubuntu-latest
@@ -31,13 +39,51 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with: { name: browser-failures, path: 'frontend/test-results/' }
-  mobile:
+
+  mobile-android:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with: { channel: stable, cache: true }
+      - name: Install Android 16 SDK
+        run: |
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
       - run: flutter pub get
+      - name: Generate app icons
+        run: dart run flutter_launcher_icons
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build apk --debug
+      - name: Build Android debug APK
+        run: flutter build apk --debug
+      - name: Build Android release app bundle
+        run: flutter build appbundle --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mastercota-android-unsigned-aab
+          path: build/app/outputs/bundle/release/*.aab
+          if-no-files-found: error
+
+  mobile-ios:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Verify Xcode generation
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - run: flutter pub get
+      - name: Generate app icons
+        run: dart run flutter_launcher_icons
+      - name: Build iOS release without signing
+        run: flutter build ios --release --no-codesign
+      - name: Package unsigned iOS app
+        run: |
+          ditto -c -k --sequesterRsrc --keepParent build/ios/iphoneos/Runner.app mastercota-ios-unsigned.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mastercota-ios-unsigned-app
+          path: mastercota-ios-unsigned.zip
+          if-no-files-found: error

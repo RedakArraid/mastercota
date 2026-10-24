@@ -4,11 +4,19 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { LogOut, ShieldCheck, UserRound, Wallet } from "lucide-react";
+import { LogOut, ShieldCheck, Trash2, UserRound, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { api } from "@/lib/api";
 import type { SiteConfig, UserProfile } from "@/lib/types";
 
@@ -19,6 +27,15 @@ export default function ProfilePage() {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteText, setDeleteText] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("delete") === "1") {
+      setDeleteOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -59,6 +76,24 @@ export default function ProfilePage() {
     router.replace("/auth/phone");
     router.refresh();
   }
+
+  async function deleteAccount() {
+    if (deleteText.trim() !== "SUPPRIMER" || deleting) return;
+    setDeleting(true);
+    try {
+      await api("/api/profile", {
+        method: "DELETE",
+        body: JSON.stringify({ confirmation: "SUPPRIMER" }),
+      });
+      toast.success("Votre compte a été supprimé");
+      router.replace("/auth/phone");
+      router.refresh();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Suppression impossible");
+      setDeleting(false);
+    }
+  }
+
 
   if (loadError) {
     return (
@@ -214,13 +249,63 @@ export default function ProfilePage() {
           ) : null}
         </section>
 
+        <section id="delete-account" className="mc-panel border-destructive/20 p-5 sm:p-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="font-bold text-ink">Supprimer le compte</h2>
+              <p className="mt-1 max-w-xl text-sm leading-6 text-muted-foreground">
+                Supprime définitivement votre compte, vos cotisations et les données
+                associées. Les contributions déjà confirmées chez d’autres organisateurs
+                sont conservées sans vos informations personnelles afin de préserver leurs totaux.
+              </p>
+            </div>
+            <Button variant="destructive" onClick={() => setDeleteOpen(true)} className="shrink-0">
+              <Trash2 className="size-4" />
+              Supprimer mon compte
+            </Button>
+          </div>
+        </section>
+
         <div className="flex justify-end">
-          <Button variant="destructive" onClick={signOut}>
+          <Button variant="outline" onClick={signOut}>
             <LogOut className="size-4" />
             Se déconnecter
           </Button>
         </div>
       </div>
+
+      <Dialog open={deleteOpen} onOpenChange={(open) => {
+        setDeleteOpen(open);
+        if (!open) setDeleteText("");
+      }}>
+        <DialogContent showCloseButton={!deleting}>
+          <DialogHeader>
+            <DialogTitle>Supprimer définitivement votre compte ?</DialogTitle>
+            <DialogDescription>
+              Cette action ne peut pas être annulée. Tapez SUPPRIMER pour confirmer.
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            value={deleteText}
+            onChange={(event) => setDeleteText(event.target.value)}
+            placeholder="SUPPRIMER"
+            autoComplete="off"
+            disabled={deleting}
+          />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleting}>
+              Annuler
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteText.trim() !== "SUPPRIMER" || deleting}
+              onClick={deleteAccount}
+            >
+              {deleting ? "Suppression…" : "Supprimer définitivement"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

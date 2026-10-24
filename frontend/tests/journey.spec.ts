@@ -69,7 +69,7 @@ test('unauthenticated private pages and admin API are protected',async({page,req
   await page.goto('/cotisation/create');
   await expect(page).toHaveURL(/\/auth\/phone/);
   expect((await request.get('/api/admin/stats')).status()).toBe(403);
-  for(const path of ['/','/frais','/comment-ca-marche','/p/cgu','/p/confidentialite']){
+  for(const path of ['/','/frais','/comment-ca-marche','/p/cgu','/p/confidentialite','/p/support','/suppression-compte']){
     await page.goto(path);await expect(page.locator('main')).toBeVisible();
   }
 });

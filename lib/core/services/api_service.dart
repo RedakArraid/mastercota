@@ -89,6 +89,23 @@ class ApiService {
     return _decode(res);
   }
 
+  static Future<Map<String, dynamic>> delete(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    final request = http.Request(
+      'DELETE',
+      Uri.parse('${AppConstants.apiBaseUrl}$path'),
+    );
+    request.headers.addAll(_headers);
+    if (body != null) request.body = jsonEncode(body);
+    final streamed = await client.send(request).timeout(
+      const Duration(seconds: 30),
+    );
+    final response = await http.Response.fromStream(streamed);
+    return _decode(response);
+  }
+
   static Future<Map<String, dynamic>> _decode(http.Response res) async {
     if (res.statusCode == 401 && isAuthenticated) await setToken(null);
     dynamic data;

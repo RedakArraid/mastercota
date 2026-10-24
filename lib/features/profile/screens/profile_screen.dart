@@ -57,6 +57,71 @@ class ProfileScreen extends ConsumerWidget {
     }
   }
 
+  Future<void> _deleteAccount(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Supprimer mon compte ?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Cette action supprime votre compte, vos cotisations et les données associées. Elle est définitive.',
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Tapez SUPPRIMER pour confirmer.',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: controller,
+                autocorrect: false,
+                textCapitalization: TextCapitalization.characters,
+                onChanged: (_) => setState(() {}),
+                decoration: const InputDecoration(
+                  hintText: 'SUPPRIMER',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(ctx).colorScheme.error,
+                foregroundColor: Theme.of(ctx).colorScheme.onError,
+              ),
+              onPressed: controller.text.trim() == 'SUPPRIMER'
+                  ? () => Navigator.pop(ctx, true)
+                  : null,
+              child: const Text('Supprimer définitivement'),
+            ),
+          ],
+        ),
+      ),
+    );
+    controller.dispose();
+    if (confirmed != true) return;
+    try {
+      await ref.read(authNotifierProvider.notifier).deleteAccount();
+      ref.invalidate(notificationsProvider);
+      if (context.mounted) context.go('/auth/phone');
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
+    }
+  }
+
   Future<void> _open(BuildContext context, String url) async {
     try {
       if (!await launchUrl(
@@ -173,6 +238,18 @@ class ProfileScreen extends ConsumerWidget {
                   'La déconnexion ferme toutes les sessions de votre compte. Ne partagez jamais votre code WhatsApp.',
                 ),
                 const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.delete_outline),
+                  label: const Text('Supprimer mon compte'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.error.withValues(alpha: 0.35),
+                    ),
+                  ),
+                  onPressed: () => _deleteAccount(context, ref),
+                ),
+                const SizedBox(height: 8),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.logout),
                   label: const Text('Déconnecter mes appareils'),
