@@ -129,6 +129,61 @@ test('OTP requires issuance, limits guesses, expires and cannot be reused', asyn
   assert.equal((await request('/api/auth/me', 'GET', undefined, login.body.token)).status, 401);
 });
 
+test('account deletion removes owned data and anonymizes contributions kept in other cotisations', async () => {
+  const owner = await user('+2250700000042');
+  const other = await user('+2250500000042');
+  const owned = await create(owner, false);
+  const otherCreated = await create(other);
+
+  await query(
+    "INSERT INTO otp_codes(phone,code_hash,expires_at) VALUES($1,'x',now()+interval '10 minutes')",
+    [owner.phone]
+  );
+  const contribution = await request(
+    `/api/cotisations/${otherCreated.cotisation.id}/contributions`,
+    'POST',
+    {
+      request_id: randomUUID(),
+      contributor_name: 'Compte à supprimer',
+      contributor_phone: owner.phone,
+      amount: 5000,
+      payment_method: 'manual',
+      note: 'Information personnelle',
+    },
+    other.token
+  );
+  assert.equal(contribution.status, 201);
+
+  const refused = await request('/api/profile', 'DELETE', { confirmation: 'non' }, owner.token);
+  assert.equal(refused.status, 400);
+  assert.equal(Number((await query('SELECT count(*) FROM users WHERE id=$1', [owner.id])).rows[0].count), 1);
+
+  const deleted = await request('/api/profile', 'DELETE', { confirmation: 'SUPPRIMER' }, owner.token);
+  assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
+  assert.equal(deleted.body.ok, true);
+  assert.equal(Number((await query('SELECT count(*) FROM users WHERE id=$1', [owner.id])).rows[0].count), 0);
+  assert.equal(Number((await query('SELECT count(*) FROM cotisations WHERE owner_id=$1', [owner.id])).rows[0].count), 0);
+  assert.equal(Number((await query('SELECT count(*) FROM platform_payments WHERE user_id=$1', [owner.id])).rows[0].count), 0);
+  assert.equal(Number((await query('SELECT count(*) FROM phone_entitlements WHERE phone=$1', [owner.phone])).rows[0].count), 0);
+  assert.equal(Number((await query('SELECT count(*) FROM otp_codes WHERE phone=$1', [owner.phone])).rows[0].count), 0);
+  assert.equal((await request('/api/auth/me', 'GET', undefined, owner.token)).status, 401);
+
+  const kept = (await query(
+    'SELECT contributor_name,contributor_phone,note,status,amount FROM contributions WHERE id=$1',
+    [contribution.body.contribution.id]
+  )).rows[0];
+  assert.equal(kept.contributor_name, 'Compte supprimé');
+  assert.match(kept.contributor_phone, /^deleted:/);
+  assert.equal(kept.note, null);
+  assert.equal(kept.status, 'paid');
+  assert.equal(Number(kept.amount), 5000);
+  assert.equal(
+    Number((await query('SELECT current_amount FROM cotisations WHERE id=$1', [otherCreated.cotisation.id])).rows[0].current_amount),
+    5000
+  );
+  assert.ok(owned.cotisation.id);
+});
+
 test('production rejects development OTP and weak secrets; Wave preserves CI leading zero', () => {
   assert.equal(normalizeWavePhone('0700000000'), '+2250700000000');
   process.env.NODE_ENV = 'production';
