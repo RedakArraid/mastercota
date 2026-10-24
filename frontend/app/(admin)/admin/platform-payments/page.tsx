@@ -25,9 +25,25 @@ type Payment = {
   review_resolved_at: string | null;
   review_resolved_by: string | null;
   review_resolution_note: string | null;
-  paystack_reference: string;
+  provider: "pispi" | "paystack";
+  provider_reference: string | null;
+  paystack_reference: string | null;
   created_at: string;
   paid_at: string | null;
+};
+
+type Routing = {
+  active_provider: "pispi" | "paystack";
+  providers: Array<{ provider: "pispi" | "paystack"; enabled: boolean; reason?: string }>;
+  history: Array<{
+    id: string;
+    from_provider: "pispi" | "paystack";
+    to_provider: "pispi" | "paystack";
+    note: string;
+    created_at: string;
+    changed_by_name: string | null;
+    changed_by_phone: string | null;
+  }>;
 };
 
 const FILTERS = [
@@ -57,6 +73,9 @@ export default function AdminPlatformPaymentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [resolvingId, setResolvingId] = useState<string | null>(null);
+  const [routing, setRouting] = useState<Routing | null>(null);
+  const [routingNote, setRoutingNote] = useState("");
+  const [switchingProvider, setSwitchingProvider] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -74,6 +93,36 @@ export default function AdminPlatformPaymentsPage() {
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [filter, refresh]);
+
+  useEffect(() => {
+    api<Routing>("/api/admin/payment-routing")
+      .then(setRouting)
+      .catch(e => toast.error(e instanceof Error ? e.message : "Routage des paiements indisponible"));
+  }, [refresh]);
+
+  async function switchProvider(provider: "pispi" | "paystack") {
+    if (!routing || provider === routing.active_provider || switchingProvider) return;
+    const note = routingNote.trim();
+    if (!note) {
+      toast.error("Indiquez le motif de la bascule.");
+      return;
+    }
+    setSwitchingProvider(true);
+    try {
+      const result = await api<{ active_provider: "pispi" | "paystack"; changed: boolean; providers: Routing["providers"] }>(
+        "/api/admin/payment-routing",
+        { method: "PATCH", body: JSON.stringify({ provider, note }) }
+      );
+      setRouting(current => current ? { ...current, active_provider: result.active_provider, providers: result.providers } : current);
+      setRoutingNote("");
+      setRefresh(value => value + 1);
+      toast.success(provider === "pispi" ? "Rail principal activé." : "Rail de secours activé.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Bascule impossible");
+    } finally {
+      setSwitchingProvider(false);
+    }
+  }
 
   async function copyReference(reference: string) {
     try {
@@ -108,15 +157,64 @@ export default function AdminPlatformPaymentsPage() {
         <div>
           <h1 className="text-2xl font-semibold">Frais Mastercota</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Paiements de création et de prolongation. Un paiement « À examiner » a été reçu,
-            mais le service n’a pas été appliqué. Vérifiez sa référence dans Paystack et
-            traitez le remboursement éventuel auprès du prestataire.
+            Paiements de création et de prolongation. Le prestataire utilisé n’est visible
+            que dans cette console. Un paiement « À examiner » a été reçu, mais le service
+            n’a pas été appliqué : vérifiez sa référence chez le prestataire concerné.
           </p>
         </div>
         <Button variant="outline" disabled={loading || !!resolvingId} onClick={() => setRefresh(value => value + 1)}>
           <RefreshCw className="mr-2 h-4 w-4" /> Actualiser
         </Button>
       </div>
+
+      {routing ? (
+        <section className="space-y-4 rounded-2xl border bg-white p-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-semibold">Routage des paiements</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Rail actif : <span className="font-medium text-foreground">{routing.active_provider === "pispi" ? "PI-SPI" : "Paystack"}</span>.
+                Cette bascule concerne uniquement les nouvelles tentatives.
+              </p>
+            </div>
+            <Badge variant="secondary">{routing.active_provider === "pispi" ? "Principal PI-SPI" : "Secours Paystack"}</Badge>
+          </div>
+          <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
+            Les paiements déjà ouverts restent attachés à leur prestataire d’origine afin d’éviter un double débit.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {routing.providers.map(item => (
+              <div key={item.provider} className="rounded-xl border p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium">{item.provider === "pispi" ? "PI-SPI" : "Paystack"}</p>
+                    <p className="text-xs text-muted-foreground">{item.enabled ? "Disponible" : item.reason || "Indisponible"}</p>
+                  </div>
+                  <Badge variant={item.enabled ? "secondary" : "destructive"}>{item.enabled ? "OK" : "OFF"}</Badge>
+                </div>
+                <Button className="mt-3 w-full" size="sm"
+                  variant={routing.active_provider === item.provider ? "secondary" : "outline"}
+                  disabled={!item.enabled || routing.active_provider === item.provider || switchingProvider}
+                  onClick={() => switchProvider(item.provider)}>
+                  {routing.active_provider === item.provider ? "Actif" : item.provider === "pispi" ? "Basculer vers PI-SPI" : "Basculer vers Paystack"}
+                </Button>
+              </div>
+            ))}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="routing-note">Motif de la prochaine bascule</Label>
+            <Textarea id="routing-note" maxLength={500} rows={2} value={routingNote}
+              onChange={event => setRoutingNote(event.target.value)}
+              placeholder="Ex. incident PI-SPI, maintenance, retour au rail principal après validation" />
+          </div>
+          {routing.history[0] ? (
+            <p className="text-xs text-muted-foreground">
+              Dernière bascule : {routing.history[0].from_provider.toUpperCase()} → {routing.history[0].to_provider.toUpperCase()}
+              {" · "}{new Date(routing.history[0].created_at).toLocaleString("fr-FR")} · {routing.history[0].note}
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <div className="flex flex-wrap gap-2" aria-label="Filtrer les frais">
         {FILTERS.map(item => (
@@ -155,7 +253,8 @@ export default function AdminPlatformPaymentsPage() {
               <div><dt className="text-muted-foreground">Organisateur</dt><dd className="break-words">{payment.user_name || "Sans nom"} · {payment.user_phone}</dd></div>
               <div><dt className="text-muted-foreground">Paiement</dt><dd>{payment.status === "paid" ? "Reçu" : payment.status === "failed" ? "Échoué" : "Non confirmé"}</dd></div>
               <div><dt className="text-muted-foreground">{payment.paid_at ? "Reçu le" : "Créé le"}</dt><dd>{new Date(payment.paid_at || payment.created_at).toLocaleString("fr-FR")}</dd></div>
-              <div><dt className="text-muted-foreground">Référence Paystack</dt><dd className="break-all font-mono text-xs">{payment.paystack_reference}</dd></div>
+              <div><dt className="text-muted-foreground">Prestataire</dt><dd>{payment.provider === "pispi" ? "PI-SPI" : "Paystack"}</dd></div>
+              <div><dt className="text-muted-foreground">Référence prestataire</dt><dd className="break-all font-mono text-xs">{payment.provider_reference || payment.paystack_reference || payment.id}</dd></div>
             </dl>
             {payment.application_status === "review_required" && (
               <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">
@@ -181,7 +280,7 @@ export default function AdminPlatformPaymentsPage() {
                 </Button>
               </form>
             ) : null}
-            <Button variant="outline" size="sm" onClick={() => copyReference(payment.paystack_reference)}>
+            <Button variant="outline" size="sm" onClick={() => copyReference(payment.provider_reference || payment.paystack_reference || payment.id)}>
               <Copy className="mr-2 h-4 w-4" /> Copier la référence
             </Button>
           </article>

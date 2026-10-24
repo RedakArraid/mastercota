@@ -35,7 +35,7 @@ import {
 } from "./lib/billing.js";
 import { normalizeWavePhone, normalizeWavePayLink } from "./lib/wave.js";
 import { getPispiRequestToPay, pispiStatus, pispiWebhookTxIds, verifyPispiWebhookSignature } from "./lib/pispi.js";
-import { assertPlatformPaymentProviderAvailable, backupPlatformPaymentProvider, platformPaymentAvailability, primaryPlatformPaymentProvider, type PlatformPaymentProvider } from "./lib/platform-payment-provider.js";
+import { activePlatformPaymentProvider, assertPlatformPaymentProviderAvailable, type PlatformPaymentProvider } from "./lib/platform-payment-provider.js";
 import { adminRoutes } from "./admin.js";
 
 export const app = new Hono();
@@ -225,21 +225,19 @@ app.post("/api/cotisations", async c => {
     return rows[0];
   });
   if (cotisation.platform_fee_status !== 'pending') return c.json({ cotisation, payment_required: false }, 201);
-  const primaryProvider = primaryPlatformPaymentProvider();
-  if (primaryProvider === "pispi") {
+  const activeProvider = await activePlatformPaymentProvider();
+  if (activeProvider === "pispi") {
     const { rows: latest } = await query('SELECT * FROM cotisations WHERE id=$1', [cotisation.id]);
     return c.json({
       cotisation: latest[0],
       payment_required: true,
-      provider: "pispi",
-      payment_action_required: "payer_alias",
-      providers: platformPaymentAvailability(),
+      payment_action_required: "payment_identifier",
     }, 201);
   }
   try {
     const payment = await initializePlatformFeePaystack({ userId: session.id, phone: session.phone, cotisationId: cotisation.id, purpose: "create", amount: Number(cotisation.platform_fee_amount), durationDays: cotisation.duration_days, callbackPath: `/cotisation/${cotisation.id}/frais` });
     const { rows: latest } = await query('SELECT * FROM cotisations WHERE id=$1', [cotisation.id]);
-    return c.json({ cotisation: latest[0], ...payment }, 201);
+    return c.json({ cotisation: latest[0], ...publicCheckout(payment) }, 201);
   } catch {
     // The saved cotisation can be resumed; never tell a client to create it again.
     const { rows: latest } = await query('SELECT * FROM cotisations WHERE id=$1', [cotisation.id]);
@@ -296,6 +294,19 @@ app.get("/api/cotisations/billing-info", async (c) => {
   });
 });
 
+function publicCheckout(payment: Record<string, any>) {
+  return {
+    payment_required: payment.payment_required === true,
+    ...(payment.authorization_url ? { authorization_url: payment.authorization_url } : {}),
+    ...(payment.reference ? { reference: payment.reference } : {}),
+    ...(payment.application_status ? { application_status: payment.application_status } : {}),
+    ...(payment.review_reason ? { review_reason: payment.review_reason } : {}),
+    ...(payment.review_resolved_at ? { review_resolved_at: payment.review_resolved_at } : {}),
+    ...(payment.review_resolution_note ? { review_resolution_note: payment.review_resolution_note } : {}),
+    payment_status: payment.payment_required === false ? "paid" : "pending",
+  };
+}
+
 function publicCotisation(cot: Record<string, any>) {
   const settings = cot.settings ?? {};
   return {
@@ -312,7 +323,7 @@ function publicCotisation(cot: Record<string, any>) {
 }
 
 async function ownerCotisation(cot: Record<string, any>) {
-  const { rows: payments } = await query("SELECT status,application_status,review_reason,review_resolved_at,review_resolved_by,review_resolution_note,provider,COALESCE(provider_reference,paystack_reference) AS reference,purpose FROM platform_payments WHERE cotisation_id=$1 ORDER BY (application_status='review_required' AND review_resolved_at IS NULL) DESC, created_at DESC LIMIT 1", [cot.id]);
+  const { rows: payments } = await query("SELECT status,application_status,review_reason,review_resolved_at,review_resolved_by,review_resolution_note,COALESCE(provider_reference,paystack_reference) AS reference,purpose FROM platform_payments WHERE cotisation_id=$1 ORDER BY (application_status='review_required' AND review_resolved_at IS NULL) DESC, created_at DESC LIMIT 1", [cot.id]);
   const today = (await query('SELECT CURRENT_DATE::text AS today')).rows[0].today;
   const feeValid = ['free', 'paid', 'waived', 'none'].includes(cot.platform_fee_status);
   const ext = canExtend({ startsAt: cot.starts_at, deadline: cot.deadline, extensionCount: Number(cot.extension_count) });
@@ -490,17 +501,6 @@ app.post("/api/paystack/webhook", async c => {
   return c.json({ received: true });
 });
 
-app.get("/api/platform-payments/options", async c => {
-  const session = await requireUser(c);
-  if (!session) return c.json({ error: "Unauthorized" }, 401);
-  const primary = primaryPlatformPaymentProvider();
-  return c.json({
-    primary,
-    backup: backupPlatformPaymentProvider(primary),
-    providers: platformPaymentAvailability(),
-  });
-});
-
 app.post("/api/pispi/webhook", async c => {
   const raw = await c.req.text();
   if (!verifyPispiWebhookSignature(raw, c.req.header("x-signature"))) {
@@ -551,7 +551,7 @@ app.get("/api/platform-payments/verify/:reference", async c => {
   const payment = owned[0];
   if (!payment) return c.json({ error: "Introuvable" }, 404);
   const provider = (payment.provider || "paystack") as PlatformPaymentProvider;
-  let status = payment.status === "paid"
+  let providerStatus = payment.status === "paid"
     ? (provider === "pispi" ? "IRREVOCABLE" : "success")
     : String(payment.metadata?.pispi_status || "pending");
 
@@ -560,56 +560,58 @@ app.get("/api/platform-payments/verify/:reference", async c => {
     if (provider === "pispi") {
       let remote;
       try { remote = await getPispiRequestToPay(reference); }
-      catch { return c.json({ error: "Vérification PI-SPI temporairement indisponible" }, 502); }
-      status = pispiStatus(remote);
-      if (status === "IRREVOCABLE") {
+      catch { return c.json({ error: "Vérification temporairement indisponible" }, 502); }
+      providerStatus = pispiStatus(remote);
+      if (providerStatus === "IRREVOCABLE") {
         const result = await activatePispiPlatformPayment(reference, remote);
         if (!result.ok) return c.json({ error: result.error }, 409);
-      } else if (["REJETE", "ANNULE"].includes(status)) {
+      } else if (["REJETE", "ANNULE"].includes(providerStatus)) {
         await query(
           "UPDATE platform_payments SET status='failed',metadata=metadata || $2::jsonb WHERE id=$1 AND status='pending'",
-          [payment.id, JSON.stringify({ pispi_status: status, pispi_reason: remote.statutRaison ?? null })]
+          [payment.id, JSON.stringify({ pispi_status: providerStatus, pispi_reason: remote.statutRaison ?? null })]
         );
       } else {
         await query(
           "UPDATE platform_payments SET metadata=metadata || $2::jsonb WHERE id=$1",
-          [payment.id, JSON.stringify({ pispi_status: status })]
+          [payment.id, JSON.stringify({ pispi_status: providerStatus })]
         );
       }
     } else {
       const { ok, data } = await paystackFetch(`/transaction/verify/${encodeURIComponent(reference)}`);
       if (!ok) return c.json({ error: "Vérification temporairement indisponible" }, 502);
-      status = data.data?.status;
-      if (status === "success") {
+      providerStatus = data.data?.status;
+      if (providerStatus === "success") {
         const result = await activatePlatformPayment(reference, data.data);
         if (!result.ok) return c.json({ error: result.error }, 409);
+      } else if (["failed", "abandoned", "reversed"].includes(providerStatus)) {
+        await query(
+          "UPDATE platform_payments SET status='failed',metadata=metadata || $2::jsonb WHERE id=$1 AND status='pending'",
+          [payment.id, JSON.stringify({ provider_status: providerStatus })]
+        );
       }
     }
   }
 
   const { rows } = await query(
-    "SELECT pp.*, c.slug, c.title, c.status AS cotisation_status FROM platform_payments pp LEFT JOIN cotisations c ON c.id=pp.cotisation_id WHERE pp.id=$1",
+    `SELECT pp.status,pp.amount,pp.purpose,pp.application_status,pp.review_reason,
+            pp.review_resolved_at,pp.review_resolved_by,pp.review_resolution_note,pp.paid_at,pp.created_at,
+            c.slug,c.title,c.status AS cotisation_status
+     FROM platform_payments pp
+     LEFT JOIN cotisations c ON c.id=pp.cotisation_id
+     WHERE pp.id=$1`,
     [payment.id]
   );
+  const current = rows[0];
   return c.json({
-    provider,
-    provider_status: status,
-    ...(provider === "paystack" ? { paystack_status: status } : {}),
-    payment: rows[0],
+    payment_status: current?.status ?? "pending",
+    payment: current ?? null,
   });
 });
 
-function requestedPlatformProvider(body: Record<string, unknown>): PlatformPaymentProvider {
-  const requested = body.provider;
-  if (requested === undefined || requested === null || requested === "") return primaryPlatformPaymentProvider();
-  if (requested !== "pispi" && requested !== "paystack") throw new HTTPException(400, { message: "Fournisseur de paiement invalide" });
-  return requested;
-}
-
-function pispiPayerAlias(body: Record<string, unknown>): string {
-  const value = typeof body.payer_alias === "string" ? body.payer_alias.trim() : "";
+function paymentIdentifier(body: Record<string, unknown>): string {
+  const value = typeof body.payment_identifier === "string" ? body.payment_identifier.trim() : "";
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)) {
-    throw new HTTPException(400, { message: "Alias PI-SPI payeur UUID requis" });
+    throw new HTTPException(400, { message: "Identifiant de paiement requis" });
   }
   return value;
 }
@@ -618,9 +620,9 @@ app.post("/api/cotisations/:id/extend", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
   const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-  const provider = requestedPlatformProvider(body);
+  const provider = await activePlatformPaymentProvider();
   try { assertPlatformPaymentProviderAvailable(provider); }
-  catch (e) { return c.json({ error: e instanceof Error ? e.message : "Paiement indisponible" }, 400); }
+  catch { return c.json({ error: "Paiement temporairement indisponible" }, 503); }
 
   const id = c.req.param("id");
   const { rows: owned } = await query<{
@@ -649,7 +651,7 @@ app.post("/api/cotisations/:id/extend", async (c) => {
           userId: session.id,
           cotisationId: id,
           purpose: "extend",
-          payerAlias: pispiPayerAlias(body),
+          payerAlias: paymentIdentifier(body),
           metadata: { new_deadline: ext.newDeadline },
         })
       : await (async () => {
@@ -667,13 +669,18 @@ app.post("/api/cotisations/:id/extend", async (c) => {
           });
         })();
     return c.json({
-      ...payment,
+      ...publicCheckout(payment),
       fee: ext.fee,
       extension_days: EXTENSION_DAYS,
       new_deadline: ext.newDeadline,
     });
   } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : "Erreur" }, 400);
+    const message = e instanceof Error ? e.message : "Erreur";
+    return c.json({
+      error: /autre moyen|prestataire|PI-SPI|Paystack/i.test(message)
+        ? "Un paiement est déjà en cours ou temporairement indisponible. Réessayez plus tard."
+        : message,
+    }, 400);
   }
 });
 
@@ -681,9 +688,9 @@ app.post("/api/cotisations/:id/pay-fee", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
   const body = await c.req.json().catch(() => ({})) as Record<string, unknown>;
-  const provider = requestedPlatformProvider(body);
+  const provider = await activePlatformPaymentProvider();
   try { assertPlatformPaymentProviderAvailable(provider); }
-  catch (e) { return c.json({ error: e instanceof Error ? e.message : "Paiement indisponible" }, 400); }
+  catch { return c.json({ error: "Paiement temporairement indisponible" }, 503); }
 
   const id = c.req.param("id");
   const { rows: owned } = await query<{
@@ -710,7 +717,7 @@ app.post("/api/cotisations/:id/pay-fee", async (c) => {
           userId: session.id,
           cotisationId: id,
           purpose: "create",
-          payerAlias: pispiPayerAlias(body),
+          payerAlias: paymentIdentifier(body),
         })
       : await (async () => {
           const phone = await getOwnerPhone(session.id);
@@ -725,9 +732,14 @@ app.post("/api/cotisations/:id/pay-fee", async (c) => {
             callbackPath: `/cotisation/${id}/frais`,
           });
         })();
-    return c.json({ ...payment, fee });
+    return c.json({ ...publicCheckout(payment), fee });
   } catch (e) {
-    return c.json({ error: e instanceof Error ? e.message : "Erreur" }, 400);
+    const message = e instanceof Error ? e.message : "Erreur";
+    return c.json({
+      error: /autre moyen|prestataire|PI-SPI|Paystack/i.test(message)
+        ? "Un paiement est déjà en cours ou temporairement indisponible. Réessayez plus tard."
+        : message,
+    }, 400);
   }
 });
 
