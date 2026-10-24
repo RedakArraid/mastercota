@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import pg from 'pg';
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const client = await pool.connect();
-const files = ['schema.sql','migrate-pages.sql','migrate-admin.sql','migrate-billing.sql','migrate-wave-p2p.sql','migrate-wave-link.sql','migrate-wave-mode.sql','migrate-cms-legal.sql','migrate-landing-copy.sql','migrate-no-emdash.sql','migrate-reliability.sql','migrate-lifecycle.sql','migrate-review-resolution.sql','migrate-payment-providers.sql'];
+const files = ['schema.sql','migrate-pages.sql','migrate-admin.sql','migrate-billing.sql','migrate-wave-p2p.sql','migrate-wave-link.sql','migrate-wave-mode.sql','migrate-cms-legal.sql','migrate-landing-copy.sql','migrate-no-emdash.sql','migrate-reliability.sql','migrate-lifecycle.sql','migrate-review-resolution.sql','migrate-payment-providers.sql','migrate-payment-routing.sql'];
 try {
   await client.query('SELECT pg_advisory_lock(76419026)');
   await client.query('CREATE TABLE IF NOT EXISTS schema_migrations (name text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())');
