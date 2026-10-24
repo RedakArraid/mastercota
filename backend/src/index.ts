@@ -35,7 +35,7 @@ import {
 } from "./lib/billing.js";
 import { normalizeWavePhone, normalizeWavePayLink } from "./lib/wave.js";
 import { getPispiRequestToPay, pispiStatus, pispiWebhookTxIds, verifyPispiWebhookSignature } from "./lib/pispi.js";
-import { assertPlatformPaymentProviderAvailable, backupPlatformPaymentProvider, platformPaymentAvailability, primaryPlatformPaymentProvider, type PlatformPaymentProvider } from "./lib/platform-payment-provider.js";
+import { activePlatformPaymentProvider, assertPlatformPaymentProviderAvailable, type PlatformPaymentProvider } from "./lib/platform-payment-provider.js";
 import { adminRoutes } from "./admin.js";
 
 export const app = new Hono();
@@ -225,21 +225,19 @@ app.post("/api/cotisations", async c => {
     return rows[0];
   });
   if (cotisation.platform_fee_status !== 'pending') return c.json({ cotisation, payment_required: false }, 201);
-  const primaryProvider = primaryPlatformPaymentProvider();
-  if (primaryProvider === "pispi") {
+  const activeProvider = await activePlatformPaymentProvider();
+  if (activeProvider === "pispi") {
     const { rows: latest } = await query('SELECT * FROM cotisations WHERE id=$1', [cotisation.id]);
     return c.json({
       cotisation: latest[0],
       payment_required: true,
-      provider: "pispi",
-      payment_action_required: "payer_alias",
-      providers: platformPaymentAvailability(),
+      payment_action_required: "payment_identifier",
     }, 201);
   }
   try {
     const payment = await initializePlatformFeePaystack({ userId: session.id, phone: session.phone, cotisationId: cotisation.id, purpose: "create", amount: Number(cotisation.platform_fee_amount), durationDays: cotisation.duration_days, callbackPath: `/cotisation/${cotisation.id}/frais` });
     const { rows: latest } = await query('SELECT * FROM cotisations WHERE id=$1', [cotisation.id]);
-    return c.json({ cotisation: latest[0], ...payment }, 201);
+    return c.json({ cotisation: latest[0], ...publicCheckout(payment) }, 201);
   } catch {
     // The saved cotisation can be resumed; never tell a client to create it again.
     const { rows: latest } = await query('SELECT * FROM cotisations WHERE id=$1', [cotisation.id]);
@@ -296,6 +294,19 @@ app.get("/api/cotisations/billing-info", async (c) => {
   });
 });
 
+function publicCheckout(payment: Record<string, any>) {
+  return {
+    payment_required: payment.payment_required === true,
+    ...(payment.authorization_url ? { authorization_url: payment.authorization_url } : {}),
+    ...(payment.reference ? { reference: payment.reference } : {}),
+    ...(payment.application_status ? { application_status: payment.application_status } : {}),
+    ...(payment.review_reason ? { review_reason: payment.review_reason } : {}),
+    ...(payment.review_resolved_at ? { review_resolved_at: payment.review_resolved_at } : {}),
+    ...(payment.review_resolution_note ? { review_resolution_note: payment.review_resolution_note } : {}),
+    payment_status: payment.payment_required === false ? "paid" : "pending",
+  };
+}
+
 function publicCotisation(cot: Record<string, any>) {
   const settings = cot.settings ?? {};
   return {
@@ -312,7 +323,7 @@ function publicCotisation(cot: Record<string, any>) {
 }
 
 async function ownerCotisation(cot: Record<string, any>) {
-  const { rows: payments } = await query("SELECT status,application_status,review_reason,review_resolved_at,review_resolved_by,review_resolution_note,provider,COALESCE(provider_reference,paystack_reference) AS reference,purpose FROM platform_payments WHERE cotisation_id=$1 ORDER BY (application_status='review_required' AND review_resolved_at IS NULL) DESC, created_at DESC LIMIT 1", [cot.id]);
+  const { rows: payments } = await query("SELECT status,application_status,review_reason,review_resolved_at,review_resolved_by,review_resolution_note,COALESCE(provider_reference,paystack_reference) AS reference,purpose FROM platform_payments WHERE cotisation_id=$1 ORDER BY (application_status='review_required' AND review_resolved_at IS NULL) DESC, created_at DESC LIMIT 1", [cot.id]);
   const today = (await query('SELECT CURRENT_DATE::text AS today')).rows[0].today;
   const feeValid = ['free', 'paid', 'waived', 'none'].includes(cot.platform_fee_status);
   const ext = canExtend({ startsAt: cot.starts_at, deadline: cot.deadline, extensionCount: Number(cot.extension_count) });
