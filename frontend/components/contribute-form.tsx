@@ -223,7 +223,7 @@ export default function ContributeForm({
 
   if (!canPay && !onlyReport) {
     return (
-      <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-4 text-sm">
+      <div className="rounded-2xl border border-amber-500/25 bg-amber-50/80 p-4 text-sm">
         <p className="font-medium text-ink">Paiement bientôt disponible</p>
         <p className="mt-1 text-muted-foreground">
           L’organisateur doit encore configurer Wave (lien Business ou numéro).
@@ -235,7 +235,7 @@ export default function ContributeForm({
 
   if (step === "done") {
     return (
-      <div className="space-y-4 rounded-2xl border border-border bg-card p-5 text-center">
+      <div className="space-y-4 rounded-[1.35rem] border border-emerald-200 bg-emerald-50/55 p-6 text-center">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-success/15 text-success">
           <Check className="h-6 w-6" />
         </div>
@@ -258,7 +258,7 @@ export default function ContributeForm({
 
   if (step === "pay") {
     return (
-      <div className="space-y-5 rounded-2xl border border-border bg-card p-5">
+      <div className="space-y-5 rounded-[1.35rem] border border-border/80 bg-white/70 p-5 sm:p-6">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
             {isBusiness ? "Paiement Wave Business" : "Paiement Wave manuel"}
@@ -271,7 +271,7 @@ export default function ContributeForm({
         {onlyReport ? (
           <p className="rounded-xl bg-secondary/60 p-3 text-sm">Signalez uniquement un transfert déjà effectué. L’organisateur vérifiera sa réception avant de l’ajouter au total.</p>
         ) : isBusiness ? (
-          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          <div className="rounded-2xl border border-amber-500/25 bg-amber-50/70 px-4 py-3 text-sm">
             <p className="font-medium text-ink">
               Wave ouvert avec le montant prérempli
             </p>
@@ -280,7 +280,7 @@ export default function ContributeForm({
             </p>
           </div>
         ) : (
-          <div className="space-y-3 rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm">
+          <div className="space-y-3 rounded-2xl border border-border/80 bg-secondary/50 px-4 py-4 text-sm">
             <p className="font-medium text-ink">Envoyez via Wave perso</p>
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-base font-bold text-ink">
@@ -361,7 +361,7 @@ export default function ContributeForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div className="rounded-xl border border-border bg-secondary/40 px-4 py-4 text-sm">
+      <div className="rounded-2xl border border-border/80 bg-secondary/45 px-4 py-4 text-sm">
         <p className="font-medium text-ink">
           {onlyReport ? "Signaler un transfert déjà effectué" : isBusiness
             ? "Paiement Wave Business en 1 clic"
@@ -407,7 +407,7 @@ export default function ContributeForm({
         />
       </div>
       {preview > 0 ? (
-        <div className="rounded-xl border border-border bg-secondary/40 px-4 py-3 text-sm">
+        <div className="rounded-2xl border border-border/80 bg-secondary/45 px-4 py-3 text-sm">
           <div className="flex justify-between font-semibold">
             <span>Vous envoyez</span>
             <span>{formatAmount(preview)}</span>
