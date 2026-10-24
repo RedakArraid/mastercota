@@ -51,7 +51,7 @@ jobs:
           test -n "$KEY_ALIAS" || (echo "ANDROID_KEY_ALIAS manquant" && exit 1)
           test -n "$KEY_PASSWORD" || (echo "ANDROID_KEY_PASSWORD manquant" && exit 1)
       - name: Install Android 16 SDK
-        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+        run: "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0"
       - name: Install signing key
         env:
           KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
