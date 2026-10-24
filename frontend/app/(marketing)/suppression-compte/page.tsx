@@ -28,11 +28,19 @@ export default function AccountDeletionPage() {
           <div className="mt-6 rounded-2xl bg-secondary/60 p-4 text-sm leading-6 text-muted-foreground">
             <div className="flex items-start gap-3">
               <ShieldCheck className="mt-0.5 size-5 shrink-0 text-emerald-700" />
-              <p>
-                Si vous avez contribué à une cotisation organisée par une autre personne,
-                le montant confirmé peut être conservé pour préserver son total, mais votre
-                nom, votre téléphone et votre note sont anonymisés.
-              </p>
+              <div className="space-y-2">
+                <p>
+                  Si vous avez contribué à une cotisation organisée par une autre personne,
+                  le montant confirmé peut être conservé pour préserver son total, mais votre
+                  nom, votre téléphone et votre note sont anonymisés.
+                </p>
+                <p>
+                  Si l’offre de première cotisation a déjà été utilisée, une empreinte
+                  cryptographique du numéro peut être conservée uniquement pour empêcher la
+                  réutilisation abusive de cette offre. Le numéro n’est pas conservé en clair
+                  dans cet historique.
+                </p>
+              </div>
             </div>
           </div>
 
