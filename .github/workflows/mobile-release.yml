@@ -20,6 +20,11 @@ on:
         description: Numéro de build strictement croissant
         required: true
         default: "1"
+      upload_to_testing:
+        description: Envoyer le build vers Google Play Internal Testing / TestFlight
+        required: true
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -89,6 +94,15 @@ jobs:
             build/symbols/android/
           if-no-files-found: error
           retention-days: 30
+      - name: Upload to Google Play Internal Testing
+        if: inputs.upload_to_testing
+        env:
+          PLAY_JSON: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 }}
+        run: |
+          test -n "$PLAY_JSON" || (echo "GOOGLE_PLAY_SERVICE_ACCOUNT_JSON_BASE64 manquant" && exit 1)
+          echo "$PLAY_JSON" | base64 --decode > "$RUNNER_TEMP/google-play.json"
+          gem install fastlane --no-document
+          fastlane supply             --aab build/app/outputs/bundle/release/app-release.aab             --package_name app.mastercota.mastercota             --json_key "$RUNNER_TEMP/google-play.json"             --track internal             --release_status completed             --skip_upload_metadata true             --skip_upload_images true             --skip_upload_screenshots true
       - name: Remove signing material
         if: always()
         run: rm -f android/app/mastercota-upload.jks android/key.properties
@@ -196,10 +210,26 @@ jobs:
             build/symbols/ios/
           if-no-files-found: error
           retention-days: 30
+      - name: Upload to App Store Connect / TestFlight
+        if: inputs.upload_to_testing
+        env:
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY_BASE64 }}
+        run: |
+          test -n "$ASC_KEY_ID" || (echo "APP_STORE_CONNECT_KEY_ID manquant" && exit 1)
+          test -n "$ASC_ISSUER_ID" || (echo "APP_STORE_CONNECT_ISSUER_ID manquant" && exit 1)
+          test -n "$ASC_PRIVATE_KEY" || (echo "APP_STORE_CONNECT_PRIVATE_KEY_BASE64 manquant" && exit 1)
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          echo "$ASC_PRIVATE_KEY" | base64 --decode > "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
+          IPA=$(find build/ios/ipa -name '*.ipa' -print -quit)
+          test -n "$IPA" || (echo "IPA introuvable" && exit 1)
+          xcrun altool --upload-app --type ios --file "$IPA" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
       - name: Remove signing material
         if: always()
         env:
           KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
         run: |
           rm -f ios/ExportOptions.plist
+          rm -rf "$HOME/.appstoreconnect/private_keys"
           security delete-keychain "$RUNNER_TEMP/mastercota.keychain-db" || true
