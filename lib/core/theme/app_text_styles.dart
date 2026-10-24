@@ -5,7 +5,7 @@ import 'app_colors.dart';
 class AppTextStyles {
   AppTextStyles._();
 
-  // ── Display — Geist, letterSpacing tight ──────────────────────
+  // ── Display — Plus Jakarta Sans, aligné avec le web ───────────
   static TextStyle get displayLarge => GoogleFonts.plusJakartaSans(
         fontSize: 32,
         fontWeight: FontWeight.w700,
