@@ -93,7 +93,7 @@
   --chart-3: #2d6a4f;
   --chart-4: #2b4575;
   --chart-5: #f4b829;
-  --radius: 0.75rem;
+  --radius: 0.9rem;
   --sidebar: #ffffff;
   --sidebar-foreground: #143268;
   --sidebar-primary: #da9810;
@@ -144,10 +144,59 @@
   body {
     @apply bg-background text-foreground antialiased;
     background-image:
-      radial-gradient(ellipse 80% 50% at 50% -20%, rgb(218 152 16 / 12%), transparent),
-      radial-gradient(ellipse 60% 40% at 100% 0%, rgb(20 50 104 / 8%), transparent);
+      radial-gradient(ellipse 80% 46% at 50% -14%, rgb(244 184 41 / 13%), transparent 64%),
+      radial-gradient(ellipse 45% 32% at 100% 0%, rgb(20 50 104 / 8%), transparent 68%);
     min-height: 100dvh;
     overflow-x: clip;
+  }
+  ::selection {
+    background: rgb(244 184 41 / 35%);
+    color: var(--ink);
+  }
+  a, button, input, textarea, select {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer components {
+  .mc-page {
+    @apply mx-auto w-full max-w-6xl;
+  }
+
+  .mc-panel {
+    @apply rounded-[1.35rem] border border-border bg-card/95 shadow-[0_18px_60px_-36px_rgb(20_50_104_/_35%)] backdrop-blur-sm;
+  }
+
+  .mc-panel-soft {
+    @apply rounded-[1.35rem] border border-border/80 bg-white/70 shadow-[0_16px_48px_-38px_rgb(20_50_104_/_30%)] backdrop-blur;
+  }
+
+  .mc-kicker {
+    @apply text-[0.72rem] font-bold uppercase tracking-[0.18em] text-primary;
+  }
+
+  .mc-page-title {
+    @apply text-balance text-3xl font-extrabold tracking-[-0.035em] text-ink sm:text-4xl;
+  }
+
+  .mc-section-title {
+    @apply text-xl font-bold tracking-[-0.02em] text-ink sm:text-2xl;
+  }
+
+  .mc-body {
+    @apply text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7;
+  }
+
+  .mc-stat {
+    @apply rounded-2xl border border-border/80 bg-white/80 px-4 py-4 shadow-[0_12px_36px_-30px_rgb(20_50_104_/_45%)];
+  }
+
+  .mc-empty {
+    @apply rounded-[1.35rem] border border-dashed border-border bg-white/55 px-6 py-12 text-center;
+  }
+
+  .mc-status-dot {
+    @apply size-2 rounded-full bg-emerald-500 shadow-[0_0_0_4px_rgb(16_185_129_/_10%)];
   }
 }
 
