@@ -594,7 +594,7 @@ app.get("/api/platform-payments/verify/:reference", async c => {
 
   const { rows } = await query(
     `SELECT pp.status,pp.amount,pp.purpose,pp.application_status,pp.review_reason,
-            pp.review_resolved_at,pp.review_resolved_by,pp.review_resolution_note,
+            pp.review_resolved_at,pp.review_resolved_by,pp.review_resolution_note,pp.paid_at,pp.created_at,
             c.slug,c.title,c.status AS cotisation_status
      FROM platform_payments pp
      LEFT JOIN cotisations c ON c.id=pp.cotisation_id
