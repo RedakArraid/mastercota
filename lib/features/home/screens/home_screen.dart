@@ -201,7 +201,7 @@ class HomeScreen extends ConsumerWidget {
                       Expanded(
                         flex: 2,
                         child: _ActionButton(
-                          label: '+ Nouvelle cagnotte',
+                          label: '+ Nouvelle cotisation',
                           primary: true,
                           onTap: () => context.push('/cotisation/create'),
                         ),
@@ -221,7 +221,7 @@ class HomeScreen extends ConsumerWidget {
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
-                        'Mes cagnottes',
+                        'Mes cotisations',
                         style: AppTextStyles.headlineLarge.copyWith(
                           fontSize: 22,
                           letterSpacing: -0.01 * 22,
@@ -346,7 +346,7 @@ class _HeroCard extends StatelessWidget {
                   Container(
                     decoration: BoxDecoration(
                       color: AppColors.ink,
-                      borderRadius: BorderRadius.circular(22),
+                      borderRadius: BorderRadius.circular(AppColors.radiusXl),
                     ),
                     padding: const EdgeInsets.fromLTRB(24, 26, 24, 22),
                     child: Column(
@@ -519,7 +519,8 @@ class _ActionButton extends StatelessWidget {
       child: Container(
         height: 56,
         decoration: BoxDecoration(
-          color: primary ? AppColors.accent : AppColors.paper,
+          gradient: primary ? AppColors.primaryGradient : null,
+          color: primary ? null : AppColors.paper,
           borderRadius: BorderRadius.circular(16),
           border: primary ? null : Border.all(color: AppColors.line),
         ),
@@ -527,7 +528,7 @@ class _ActionButton extends StatelessWidget {
           child: Text(
             label,
             style: AppTextStyles.bodyMedium.copyWith(
-              color: primary ? Colors.white : AppColors.ink,
+              color: primary ? AppColors.ink : AppColors.ink,
               fontWeight: FontWeight.w500,
               fontSize: 14,
             ),
@@ -549,7 +550,7 @@ class _EmptyState extends StatelessWidget {
         onTap: () => context.push('/cotisation/create'),
         child: Center(
           child: Text(
-            'Créez votre première cagnotte →',
+            'Créez votre première cotisation →',
             style: AppTextStyles.bodyMedium.copyWith(
               color: AppColors.ink3,
               fontWeight: FontWeight.w500,

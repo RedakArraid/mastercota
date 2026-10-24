@@ -30,8 +30,9 @@ class AppColors {
   static const Color lineSoft = Color(0x0F143268); // 6%
 
   /// Radius shadcn (0.75rem ≈ 12 logical pixels)
-  static const double radius = 12;
-  static const double radiusLg = 16;
+  static const double radius = 14;
+  static const double radiusLg = 20;
+  static const double radiusXl = 24;
 
   // ── Backward-compat aliases (existing widgets compile unchanged) ─
   static const Color background      = cream;

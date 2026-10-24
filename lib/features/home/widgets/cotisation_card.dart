@@ -33,13 +33,21 @@ class CotisationCard extends StatelessWidget {
       child:
           Container(
                 decoration: BoxDecoration(
-                  color: AppColors.paper,
-                  borderRadius: BorderRadius.circular(20),
+                  color: AppColors.cream,
+                  borderRadius: BorderRadius.circular(AppColors.radiusXl),
                   border: Border.all(
                     color: isAccent ? AppColors.accentLine : AppColors.line,
                   ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.ink.withValues(alpha: 0.06),
+                      blurRadius: 28,
+                      spreadRadius: -10,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
                 ),
-                padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -56,7 +64,7 @@ class CotisationCard extends StatelessWidget {
                                 style: AppTextStyles.titleLarge.copyWith(
                                   fontSize: 18,
                                   letterSpacing: -0.01 * 18,
-                                  fontWeight: FontWeight.w500,
+                                  fontWeight: FontWeight.w700,
                                   height: 1.15,
                                 ),
                                 maxLines: 2,

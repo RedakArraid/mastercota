@@ -18,7 +18,7 @@
   },
   "typography": {
     "fontFamily": "Plus Jakarta Sans",
-    "radius": "0.75rem"
+    "radius": "0.9rem"
   },
   "business": {
     "commissionRate": 0.01,

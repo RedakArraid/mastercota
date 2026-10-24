@@ -54,25 +54,25 @@ function PhoneForm() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col px-4 py-10 sm:px-6 sm:py-12 md:py-16">
+    <div className="relative mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-lg flex-col justify-center px-4 py-10 sm:px-6 sm:py-14">
       <Enter>
         <Logo href="/" size="md" />
       </Enter>
       <Enter delayMs={140} className="mt-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">
+        <p className="mc-kicker">
           Étape 1 sur 2 · Connexion
         </p>
-        <h1 className="mt-3 text-2xl font-extrabold text-ink sm:text-3xl">
+        <h1 className="mt-3 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">
           Votre numéro WhatsApp
         </h1>
-        <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+        <p className="mt-4 text-base leading-7 text-muted-foreground">
           Choisissez votre pays, puis saisissez votre numéro. Nous envoyons un
           code à <strong className="font-semibold text-foreground">6 chiffres</strong>{" "}
           sur WhatsApp. Ce numéro devient votre compte Mastercota.
         </p>
       </Enter>
 
-      <Enter delayMs={280} className="mt-8">
+      <Enter delayMs={280} className="mc-panel mt-8 p-5 sm:p-6">
         <form onSubmit={onSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="phone">Téléphone</Label>

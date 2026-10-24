@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Copy, Share2, Lock, Pencil, Save } from "lucide-react";
+import { ArrowLeft, CalendarDays, Copy, Share2, Lock, Pencil, Save, Trophy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -398,39 +398,70 @@ export default function CotisationDetailPage() {
     cotisation.settings?.show_best_contributor !== false && best;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-8">
-      <div>
-        <Button
-          variant="ghost"
-          className="-ml-3 mb-2"
-          onClick={() => router.push("/home")}
-        >
-          ← Retour
-        </Button>
-        <div className="flex flex-wrap items-center gap-2">
-          <h1 className="text-2xl font-extrabold text-ink sm:text-3xl">{cotisation.title}</h1>
-          <Badge variant="secondary">{statusLabel(cotisation.status)}</Badge>
-        </div>
-        {cotisation.description ? (
-          <p className="mt-2 text-muted-foreground">{cotisation.description}</p>
-        ) : null}
-        <p className="mt-2 text-sm text-muted-foreground">
-          {cotisation.status === "pending_fee" ? "La durée commence à l’activation" : remainingLabel(cotisation.deadline)}
-          {cotisation.duration_days
-            ? ` · durée ${cotisation.duration_days} j`
-            : ""}
-          {cotisation.is_free_tier ? " · offre gratuite" : ""}
-        </p>
-      </div>
+    <div className="mc-page">
+      <div className="mx-auto max-w-4xl space-y-7">
+        <section className="relative overflow-hidden rounded-[1.7rem] bg-[linear-gradient(135deg,#143268_0%,#214b86_100%)] p-6 text-white shadow-[0_28px_70px_-40px_rgb(20_50_104_/_90%)] sm:p-8">
+          <div className="pointer-events-none absolute -right-20 -top-24 size-64 rounded-full bg-gold-bright/15 blur-2xl" />
+          <div className="relative">
+            <Button
+              variant="ghost"
+              className="-ml-3 mb-5 text-white/70 hover:bg-white/10 hover:text-white"
+              onClick={() => router.push("/home")}
+            >
+              <ArrowLeft className="size-4" />
+              Retour
+            </Button>
+
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="min-w-0 max-w-2xl">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge className="rounded-full border border-white/10 bg-white/10 text-white hover:bg-white/10">
+                    {statusLabel(cotisation.status)}
+                  </Badge>
+                  {cotisation.is_free_tier ? (
+                    <span className="rounded-full bg-gold-bright/15 px-2.5 py-1 text-[11px] font-bold text-gold-bright">
+                      Offre gratuite
+                    </span>
+                  ) : null}
+                </div>
+                <h1 className="mt-4 text-balance text-3xl font-extrabold tracking-[-0.045em] sm:text-4xl">
+                  {cotisation.title}
+                </h1>
+                {cotisation.description ? (
+                  <p className="mt-3 max-w-xl text-sm leading-6 text-white/65 sm:text-base">
+                    {cotisation.description}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-right backdrop-blur">
+                <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/45">
+                  Période
+                </p>
+                <p className="mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-white">
+                  <CalendarDays className="size-3.5 text-gold-bright" />
+                  {cotisation.status === "pending_fee"
+                    ? "Démarre à l’activation"
+                    : remainingLabel(cotisation.deadline)}
+                </p>
+                {cotisation.duration_days ? (
+                  <p className="mt-1 text-xs text-white/45">
+                    Durée : {cotisation.duration_days} jours
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </section>
 
       {cotisation.platform_payment?.application_status === "review_required" && !cotisation.platform_payment.review_resolved_at ? (
-        <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
+        <div role="alert" className="mc-panel border-amber-500/35 bg-amber-50/80 p-5 text-sm">
           <p>Votre paiement a été reçu, mais le service n’a pas pu être appliqué. Ne payez pas une seconde fois.</p>
           <Button asChild variant="secondary" className="mt-3"><Link href={`/cotisation/${id}/frais?ref=${encodeURIComponent(cotisation.platform_payment.reference)}`}>Consulter le paiement</Link></Button>
         </div>
       ) : null}
       {cotisation.platform_payment?.review_resolved_at ? (
-        <div role="status" className="space-y-2 rounded-xl border bg-secondary/50 p-4 text-sm">
+        <div role="status" className="mc-panel space-y-2 bg-secondary/50 p-5 text-sm">
           <p className="font-medium">Le support a terminé l’examen de votre paiement.</p>
           <p className="whitespace-pre-wrap break-words">{cotisation.platform_payment.review_resolution_note}</p>
           <p>Ce paiement n’a pas activé le service. Suivez les instructions du support avant un nouveau paiement.</p>
@@ -438,7 +469,7 @@ export default function CotisationDetailPage() {
         </div>
       ) : null}
       {cotisation.status === "pending_fee" && (cotisation.platform_payment?.application_status !== "review_required" || !!cotisation.platform_payment.review_resolved_at) ? (
-        <div className="rounded-2xl border border-amber-500/40 bg-amber-500/10 px-4 py-4 text-sm">
+        <div className="mc-panel border-amber-500/35 bg-amber-50/80 p-5 text-sm">
           <p className="font-semibold text-ink">
             Frais Mastercota en attente
           </p>
@@ -459,7 +490,7 @@ export default function CotisationDetailPage() {
       {!cotisation.owner_wave_pay_link &&
       !cotisation.owner_wave_phone &&
       cotisation.status !== "pending_fee" ? (
-        <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+        <div className="mc-panel border-amber-500/30 bg-amber-50/70 p-5 text-sm">
           <p className="font-medium text-ink">Wave non configuré</p>
           <p className="mt-1 text-muted-foreground">
             Ajoutez un lien Wave Business ou votre numéro pour recevoir les
@@ -471,27 +502,42 @@ export default function CotisationDetailPage() {
         </div>
       ) : null}
 
-      <section className="rounded-2xl border border-border bg-card p-5">
-        <div className="mb-2 flex justify-between text-sm">
-          <span className="font-semibold">
-            {formatAmount(Number(cotisation.current_amount))}
-          </span>
-          <span className="text-muted-foreground">
-            objectif {formatAmount(Number(cotisation.target_amount))}
-          </span>
+      <section className="mc-panel p-5 sm:p-7">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="mc-kicker">Progression</p>
+            <p className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">
+              {formatAmount(Number(cotisation.current_amount))}
+            </p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              sur un objectif de {formatAmount(Number(cotisation.target_amount))}
+            </p>
+          </div>
+          <div className="rounded-2xl bg-secondary px-4 py-3 text-right">
+            <p className="text-2xl font-extrabold tracking-[-0.03em] text-ink">
+              {pct.toFixed(0)} %
+            </p>
+            <p className="text-xs font-medium text-muted-foreground">atteint</p>
+          </div>
         </div>
-        <Progress value={pct} className="h-3" />
-        <p className="mt-2 text-xs text-muted-foreground">{pct.toFixed(0)} %</p>
+
+        <Progress value={pct} className="mt-5 h-3 bg-secondary" />
+
         {showBest ? (
-          <p className="mt-3 rounded-xl bg-secondary/60 px-3 py-2 text-sm">
-            Meilleur contributeur :{" "}
-            <span className="font-semibold">{best.contributor_name}</span> ·{" "}
-            {formatAmount(Number(best.amount))}
-          </p>
+          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-accent/70 px-4 py-3 text-sm">
+            <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white text-primary shadow-sm">
+              <Trophy className="size-4" />
+            </span>
+            <p className="min-w-0 text-muted-foreground">
+              Meilleur contributeur :{" "}
+              <span className="font-bold text-ink">{best.contributor_name}</span>{" "}
+              · {formatAmount(Number(best.amount))}
+            </p>
+          </div>
         ) : null}
       </section>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="mc-panel-soft flex flex-wrap gap-2 p-3">
         <Button onClick={share} disabled={cotisation.status === "pending_fee"}>
           <Share2 className="size-4" />
           Partager
@@ -573,9 +619,13 @@ export default function CotisationDetailPage() {
         ) : null}
       </div>
 
-      <p className="rounded-xl bg-secondary px-4 py-3 text-sm break-all text-muted-foreground">
-        {publicUrl}
-      </p>
+      <div className="flex items-center gap-3 rounded-2xl border border-border/80 bg-white/70 px-4 py-3">
+        <span className="min-w-0 flex-1 break-all text-xs text-muted-foreground sm:text-sm">{publicUrl}</span>
+        <Button size="sm" variant="ghost" onClick={copyLink}>
+          <Copy className="size-3.5" />
+          Copier
+        </Button>
+      </div>
 
       <Tabs defaultValue="contributions">
         <TabsList className="w-full">
@@ -596,7 +646,7 @@ export default function CotisationDetailPage() {
               Aucune contribution pour le moment. Partagez le lien.
             </p>
           ) : (
-            <ul className="divide-y divide-border rounded-2xl border border-border bg-card">
+            <ul className="divide-y divide-border overflow-hidden rounded-[1.35rem] border border-border/80 bg-white/85 shadow-[0_18px_50px_-40px_rgb(20_50_104_/_40%)]">
               {contributions.map((c) => (
                 <li
                   key={c.id}
@@ -644,7 +694,7 @@ export default function CotisationDetailPage() {
         <TabsContent value="edit" className="mt-4">
           <form
             onSubmit={saveInfo}
-            className="space-y-4 rounded-2xl border border-border bg-card p-5"
+            className="mc-panel space-y-4 p-5 sm:p-6"
           >
             {infoConflict ? <div role="alert" className="space-y-2 rounded-xl bg-amber-500/10 p-3 text-sm">
               <p>Ces informations ont changé sur un autre écran. Votre saisie est conservée.</p>
@@ -694,7 +744,7 @@ export default function CotisationDetailPage() {
         <TabsContent value="settings" className="mt-4">
           <form
             onSubmit={saveSettings}
-            className="rounded-2xl border border-border bg-card p-5"
+            className="mc-panel p-5 sm:p-6"
           >
             {settingsConflict ? <div role="alert" className="space-y-2 rounded-xl bg-amber-500/10 p-3 text-sm">
               <p>Les réglages ont changé sur un autre écran. Vos choix sont conservés.</p>
@@ -714,6 +764,7 @@ export default function CotisationDetailPage() {
           </form>
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
 }

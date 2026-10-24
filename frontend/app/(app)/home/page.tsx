@@ -1,11 +1,20 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { Plus, AlertCircle } from "lucide-react";
+import {
+  Plus,
+  AlertCircle,
+  Wallet,
+  Activity,
+  Target,
+  ArrowRight,
+  Sparkles,
+} from "lucide-react";
 import { CotisationCard } from "@/components/cotisation-card";
 import { Button } from "@/components/ui/button";
 import { SESSION_COOKIE } from "@/lib/auth-token";
 import { backendFetch } from "@/lib/backend";
 import { hasWavePayoutConfigured } from "@/lib/wave";
+import { formatAmount } from "@/lib/format";
 import type { Cotisation, UserProfile } from "@/lib/types";
 
 export default async function HomePage() {
@@ -37,11 +46,19 @@ export default async function HomePage() {
   }
 
   const active = list.filter((c) => c.status === "active");
+  const completed = list.filter((c) => c.status === "completed");
   const others = list.filter((c) => c.status !== "active");
   const totalRaised = list.reduce(
-    (s, c) => s + Number(c.current_amount || 0),
+    (sum, c) => sum + Number(c.current_amount || 0),
     0
   );
+  const totalTarget = list.reduce(
+    (sum, c) => sum + Number(c.target_amount || 0),
+    0
+  );
+  const globalProgress =
+    totalTarget > 0 ? Math.min(100, Math.round((totalRaised / totalTarget) * 100)) : 0;
+
   const needsPayout =
     profile &&
     !hasWavePayoutConfigured({
@@ -51,104 +68,167 @@ export default async function HomePage() {
     });
 
   return (
-    <div className="space-y-6 sm:space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
-        <div className="min-w-0">
-          <p className="text-sm font-medium uppercase tracking-widest text-primary">
-            Tableau de bord
-          </p>
-          <h1 className="mt-1 text-2xl font-extrabold text-ink sm:text-3xl">
-            {profile?.name
-              ? `Bonjour, ${profile.name.split(" ")[0]}`
-              : "Mes cotisations"}
-          </h1>
-          {list.length > 0 ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              {active.length} active{active.length > 1 ? "s" : ""} ·{" "}
-              {list.length} au total ·{" "}
-              {new Intl.NumberFormat("fr-FR").format(totalRaised)} FCFA collectés
+    <div className="mc-page space-y-7 sm:space-y-9">
+      <section className="relative overflow-hidden rounded-[1.7rem] bg-[linear-gradient(135deg,#143268_0%,#1d447e_58%,#2b558f_100%)] p-6 text-white shadow-[0_28px_70px_-38px_rgb(20_50_104_/_95%)] sm:p-8 lg:p-10">
+        <div className="pointer-events-none absolute -right-24 -top-28 size-72 rounded-full bg-gold-bright/15 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-24 left-1/3 size-64 rounded-full bg-white/5 blur-3xl" />
+
+        <div className="relative flex flex-col gap-8 lg:flex-row lg:items-end lg:justify-between">
+          <div className="max-w-2xl">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-xs font-semibold text-white/75">
+              <Sparkles className="size-3.5 text-gold-bright" />
+              Espace organisateur
+            </div>
+            <h1 className="text-balance text-3xl font-extrabold tracking-[-0.04em] sm:text-4xl lg:text-5xl">
+              {profile?.name
+                ? `Bonjour, ${profile.name.split(" ")[0]}.`
+                : "Pilotez vos cotisations simplement."}
+            </h1>
+            <p className="mt-4 max-w-xl text-sm leading-6 text-white/65 sm:text-base">
+              Suivez l’avancement, confirmez les contributions et partagez vos
+              collectes sans perdre le fil dans les messages.
             </p>
-          ) : null}
+          </div>
+
+          <Button
+            asChild
+            size="lg"
+            className="w-full bg-gold-bright text-ink hover:bg-gold-bright sm:w-auto"
+          >
+            <Link href="/cotisation/create">
+              <Plus className="size-4" />
+              Nouvelle cotisation
+            </Link>
+          </Button>
         </div>
-        <Button asChild className="w-full sm:w-auto">
-          <Link href="/cotisation/create">
-            <Plus className="size-4" />
-            Nouvelle
-          </Link>
-        </Button>
-      </div>
+
+        {list.length > 0 ? (
+          <div className="relative mt-8 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/10 bg-white/8 p-4 backdrop-blur">
+              <div className="flex items-center gap-2 text-xs font-medium text-white/55">
+                <Wallet className="size-3.5 text-gold-bright" />
+                Total collecté
+              </div>
+              <p className="mt-2 text-2xl font-extrabold tracking-[-0.03em]">
+                {formatAmount(totalRaised)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/8 p-4 backdrop-blur">
+              <div className="flex items-center gap-2 text-xs font-medium text-white/55">
+                <Activity className="size-3.5 text-gold-bright" />
+                Cotisations actives
+              </div>
+              <p className="mt-2 text-2xl font-extrabold tracking-[-0.03em]">
+                {active.length}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/8 p-4 backdrop-blur">
+              <div className="flex items-center gap-2 text-xs font-medium text-white/55">
+                <Target className="size-3.5 text-gold-bright" />
+                Progression globale
+              </div>
+              <p className="mt-2 text-2xl font-extrabold tracking-[-0.03em]">
+                {globalProgress} %
+              </p>
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       {needsPayout ? (
-        <div className="flex gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
-          <AlertCircle className="mt-0.5 size-4 shrink-0 text-amber-700" />
-          <div>
-            <p className="font-medium text-ink">Avant de recevoir : configurez Wave</p>
-            <p className="mt-1 leading-relaxed text-muted-foreground">
-              Sans Wave, vos contributeurs ne peuvent pas vous payer. Choisissez
-              Wave Business (paiement en 1 clic) ou votre numéro Wave (envoi
-              manuel). On vous explique chaque étape.
-            </p>
-            <Button asChild size="sm" variant="secondary" className="mt-3">
-              <Link href="/profile/payout">Voir les deux modes et configurer</Link>
-            </Button>
+        <section className="mc-panel flex flex-col gap-4 border-amber-500/25 bg-amber-50/75 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-amber-100 text-amber-800">
+              <AlertCircle className="size-5" />
+            </span>
+            <div>
+              <p className="font-bold text-ink">Configurez votre réception Wave</p>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                Vos contributeurs pourront vous payer dès que votre lien Wave
+                Business ou votre numéro Wave sera renseigné.
+              </p>
+            </div>
           </div>
-        </div>
+          <Button asChild variant="outline" className="shrink-0">
+            <Link href="/profile/payout">
+              Configurer maintenant
+              <ArrowRight className="size-4" />
+            </Link>
+          </Button>
+        </section>
       ) : null}
 
       {loadError ? (
-        <div className="rounded-2xl border border-destructive/30 bg-destructive/5 px-6 py-10 text-center">
-          <h2 className="text-lg font-semibold text-ink">
+        <section className="mc-empty border-destructive/30 bg-destructive/5">
+          <h2 className="text-lg font-bold text-ink">
             Impossible de charger vos cotisations
           </h2>
-          <p className="mt-2 text-muted-foreground">
-            Vérifiez votre connexion et réessayez.
+          <p className="mt-2 text-sm text-muted-foreground">
+            Vérifiez votre connexion puis actualisez la page.
           </p>
-        </div>
+        </section>
       ) : list.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border bg-card/50 px-6 py-14 text-left md:text-center">
-          <p className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">
-            Première cotisation
-          </p>
-          <h2 className="mt-3 text-2xl font-extrabold text-ink">
-            Aucune cotisation pour l’instant
-          </h2>
-          <p className="mx-auto mt-4 max-w-md text-base leading-relaxed text-muted-foreground">
-            Une cotisation, c’est une page publique avec un objectif et une
-            durée. Vous la partagez sur WhatsApp ; vos proches paient via Wave ;
-            vous confirmez les paiements. Avant de créer, configurez Wave si ce
-            n’est pas déjà fait.
-          </p>
-          <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
-            <Button asChild size="lg">
-              <Link href="/cotisation/create">Créer une cotisation</Link>
-            </Button>
-            <Button asChild size="lg" variant="secondary">
-              <Link href="/profile/payout">D’abord configurer Wave</Link>
-            </Button>
+        <section className="mc-panel relative overflow-hidden px-6 py-12 text-center sm:px-10 sm:py-16">
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-[radial-gradient(ellipse_at_top,_rgb(244_184_41_/_14%),_transparent_70%)]" />
+          <div className="relative mx-auto max-w-xl">
+            <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-accent text-primary">
+              <Plus className="size-6" />
+            </span>
+            <p className="mc-kicker mt-6">Première cotisation</p>
+            <h2 className="mt-2 text-2xl font-extrabold tracking-[-0.03em] text-ink sm:text-3xl">
+              Transformez votre prochain groupe WhatsApp en collecte claire.
+            </h2>
+            <p className="mx-auto mt-4 max-w-lg text-sm leading-6 text-muted-foreground sm:text-base sm:leading-7">
+              Créez la page, partagez le lien, recevez directement et gardez une
+              vision nette de chaque contribution.
+            </p>
+            <div className="mt-7 flex flex-col justify-center gap-3 sm:flex-row">
+              <Button asChild size="lg">
+                <Link href="/cotisation/create">Créer ma cotisation</Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <Link href="/profile/payout">Configurer la réception</Link>
+              </Button>
+            </div>
           </div>
-        </div>
+        </section>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-10">
           {active.length > 0 ? (
             <section className="space-y-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                En cours
-              </h2>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {active.map((c) => (
-                  <CotisationCard key={c.id} cotisation={c} />
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="mc-kicker">En cours</p>
+                  <h2 className="mt-1 mc-section-title">Cotisations actives</h2>
+                </div>
+                <span className="rounded-full bg-secondary px-3 py-1.5 text-xs font-semibold text-muted-foreground">
+                  {active.length} active{active.length > 1 ? "s" : ""}
+                </span>
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {active.map((cotisation) => (
+                  <CotisationCard key={cotisation.id} cotisation={cotisation} />
                 ))}
               </div>
             </section>
           ) : null}
+
           {others.length > 0 ? (
             <section className="space-y-4">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-                Terminées / clôturées
-              </h2>
-              <div className="grid gap-4 sm:grid-cols-2">
-                {others.map((c) => (
-                  <CotisationCard key={c.id} cotisation={c} />
+              <div className="flex items-end justify-between gap-4">
+                <div>
+                  <p className="mc-kicker">Historique</p>
+                  <h2 className="mt-1 mc-section-title">Autres cotisations</h2>
+                </div>
+                {completed.length > 0 ? (
+                  <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700">
+                    {completed.length} objectif{completed.length > 1 ? "s" : ""} atteint{completed.length > 1 ? "s" : ""}
+                  </span>
+                ) : null}
+              </div>
+              <div className="grid gap-4 lg:grid-cols-2">
+                {others.map((cotisation) => (
+                  <CotisationCard key={cotisation.id} cotisation={cotisation} />
                 ))}
               </div>
             </section>

@@ -5,65 +5,65 @@ import 'app_colors.dart';
 class AppTextStyles {
   AppTextStyles._();
 
-  // ── Display — Geist, letterSpacing tight ──────────────────────
-  static TextStyle get displayLarge => GoogleFonts.dmSans(
+  // ── Display — Plus Jakarta Sans, aligné avec le web ───────────
+  static TextStyle get displayLarge => GoogleFonts.plusJakartaSans(
         fontSize: 32,
         fontWeight: FontWeight.w700,
         color: AppColors.ink,
         letterSpacing: -0.64,
       );
 
-  static TextStyle get displayMedium => GoogleFonts.dmSans(
+  static TextStyle get displayMedium => GoogleFonts.plusJakartaSans(
         fontSize: 26,
         fontWeight: FontWeight.w600,
         color: AppColors.ink,
         letterSpacing: -0.52,
       );
 
-  static TextStyle get headlineLarge => GoogleFonts.dmSans(
+  static TextStyle get headlineLarge => GoogleFonts.plusJakartaSans(
         fontSize: 22,
         fontWeight: FontWeight.w600,
         color: AppColors.ink,
         letterSpacing: -0.22,
       );
 
-  static TextStyle get headlineMedium => GoogleFonts.dmSans(
+  static TextStyle get headlineMedium => GoogleFonts.plusJakartaSans(
         fontSize: 18,
         fontWeight: FontWeight.w600,
         color: AppColors.ink,
       );
 
-  static TextStyle get titleLarge => GoogleFonts.dmSans(
+  static TextStyle get titleLarge => GoogleFonts.plusJakartaSans(
         fontSize: 16,
         fontWeight: FontWeight.w500,
         color: AppColors.ink,
       );
 
-  static TextStyle get titleMedium => GoogleFonts.dmSans(
+  static TextStyle get titleMedium => GoogleFonts.plusJakartaSans(
         fontSize: 14,
         fontWeight: FontWeight.w500,
         color: AppColors.ink,
       );
 
-  static TextStyle get bodyLarge => GoogleFonts.dmSans(
+  static TextStyle get bodyLarge => GoogleFonts.plusJakartaSans(
         fontSize: 16,
         fontWeight: FontWeight.w400,
         color: AppColors.ink,
       );
 
-  static TextStyle get bodyMedium => GoogleFonts.dmSans(
+  static TextStyle get bodyMedium => GoogleFonts.plusJakartaSans(
         fontSize: 14,
         fontWeight: FontWeight.w400,
         color: AppColors.ink2,
       );
 
-  static TextStyle get bodySmall => GoogleFonts.dmSans(
+  static TextStyle get bodySmall => GoogleFonts.plusJakartaSans(
         fontSize: 12,
         fontWeight: FontWeight.w400,
         color: AppColors.ink2,
       );
 
-  static TextStyle get labelLarge => GoogleFonts.dmSans(
+  static TextStyle get labelLarge => GoogleFonts.plusJakartaSans(
         fontSize: 14,
         fontWeight: FontWeight.w500,
         color: AppColors.ink,
@@ -71,7 +71,7 @@ class AppTextStyles {
       );
 
   // EYEBROW — small caps label
-  static TextStyle get caption => GoogleFonts.dmSans(
+  static TextStyle get caption => GoogleFonts.plusJakartaSans(
         fontSize: 11,
         fontWeight: FontWeight.w500,
         color: AppColors.ink3,

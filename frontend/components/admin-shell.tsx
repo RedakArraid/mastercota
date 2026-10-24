@@ -109,20 +109,20 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   }
 
   const sidebar = (
-    <aside className="flex h-full w-[260px] flex-col bg-[#0f1f3d] text-white">
-      <div className="border-b border-white/10 px-5 py-6">
+    <aside className="flex h-full w-[276px] flex-col bg-[linear-gradient(180deg,#0f1f3d_0%,#10264a_100%)] text-white">
+      <div className="border-b border-white/10 px-5 py-5">
         <div className="flex items-center gap-3">
           <LogoMark size="sm" variant="light" />
           <div>
             <p className="text-sm font-bold tracking-tight">
               Master<span className="text-[#F4B829]">cota</span>
             </p>
-            <p className="text-[11px] text-white/50">Console admin</p>
+            <p className="mt-0.5 text-[11px] text-white/45">Console d’exploitation</p>
           </div>
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 space-y-1.5 overflow-y-auto px-3 py-5">
         <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/35">
           Menu
         </p>
@@ -136,13 +136,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               key={item.href}
               href={item.href}
               className={cn(
-                "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition",
+                "flex items-center gap-3 rounded-2xl px-3.5 py-3 text-sm font-semibold transition-all",
                 active
-                  ? "bg-[#da9810] font-semibold text-[#143268] shadow-lg shadow-[#da9810]/20"
-                  : "text-white/70 hover:bg-white/10 hover:text-white"
+                  ? "bg-[#f4b829] text-[#143268] shadow-[0_14px_30px_-18px_rgb(244_184_41_/_65%)]"
+                  : "text-white/65 hover:bg-white/8 hover:text-white"
               )}
             >
-              <Icon className="h-4 w-4 shrink-0" />
+              <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-xl", active ? "bg-[#143268]/10" : "bg-white/5")}><Icon className="h-4 w-4" /></span>
               {item.label}
             </Link>
           );
@@ -159,7 +159,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <ExternalLink className="h-3.5 w-3.5" />
           Voir le site
         </a>
-        <div className="rounded-xl bg-white/5 px-3 py-3">
+        <div className="rounded-2xl border border-white/8 bg-white/5 px-3.5 py-3.5">
           <p className="truncate text-sm font-medium">
             {me.name || "Administrateur"}
           </p>
@@ -180,7 +180,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <div className="flex min-h-screen bg-[#eef2f8]">
+    <div className="flex min-h-screen bg-[linear-gradient(180deg,#f5f7fb_0%,#eef2f8_100%)]">
       <div className="hidden lg:fixed lg:inset-y-0 lg:flex">{sidebar}</div>
 
       {mobileOpen && (
@@ -195,8 +195,8 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
         </div>
       )}
 
-      <div className="flex min-h-screen flex-1 flex-col lg:pl-[260px]">
-        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-[#d8e0ec] bg-white/90 px-4 py-3 backdrop-blur lg:px-8">
+      <div className="flex min-h-screen flex-1 flex-col lg:pl-[276px]">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-border/80 bg-white/85 px-4 py-3.5 backdrop-blur-xl lg:px-8">
           <div className="flex items-center gap-3">
             <Button
               variant="outline"
@@ -217,13 +217,13 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               </p>
             </div>
           </div>
-          <div className="hidden items-center gap-2 rounded-full bg-[#f4f7fb] px-3 py-1.5 text-xs text-[#6b7a95] sm:flex">
-            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-            Compte administrateur
+          <div className="hidden items-center gap-2 rounded-full border border-border/80 bg-white px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-sm sm:flex">
+            <span className="mc-status-dot" />
+            Système opérationnel
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8">{children}</main>
+        <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8 xl:px-10">{children}</main>
       </div>
     </div>
   );

@@ -86,25 +86,25 @@ function OtpForm() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col px-4 py-10 sm:px-6 sm:py-12 md:py-16">
+    <div className="relative mx-auto flex min-h-[calc(100dvh-4rem)] w-full max-w-lg flex-col justify-center px-4 py-10 sm:px-6 sm:py-14">
       <Enter>
         <Logo href="/" size="md" />
       </Enter>
       <Enter delayMs={140} className="mt-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.16em] text-primary">
+        <p className="mc-kicker">
           Étape 2 sur 2 · Vérification
         </p>
-        <h1 className="mt-3 text-2xl font-extrabold text-ink sm:text-3xl">
+        <h1 className="mt-3 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">
           Code reçu sur WhatsApp
         </h1>
-        <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+        <p className="mt-4 text-base leading-7 text-muted-foreground">
           Ouvrez WhatsApp sur le numéro{" "}
           <span className="font-semibold text-foreground">{phone || "…"}</span>
           . Saisissez le code à 6 chiffres ci-dessous. Prenez votre temps, le
           code reste valable quelques minutes.
         </p>
       </Enter>
-      <Enter delayMs={280} className="mt-8">
+      <Enter delayMs={280} className="mc-panel mt-8 p-5 sm:p-6">
         <form onSubmit={onSubmit} className="space-y-6">
           <div className="space-y-2">
             <Label htmlFor="otp">Code à 6 chiffres</Label>
