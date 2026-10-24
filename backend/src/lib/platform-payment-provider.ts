@@ -51,7 +51,9 @@ export async function setActivePlatformPaymentProvider(options: {
       return { active_provider: previous, changed: false };
     }
     await client.query(
-      "UPDATE platform_payment_settings SET active_provider=$1,updated_by=$2,updated_at=now() WHERE id=1",
+      `INSERT INTO platform_payment_settings(id,active_provider,updated_by,updated_at)
+       VALUES(1,$1,$2,now())
+       ON CONFLICT (id) DO UPDATE SET active_provider=EXCLUDED.active_provider,updated_by=EXCLUDED.updated_by,updated_at=now()`,
       [options.provider, options.adminId]
     );
     await client.query(
