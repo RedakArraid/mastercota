@@ -10,11 +10,24 @@ process.env.JWT_SECRET = 'mastercota-test-secret-at-least-32-characters';
 process.env.OTP_DEV_CODE = '123456';
 process.env.OPENWA_ENABLED = 'false';
 process.env.PAYSTACK_SECRET_KEY = 'sk_test_isolated_mock';
+process.env.PLATFORM_PAYMENT_PRIMARY = 'paystack';
+process.env.PISPI_ENABLED = 'true';
+process.env.PISPI_ENVIRONMENT = 'sandbox';
+process.env.PISPI_PARTICIPANT = 'TEST';
+process.env.PISPI_API_BASE_URL = 'https://sandbox.pispi.test/piz/v1';
+process.env.PISPI_TOKEN_URL = 'https://sandbox.pispi.test/oauth2/token';
+process.env.PISPI_CLIENT_ID = 'test-client';
+process.env.PISPI_CLIENT_SECRET = 'test-client-secret';
+process.env.PISPI_API_KEY = 'test-api-key';
+process.env.PISPI_PAYEE_ALIAS = '11111111-1111-4111-8111-111111111111';
+process.env.PISPI_SCOPE_PREFIX = 'piz/';
+process.env.PISPI_WEBHOOK_SECRET = 'test-webhook-secret';
 process.env.APP_URL = 'http://localhost:3000';
 const { app } = await import('../src/index.js');
 const { pool, query } = await import('../src/lib/db.js');
 const { signSession } = await import('../src/lib/auth.js');
 const { activatePlatformPayment, initializePlatformFeePaystack } = await import('../src/lib/billing.js');
+const { resetPispiTokenCacheForTests } = await import('../src/lib/pispi.js');
 const { validateEnvironment } = await import('../src/lib/security.js');
 const { normalizeWavePhone } = await import('../src/lib/wave.js');
 const charges = new Map<string, any>();
@@ -23,8 +36,26 @@ let initializeCalls = 0;
 let lostInitializeResponse = false;
 let failVerification = false;
 let waitForFullPool = false;
+const pispiRequests = new Map<string, any>();
+let pispiTokenCalls = 0;
 globalThis.fetch = async (input, init) => {
   const target = String(input);
+  if (target === process.env.PISPI_TOKEN_URL) {
+    pispiTokenCalls++;
+    return Response.json({ access_token: 'pispi-test-token', expires_in: 300 });
+  }
+  if (target.startsWith(process.env.PISPI_API_BASE_URL!)) {
+    assert.equal(new Headers(init?.headers).get('x-api-key'), process.env.PISPI_API_KEY);
+    if (target.endsWith('/demandes-paiements') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      const value = { ...body, statut: 'ENVOYE', end2endId: `E2E-${body.txId}` };
+      pispiRequests.set(body.txId, value);
+      return Response.json(value);
+    }
+    const reference = decodeURIComponent(target.split('/').at(-1)!);
+    const value = pispiRequests.get(reference);
+    return value ? Response.json(value) : Response.json({ message: 'Not found' }, { status: 404 });
+  }
   assert.ok(target.startsWith('https://api.paystack.co/'), `Unexpected external request: ${target}`);
   if (target.endsWith('/initialize')) {
     initializeCalls++;
@@ -46,6 +77,8 @@ globalThis.fetch = async (input, init) => {
 beforeEach(async () => {
   await query('TRUNCATE users, otp_codes, phone_entitlements, request_limits RESTART IDENTITY CASCADE');
   charges.clear(); initializeCalls = 0; lostInitializeResponse = false; failVerification = false; waitForFullPool = false;
+  pispiRequests.clear(); pispiTokenCalls = 0; resetPispiTokenCacheForTests();
+  process.env.PLATFORM_PAYMENT_PRIMARY = 'paystack';
 });
 after(async () => { globalThis.fetch = originalFetch; await pool.end(); });
 async function user(phone = '+2250700000000') {
@@ -181,6 +214,63 @@ test('checkout retries reuse one reference and verify checks ownership and amoun
   const result = await request(`/api/platform-payments/verify/${reference}`, 'GET', undefined, owner.token);
   assert.equal(result.body.payment.cotisation_status, 'active');
   assert.equal(result.body.payment.status, 'paid');
+});
+
+test('PI-SPI platform fee uses explicit provider, canonical status and signed webhook', async () => {
+  process.env.PLATFORM_PAYMENT_PRIMARY = 'pispi';
+  const owner = await user();
+  const created = await create(owner, false);
+  assert.equal(created.provider, 'pispi');
+  assert.equal(created.payment_required, true);
+  assert.equal(created.payment_action_required, 'payer_alias');
+  assert.equal(initializeCalls, 0);
+
+  const payerAlias = '22222222-2222-4222-8222-222222222222';
+  const started = await request(
+    `/api/cotisations/${created.cotisation.id}/pay-fee`,
+    'POST',
+    { provider: 'pispi', payer_alias: payerAlias },
+    owner.token
+  );
+  assert.equal(started.status, 200, JSON.stringify(started.body));
+  assert.equal(started.body.provider, 'pispi');
+  assert.equal(started.body.provider_status, 'ENVOYE');
+  assert.ok(started.body.reference);
+  assert.equal(pispiTokenCalls, 1);
+
+  const row = (await query('SELECT * FROM platform_payments WHERE id=$1', [started.body.reference])).rows[0];
+  assert.equal(row.provider, 'pispi');
+  assert.equal(row.provider_reference, started.body.reference);
+  assert.equal(row.paystack_reference, null);
+  assert.equal(row.status, 'pending');
+
+  const crossProvider = await request(
+    `/api/cotisations/${created.cotisation.id}/pay-fee`,
+    'POST',
+    { provider: 'paystack' },
+    owner.token
+  );
+  assert.equal(crossProvider.status, 400);
+  assert.match(crossProvider.body.error, /autre moyen/);
+  assert.equal(initializeCalls, 0);
+
+  const remote = pispiRequests.get(started.body.reference);
+  remote.statut = 'IRREVOCABLE';
+  remote.montant = Number(row.amount);
+  const webhookBody = JSON.stringify({ data: [{ txId: started.body.reference, evCode: 'PAIEMENT_IRREVOCABLE' }] });
+  const signature = createHmac('sha256', process.env.PISPI_WEBHOOK_SECRET!).update(webhookBody).digest('hex');
+
+  assert.equal((await app.request('/api/pispi/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Signature': 'bad' }, body: webhookBody })).status, 401);
+  assert.equal((await app.request('/api/pispi/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Signature': signature }, body: webhookBody })).status, 200);
+
+  const verified = await request(`/api/platform-payments/verify/${started.body.reference}`, 'GET', undefined, owner.token);
+  assert.equal(verified.status, 200);
+  assert.equal(verified.body.provider, 'pispi');
+  assert.equal(verified.body.provider_status, 'IRREVOCABLE');
+  assert.equal(verified.body.payment.status, 'paid');
+  assert.equal(verified.body.payment.application_status, 'applied');
+  assert.equal(verified.body.payment.cotisation_status, 'active');
+  assert.equal(initializeCalls, 0);
 });
 
 test('webhook signature and duplicate extension delivery', async () => {

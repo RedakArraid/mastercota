@@ -11,6 +11,9 @@ export function validateEnvironment() {
   if (process.env.OTP_DEV_CODE || process.env.OTP_DEV_LOG === "1") throw new Error("Les options OTP de développement sont interdites en production");
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL manquant");
   if (!process.env.APP_URL?.startsWith("https://")) throw new Error("APP_URL HTTPS requis en production");
+  if (process.env.PISPI_ENABLED === "true") {
+    throw new Error("PI-SPI production est bloqué tant que le mTLS/PICERT du participant n’est pas installé");
+  }
 }
 
 export function clientAddress(c: Context): string {

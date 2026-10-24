@@ -25,18 +25,26 @@ export function platformPaymentAvailability(): PlatformPaymentAvailability[] {
   const pispiEnabled = process.env.PISPI_ENABLED === "true";
   const pispiParticipant = (process.env.PISPI_PARTICIPANT || "").trim();
   const pispiBaseUrl = (process.env.PISPI_API_BASE_URL || "").trim();
+  const pispiTokenUrl = (process.env.PISPI_TOKEN_URL || "").trim();
+  const pispiClientId = (process.env.PISPI_CLIENT_ID || "").trim();
+  const pispiClientSecret = (process.env.PISPI_CLIENT_SECRET || "").trim();
+  const pispiApiKey = (process.env.PISPI_API_KEY || "").trim();
+  const pispiPayeeAlias = (process.env.PISPI_PAYEE_ALIAS || "").trim();
+  const pispiEnvironment = (process.env.PISPI_ENVIRONMENT || "sandbox").trim().toLowerCase();
   const paystackEnabled = Boolean((process.env.PAYSTACK_SECRET_KEY || "").trim());
 
   return [
     {
       provider: "pispi",
-      enabled: pispiEnabled && Boolean(pispiParticipant) && Boolean(pispiBaseUrl),
+      enabled: pispiEnabled && pispiEnvironment === "sandbox" && Boolean(pispiParticipant) && Boolean(pispiBaseUrl) && Boolean(pispiTokenUrl) && Boolean(pispiClientId) && Boolean(pispiClientSecret) && Boolean(pispiApiKey) && Boolean(pispiPayeeAlias),
       ...(
-        pispiEnabled && pispiParticipant && pispiBaseUrl
+        pispiEnabled && pispiEnvironment === "sandbox" && pispiParticipant && pispiBaseUrl && pispiTokenUrl && pispiClientId && pispiClientSecret && pispiApiKey && pispiPayeeAlias
           ? {}
           : {
               reason:
-                "PI-SPI sera activé après contractualisation et configuration de l’API Business d’un participant homologué.",
+                pispiEnvironment === "production"
+                  ? "PI-SPI production reste bloqué jusqu’à l’installation mTLS/PICERT du participant."
+                  : "PI-SPI sandbox nécessite participant, URLs, OAuth2, clé API et alias bénéficiaire.",
             }
       ),
     },
