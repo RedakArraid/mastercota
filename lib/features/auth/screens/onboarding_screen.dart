@@ -72,7 +72,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     eyebrow: '01 sur 03',
                     title: 'Créez en',
                     titleAccent: '30 secondes.',
-                    body: 'Titre, objectif, date : votre cotisation est prête à partager.',
+                    body: 'Titre, objectif, durée : votre cotisation est prête à partager.',
                     illustration: _Illus1(),
                   ),
                   _Slide(
@@ -84,9 +84,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                   _Slide(
                     eyebrow: '03 sur 03',
-                    title: 'Suivez,',
-                    titleAccent: 'relancez.',
-                    body: 'Chaque paiement en temps réel. Rappels personnalisés aux retardataires.',
+                    title: 'Vérifiez,',
+                    titleAccent: 'confirmez.',
+                    body: 'Chaque transfert signalé reste en attente jusqu\'à votre vérification. Seuls les montants confirmés comptent dans le total.',
                     illustration: _Illus3(),
                   ),
                 ],
