@@ -11,13 +11,15 @@ val signingProperties = Properties()
 val signingFile = rootProject.file("key.properties")
 if (signingFile.exists()) signingProperties.load(FileInputStream(signingFile))
 val releaseRequested = gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
-if (releaseRequested && !signingFile.exists()) {
-    throw GradleException("Signature release manquante. Configurez android/key.properties (voir README).")
+val signedReleaseRequired = System.getenv("MASTERCOTA_REQUIRE_SIGNED_RELEASE") == "true"
+if (releaseRequested && signedReleaseRequired && !signingFile.exists()) {
+    throw GradleException("Signature release manquante. Configurez android/key.properties ou les secrets CI de release.")
 }
 
 android {
     namespace = "app.mastercota.mastercota"
-    compileSdk = flutter.compileSdkVersion
+    // Google Play exige API 36+ pour les nouvelles apps et mises à jour depuis le 31 août 2026.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
@@ -30,7 +32,7 @@ android {
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
@@ -46,6 +48,8 @@ android {
     buildTypes {
         release {
             if (signingFile.exists()) signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = true
+            isShrinkResources = true
         }
     }
 }
