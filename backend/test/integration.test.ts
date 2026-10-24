@@ -79,7 +79,7 @@ beforeEach(async () => {
   charges.clear(); initializeCalls = 0; lostInitializeResponse = false; failVerification = false; waitForFullPool = false;
   pispiRequests.clear(); pispiTokenCalls = 0; resetPispiTokenCacheForTests();
   process.env.PLATFORM_PAYMENT_PRIMARY = 'paystack';
-  await query("UPDATE platform_payment_settings SET active_provider='paystack',updated_by=NULL,updated_at=now() WHERE id=1");
+  await query("INSERT INTO platform_payment_settings(id,active_provider,updated_by,updated_at) VALUES(1,'paystack',NULL,now()) ON CONFLICT(id) DO UPDATE SET active_provider='paystack',updated_by=NULL,updated_at=now()");
   await query("DELETE FROM platform_payment_provider_events");
 });
 after(async () => { globalThis.fetch = originalFetch; await pool.end(); });
