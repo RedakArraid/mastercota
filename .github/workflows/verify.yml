@@ -40,4 +40,31 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build apk --debug
+      - run: flutter build apk --debug --dart-define=API_BASE_URL=https://mastercota.com --dart-define=APP_BASE_URL=https://mastercota.com
+      - name: Create ephemeral Android release key
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$GITHUB_WORKSPACE/android/app/ci-upload.jks" \
+            -storepass ci-mastercota \
+            -alias upload \
+            -keypass ci-mastercota \
+            -keyalg RSA -keysize 2048 -validity 3650 \
+            -dname "CN=Mastercota CI,O=Mastercota,C=CI"
+          cat > android/key.properties <<EOF
+          storeFile=$GITHUB_WORKSPACE/android/app/ci-upload.jks
+          storePassword=ci-mastercota
+          keyAlias=upload
+          keyPassword=ci-mastercota
+          EOF
+      - run: flutter build appbundle --release --dart-define=API_BASE_URL=https://mastercota.com --dart-define=APP_BASE_URL=https://mastercota.com
+
+  ios-mobile:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+      - run: flutter build ios --release --no-codesign --dart-define=API_BASE_URL=https://mastercota.com --dart-define=APP_BASE_URL=https://mastercota.com
