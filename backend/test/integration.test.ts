@@ -36,8 +36,26 @@ let initializeCalls = 0;
 let lostInitializeResponse = false;
 let failVerification = false;
 let waitForFullPool = false;
+const pispiRequests = new Map<string, any>();
+let pispiTokenCalls = 0;
 globalThis.fetch = async (input, init) => {
   const target = String(input);
+  if (target === process.env.PISPI_TOKEN_URL) {
+    pispiTokenCalls++;
+    return Response.json({ access_token: 'pispi-test-token', expires_in: 300 });
+  }
+  if (target.startsWith(process.env.PISPI_API_BASE_URL!)) {
+    assert.equal(new Headers(init?.headers).get('x-api-key'), process.env.PISPI_API_KEY);
+    if (target.endsWith('/demandes-paiements') && init?.method === 'POST') {
+      const body = JSON.parse(String(init.body));
+      const value = { ...body, statut: 'ENVOYE', end2endId: `E2E-${body.txId}` };
+      pispiRequests.set(body.txId, value);
+      return Response.json(value);
+    }
+    const reference = decodeURIComponent(target.split('/').at(-1)!);
+    const value = pispiRequests.get(reference);
+    return value ? Response.json(value) : Response.json({ message: 'Not found' }, { status: 404 });
+  }
   assert.ok(target.startsWith('https://api.paystack.co/'), `Unexpected external request: ${target}`);
   if (target.endsWith('/initialize')) {
     initializeCalls++;
@@ -59,6 +77,8 @@ globalThis.fetch = async (input, init) => {
 beforeEach(async () => {
   await query('TRUNCATE users, otp_codes, phone_entitlements, request_limits RESTART IDENTITY CASCADE');
   charges.clear(); initializeCalls = 0; lostInitializeResponse = false; failVerification = false; waitForFullPool = false;
+  pispiRequests.clear(); pispiTokenCalls = 0; resetPispiTokenCacheForTests();
+  process.env.PLATFORM_PAYMENT_PRIMARY = 'paystack';
 });
 after(async () => { globalThis.fetch = originalFetch; await pool.end(); });
 async function user(phone = '+2250700000000') {
