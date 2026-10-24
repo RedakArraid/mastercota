@@ -33,7 +33,7 @@ jobs:
         with: { name: browser-failures, path: 'frontend/test-results/' }
 
   mobile-android:
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
