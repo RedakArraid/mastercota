@@ -225,6 +225,17 @@ app.post("/api/cotisations", async c => {
     return rows[0];
   });
   if (cotisation.platform_fee_status !== 'pending') return c.json({ cotisation, payment_required: false }, 201);
+  const primaryProvider = primaryPlatformPaymentProvider();
+  if (primaryProvider === "pispi") {
+    const { rows: latest } = await query('SELECT * FROM cotisations WHERE id=$1', [cotisation.id]);
+    return c.json({
+      cotisation: latest[0],
+      payment_required: true,
+      provider: "pispi",
+      payment_action_required: "payer_alias",
+      providers: platformPaymentAvailability(),
+    }, 201);
+  }
   try {
     const payment = await initializePlatformFeePaystack({ userId: session.id, phone: session.phone, cotisationId: cotisation.id, purpose: "create", amount: Number(cotisation.platform_fee_amount), durationDays: cotisation.duration_days, callbackPath: `/cotisation/${cotisation.id}/frais` });
     const { rows: latest } = await query('SELECT * FROM cotisations WHERE id=$1', [cotisation.id]);
