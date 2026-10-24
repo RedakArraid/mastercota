@@ -18,3 +18,9 @@ ON CONFLICT (slug) DO UPDATE SET
   sort_order = EXCLUDED.sort_order,
   published = true,
   updated_at = now();
+
+
+UPDATE pages
+SET body_md = body_md || E'\n\n### Suppression du compte\n\nVous pouvez supprimer votre compte directement dans l’application ou depuis https://mastercota.com/suppression-compte. La suppression efface votre compte, vos cotisations, vos données de profil, vos OTP et les données associées au service. Si vous avez contribué à une cotisation organisée par une autre personne, le montant confirmé peut être conservé afin de préserver son total, mais votre nom, votre téléphone et votre note sont anonymisés. Des données minimales peuvent rester chez les prestataires de paiement selon leurs propres obligations légales et contractuelles.'
+WHERE slug = 'confidentialite'
+  AND body_md NOT LIKE '%### Suppression du compte%';
