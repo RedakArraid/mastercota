@@ -35,8 +35,8 @@ class AppButton extends StatelessWidget {
         Text(
           label,
           style: GoogleFonts.plusJakartaSans(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
+            fontSize: 14.5,
+            fontWeight: FontWeight.w700,
             color: AppColors.ink,
           ),
         ),
@@ -44,12 +44,12 @@ class AppButton extends StatelessWidget {
     );
 
     final shape = RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(AppColors.radius),
+      borderRadius: BorderRadius.circular(16),
     );
 
     return SizedBox(
       width: double.infinity,
-      height: 40,
+      height: 50,
       child: isSecondary
           ? OutlinedButton(
               onPressed: isLoading ? null : onPressed,
