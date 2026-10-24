@@ -98,7 +98,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-white/80 px-4 py-3 backdrop-blur-xl md:hidden">
+          <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-white/[0.08]0 px-4 py-3 backdrop-blur-xl md:hidden">
             <Logo href="/home" size="sm" />
             <Sheet>
               <SheetTrigger asChild>
