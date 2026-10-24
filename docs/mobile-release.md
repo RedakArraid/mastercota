@@ -83,6 +83,8 @@ Secrets GitHub nécessaires à la signature :
 - `IOS_TEAM_ID`
 - `IOS_KEYCHAIN_PASSWORD`
 
+L'application embarque un `PrivacyInfo.xcprivacy`. Après création d'une archive signée, générer également le rapport de confidentialité agrégé dans Xcode avant la première soumission et après toute modification importante des plugins.
+
 Pour l'upload optionnel vers App Store Connect / TestFlight :
 
 - `APP_STORE_CONNECT_KEY_ID`
@@ -168,5 +170,7 @@ Les points suivants nécessitent des comptes externes réels et ne peuvent pas �
 - empreinte Play App Signing ;
 - identifiants légaux réels de l'éditeur ;
 - informations fiscales / bancaires demandées par les stores.
+
+En production, configurer également un `DATA_RETENTION_SECRET` stable (32 caractères minimum) afin de pseudonymiser l'historique anti-abus lié à l'offre gratuite.
 
 Ne jamais committer ces secrets.
