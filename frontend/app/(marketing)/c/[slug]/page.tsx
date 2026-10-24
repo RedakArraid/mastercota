@@ -212,7 +212,7 @@ export default async function PublicContributionPage({ params }: Props) {
             <h2 className="mt-1 text-xl font-bold tracking-[-0.025em] text-ink sm:text-2xl">
               {canContribute
                 ? "Je contribue à cette cotisation"
-                : "Vous avez déjà effectué un transfert ?"}
+                : "Vous avez déjà payé ?"}
             </h2>
             {!canContribute ? (
               <p className="mt-2 text-sm leading-6 text-muted-foreground">
