@@ -216,6 +216,63 @@ test('checkout retries reuse one reference and verify checks ownership and amoun
   assert.equal(result.body.payment.status, 'paid');
 });
 
+test('PI-SPI platform fee uses explicit provider, canonical status and signed webhook', async () => {
+  process.env.PLATFORM_PAYMENT_PRIMARY = 'pispi';
+  const owner = await user();
+  const created = await create(owner, false);
+  assert.equal(created.provider, 'pispi');
+  assert.equal(created.payment_required, true);
+  assert.equal(created.payment_action_required, 'payer_alias');
+  assert.equal(initializeCalls, 0);
+
+  const payerAlias = '22222222-2222-4222-8222-222222222222';
+  const started = await request(
+    `/api/cotisations/${created.cotisation.id}/pay-fee`,
+    'POST',
+    { provider: 'pispi', payer_alias: payerAlias },
+    owner.token
+  );
+  assert.equal(started.status, 200, JSON.stringify(started.body));
+  assert.equal(started.body.provider, 'pispi');
+  assert.equal(started.body.provider_status, 'ENVOYE');
+  assert.ok(started.body.reference);
+  assert.equal(pispiTokenCalls, 1);
+
+  const row = (await query('SELECT * FROM platform_payments WHERE id=$1', [started.body.reference])).rows[0];
+  assert.equal(row.provider, 'pispi');
+  assert.equal(row.provider_reference, started.body.reference);
+  assert.equal(row.paystack_reference, null);
+  assert.equal(row.status, 'pending');
+
+  const crossProvider = await request(
+    `/api/cotisations/${created.cotisation.id}/pay-fee`,
+    'POST',
+    { provider: 'paystack' },
+    owner.token
+  );
+  assert.equal(crossProvider.status, 400);
+  assert.match(crossProvider.body.error, /autre moyen/);
+  assert.equal(initializeCalls, 0);
+
+  const remote = pispiRequests.get(started.body.reference);
+  remote.statut = 'IRREVOCABLE';
+  remote.montant = Number(row.amount);
+  const webhookBody = JSON.stringify({ data: [{ txId: started.body.reference, evCode: 'PAIEMENT_IRREVOCABLE' }] });
+  const signature = createHmac('sha256', process.env.PISPI_WEBHOOK_SECRET!).update(webhookBody).digest('hex');
+
+  assert.equal((await app.request('/api/pispi/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Signature': 'bad' }, body: webhookBody })).status, 401);
+  assert.equal((await app.request('/api/pispi/webhook', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Signature': signature }, body: webhookBody })).status, 200);
+
+  const verified = await request(`/api/platform-payments/verify/${started.body.reference}`, 'GET', undefined, owner.token);
+  assert.equal(verified.status, 200);
+  assert.equal(verified.body.provider, 'pispi');
+  assert.equal(verified.body.provider_status, 'IRREVOCABLE');
+  assert.equal(verified.body.payment.status, 'paid');
+  assert.equal(verified.body.payment.application_status, 'applied');
+  assert.equal(verified.body.payment.cotisation_status, 'active');
+  assert.equal(initializeCalls, 0);
+});
+
 test('webhook signature and duplicate extension delivery', async () => {
   const owner = await user(); const { cotisation } = await create(owner);
   const extension = await request(`/api/cotisations/${cotisation.id}/extend`, 'POST', {}, owner.token);
