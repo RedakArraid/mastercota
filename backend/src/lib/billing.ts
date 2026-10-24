@@ -131,6 +131,10 @@ export async function initializePlatformFeePaystack(options: {
     let existing = previous[0];
     if (existing?.application_status === 'review_required' && existing.review_resolved_at) existing = undefined;
     if (existing?.status === 'paid') return completedCheckout(existing);
+    if (existing && existing.provider !== 'paystack') {
+      if (existing.status === 'failed') existing = undefined;
+      else throw new Error('Un paiement via un autre moyen est déjà en cours. Terminez-le ou attendez sa résolution avant de choisir Paystack.');
+    }
     if (existing) {
       const verified = await paystackFetch(`/transaction/verify/${encodeURIComponent(existing.paystack_reference)}`);
       if (verified.ok && verified.data.data?.status === 'success') {
