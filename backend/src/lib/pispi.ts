@@ -25,6 +25,13 @@ export type PispiRequestToPay = {
   [key: string]: unknown;
 };
 
+export class PispiApiError extends Error {
+  constructor(message: string, public readonly status: number, public readonly data?: unknown) {
+    super(message);
+    this.name = "PispiApiError";
+  }
+}
+
 type PispiConfig = {
   baseUrl: string;
   tokenUrl: string;
@@ -158,15 +165,19 @@ export async function createPispiRequestToPay(options: {
     body: JSON.stringify(payload),
   }, [WRITE_SCOPE]);
   if (!result.ok || !result.data) {
-    throw new Error(result.data?.message || result.data?.detail || "Création de la demande PI-SPI impossible");
+    throw new PispiApiError(result.data?.message || result.data?.detail || "Création de la demande PI-SPI impossible", result.status, result.data);
   }
-  return result.data as PispiRequestToPay;
+  const created = result.data as PispiRequestToPay;
+  if (pispiStatus(created) === "REJETE" && String(created.statutRaison || "").toUpperCase() === "DU03") {
+    return getPispiRequestToPay(options.txId);
+  }
+  return created;
 }
 
 export async function getPispiRequestToPay(txId: string): Promise<PispiRequestToPay> {
   const result = await apiFetch(`/demandes-paiements/${encodeURIComponent(txId)}`, undefined, [READ_SCOPE]);
   if (!result.ok || !result.data) {
-    throw new Error(result.data?.message || result.data?.detail || "Vérification PI-SPI indisponible");
+    throw new PispiApiError(result.data?.message || result.data?.detail || "Vérification PI-SPI indisponible", result.status, result.data);
   }
   return result.data as PispiRequestToPay;
 }
