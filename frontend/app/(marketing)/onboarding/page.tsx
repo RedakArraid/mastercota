@@ -25,17 +25,17 @@ const slides = [
   },
   {
     icon: Wallet,
-    title: "Recevoir sur Wave",
-    lead: "L’argent arrive chez vous, pas chez nous.",
-    body: "Recommandé : Wave Business, vos proches paient en un clic. Sinon : votre numéro Wave, ils envoient à la main.",
-    detail: "Wave Business est gratuit (app « Wave Business »). Support CI : 1315.",
+    title: "Recevoir directement",
+    lead: "L’argent reste entre le participant et vous.",
+    body: "Configurez votre mode de réception. Aujourd’hui, Mastercota prend en charge Wave Business ou votre numéro Wave.",
+    detail: "Mastercota ne conserve pas les fonds de la cotisation.",
   },
   {
     icon: Share2,
     title: "Créer et partager",
     lead: "Une page publique pour vos proches.",
-    body: "Titre, objectif, durée. Vous envoyez le lien sur WhatsApp. Ils paient via Wave, cliquent « J’ai payé », vous validez. 0 % sur les contributions.",
-    detail: "Première cotisation : 35 jours gratuits.",
+    body: "Titre, objectif, durée. Vous partagez le lien dans votre groupe. Après leur transfert, les participants le signalent et vous confirmez ce qui a réellement été reçu.",
+    detail: "Première cotisation : 35 jours offerts. Mastercota prend 0 % sur les contributions.",
   },
 ];
 
@@ -152,7 +152,7 @@ export default function OnboardingPage() {
           </Button>
         ) : (
           <p className="text-center text-xs text-muted-foreground">
-            Ensuite : WhatsApp → code → configurer Wave
+            Ensuite : WhatsApp → code → configurer la réception
           </p>
         )}
       </div>
