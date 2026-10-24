@@ -23,15 +23,19 @@ import {
   FREE_DURATION_DAYS,
   MAX_DURATION_DAYS,
   activatePlatformPayment,
+  activatePispiPlatformPayment,
   deadlineFromDuration,
   freeEligibleForPhone,
   getOwnerPhone,
   initializePlatformFeePaystack,
+  initializePlatformFeePispi,
   quoteDuration,
   canExtend,
   EXTENSION_DAYS,
 } from "./lib/billing.js";
 import { normalizeWavePhone, normalizeWavePayLink } from "./lib/wave.js";
+import { getPispiRequestToPay, pispiStatus, pispiWebhookTxIds, verifyPispiWebhookSignature } from "./lib/pispi.js";
+import { assertPlatformPaymentProviderAvailable, backupPlatformPaymentProvider, platformPaymentAvailability, primaryPlatformPaymentProvider, type PlatformPaymentProvider } from "./lib/platform-payment-provider.js";
 import { adminRoutes } from "./admin.js";
 
 export const app = new Hono();
@@ -71,7 +75,8 @@ app.use("*", secureHeaders());
 app.use("*", bodyLimit({ maxSize: 128 * 1024, onError: c => c.json({ error: "Requête trop volumineuse" }, 413) }));
 app.use("/api/*", async (c, next) => {
   c.header("Cache-Control", "no-store");
-  if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method) && c.req.path !== "/api/paystack/webhook") {
+  const providerWebhook = c.req.path === "/api/paystack/webhook" || c.req.path === "/api/pispi/webhook";
+  if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method) && !providerWebhook) {
     const origin = c.req.header("origin");
     if (origin && !ALLOWED_ORIGINS.has(origin)) return c.json({ error: "Origine non autorisée" }, 403);
     if (!c.req.header("content-type")?.includes("application/json")) return c.json({ error: "Content-Type application/json requis" }, 415);
@@ -296,7 +301,7 @@ function publicCotisation(cot: Record<string, any>) {
 }
 
 async function ownerCotisation(cot: Record<string, any>) {
-  const { rows: payments } = await query("SELECT status,application_status,review_reason,review_resolved_at,review_resolved_by,review_resolution_note,paystack_reference AS reference,purpose FROM platform_payments WHERE cotisation_id=$1 ORDER BY (application_status='review_required' AND review_resolved_at IS NULL) DESC, created_at DESC LIMIT 1", [cot.id]);
+  const { rows: payments } = await query("SELECT status,application_status,review_reason,review_resolved_at,review_resolved_by,review_resolution_note,provider,COALESCE(provider_reference,paystack_reference) AS reference,purpose FROM platform_payments WHERE cotisation_id=$1 ORDER BY (application_status='review_required' AND review_resolved_at IS NULL) DESC, created_at DESC LIMIT 1", [cot.id]);
   const today = (await query('SELECT CURRENT_DATE::text AS today')).rows[0].today;
   const feeValid = ['free', 'paid', 'waived', 'none'].includes(cot.platform_fee_status);
   const ext = canExtend({ startsAt: cot.starts_at, deadline: cot.deadline, extensionCount: Number(cot.extension_count) });
