@@ -122,3 +122,15 @@ Android : copier `android/key.properties.example` vers `android/key.properties`,
 iOS : sélectionner l’équipe Apple et les profils de distribution dans Xcode, puis `flutter build ipa --release --dart-define=API_BASE_URL=https://mastercota.com`. La capacité Keychain est déclarée. Vérifier sur un appareil réel l’OTP, les deux modes Wave et le retour de paiement avant distribution.
 
 Les textes légaux, l’identité de l’éditeur et les coordonnées de support doivent être renseignés avec les informations réelles via le CMS avant publication. Aucune identité d’entreprise ou validation réglementaire n’est inventée dans le dépôt.
+
+
+## Android et iOS
+
+La préparation de release mobile (AAB Android, build iOS, liens universels, signature et checklist stores) est documentée dans [`docs/mobile-release.md`](docs/mobile-release.md).
+
+La CI vérifie désormais :
+- APK debug Android ;
+- AAB release Android signé avec une clé éphémère de CI ;
+- build iOS release sans signature sur macOS.
+
+Le workflow manuel `Mobile Release` produit les artefacts signés avec les secrets de publication réels. Les clés, certificats et profils de provisioning ne doivent jamais être commités.
