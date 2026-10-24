@@ -1,3 +1,5 @@
+import { query, transaction } from "./db.js";
+
 export type PlatformPaymentProvider = "pispi" | "paystack";
 
 export type PlatformPaymentAvailability = {
@@ -13,12 +15,51 @@ export type PlatformPaymentAvailability = {
  * This module deliberately does not auto-fallback between providers: a user
  * must explicitly choose the backup rail to avoid double-payment risk.
  */
-export function primaryPlatformPaymentProvider(): PlatformPaymentProvider {
+export function configuredPlatformPaymentProvider(): PlatformPaymentProvider {
   const value = (process.env.PLATFORM_PAYMENT_PRIMARY || "paystack").trim().toLowerCase();
   if (value !== "pispi" && value !== "paystack") {
     throw new Error("PLATFORM_PAYMENT_PRIMARY doit valoir pispi ou paystack");
   }
   return value;
+}
+
+export async function activePlatformPaymentProvider(): Promise<PlatformPaymentProvider> {
+  try {
+    const { rows } = await query<{ active_provider: PlatformPaymentProvider }>(
+      "SELECT active_provider FROM platform_payment_settings WHERE id=1"
+    );
+    return rows[0]?.active_provider ?? configuredPlatformPaymentProvider();
+  } catch {
+    return configuredPlatformPaymentProvider();
+  }
+}
+
+export async function setActivePlatformPaymentProvider(options: {
+  provider: PlatformPaymentProvider;
+  adminId: string;
+  note: string;
+}) {
+  assertPlatformPaymentProviderAvailable(options.provider);
+  const note = options.note.trim();
+  if (!note || note.length > 500) throw new Error("Une note de bascule de 1 à 500 caractères est requise");
+  return transaction(async client => {
+    const { rows } = await client.query<{ active_provider: PlatformPaymentProvider }>(
+      "SELECT active_provider FROM platform_payment_settings WHERE id=1 FOR UPDATE"
+    );
+    const previous = rows[0]?.active_provider ?? configuredPlatformPaymentProvider();
+    if (previous === options.provider) {
+      return { active_provider: previous, changed: false };
+    }
+    await client.query(
+      "UPDATE platform_payment_settings SET active_provider=$1,updated_by=$2,updated_at=now() WHERE id=1",
+      [options.provider, options.adminId]
+    );
+    await client.query(
+      "INSERT INTO platform_payment_provider_events(from_provider,to_provider,changed_by,note) VALUES($1,$2,$3,$4)",
+      [previous, options.provider, options.adminId, note]
+    );
+    return { active_provider: options.provider, changed: true };
+  });
 }
 
 export function platformPaymentAvailability(): PlatformPaymentAvailability[] {
@@ -70,7 +111,7 @@ export function assertPlatformPaymentProviderAvailable(provider: PlatformPayment
  * obtain an explicit choice; never initialize it automatically after failure.
  */
 export function backupPlatformPaymentProvider(
-  primary = primaryPlatformPaymentProvider()
+  primary = configuredPlatformPaymentProvider()
 ): PlatformPaymentProvider | null {
   if (primary === "pispi") {
     const paystack = platformPaymentAvailability().find(item => item.provider === "paystack");
