@@ -10,7 +10,7 @@ export const metadata = {
 
 export default function AccountDeletionPage() {
   return (
-    <main className="min-h-dvh bg-[linear-gradient(180deg,#fffdf8_0%,#f6f8fc_100%)] px-4 py-8 sm:px-6 sm:py-14">
+    <div className="min-h-dvh bg-[linear-gradient(180deg,#fffdf8_0%,#f6f8fc_100%)] px-4 py-8 sm:px-6 sm:py-14">
       <div className="mx-auto max-w-2xl">
         <Logo href="/" size="sm" />
         <section className="mc-panel mt-8 p-6 sm:p-8">
@@ -62,6 +62,6 @@ export default function AccountDeletionPage() {
           </p>
         </section>
       </div>
-    </main>
+    </div>
   );
 }
