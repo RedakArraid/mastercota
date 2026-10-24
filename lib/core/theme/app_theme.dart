@@ -39,7 +39,7 @@ class AppTheme {
           filled: true,
           fillColor: AppColors.cream,
           contentPadding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppColors.radius),
             borderSide: const BorderSide(color: AppColors.line),
@@ -67,10 +67,11 @@ class AppTheme {
             backgroundColor: AppColors.accent,
             foregroundColor: AppColors.ink,
             elevation: 0,
+            minimumSize: const Size(0, 48),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppColors.radius),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
             textStyle: GoogleFonts.plusJakartaSans(
               fontSize: 14,
               fontWeight: FontWeight.w600,
