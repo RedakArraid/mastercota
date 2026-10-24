@@ -491,13 +491,13 @@ export default function CotisationDetailPage() {
       !cotisation.owner_wave_phone &&
       cotisation.status !== "pending_fee" ? (
         <div className="mc-panel border-amber-500/30 bg-amber-50/70 p-5 text-sm">
-          <p className="font-medium text-ink">Wave non configuré</p>
+          <p className="font-medium text-ink">Réception non configurée</p>
           <p className="mt-1 text-muted-foreground">
-            Ajoutez un lien Wave Business ou votre numéro pour recevoir les
-            contributions.
+            Configurez votre mode de réception avant de partager. Aujourd’hui,
+            Mastercota prend en charge Wave Business ou votre numéro Wave.
           </p>
           <Button asChild size="sm" variant="secondary" className="mt-3">
-            <Link href="/profile/payout">Configurer Wave</Link>
+            <Link href="/profile/payout">Configurer la réception</Link>
           </Button>
         </div>
       ) : null}
