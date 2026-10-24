@@ -85,7 +85,7 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
     backgroundColor: AppColors.cream,
-    appBar: AppBar(title: const Text('Recevoir sur Wave')),
+    appBar: AppBar(title: const Text('Recevoir les contributions')),
     body: !_ready
         ? Center(
             child: _error == null
@@ -107,12 +107,11 @@ class _PayoutSettingsScreenState extends ConsumerState<PayoutSettingsScreen> {
               padding: const EdgeInsets.all(20),
               children: [
                 Text(
-                  'L’argent arrive chez vous.',
-                  style: Theme.of(context).textTheme.headlineSmall,
+                  'Les fonds restent chez vous.',                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Les contributeurs vous paient directement dans Wave. Vérifiez chaque réception avant de la confirmer dans Mastercota.',
+                  'Mastercota ne conserve pas l’argent de la cotisation. Aujourd’hui, les contributions sont reçues via Wave : vérifiez chaque transfert avant de le confirmer dans Mastercota.',
                 ),
                 const SizedBox(height: 24),
                 SegmentedButton<String>(
