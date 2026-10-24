@@ -3,9 +3,9 @@ class AppConstants {
 
   static const String appName = 'Mastercota';
   static const String appTagline =
-      'Une cotisation WhatsApp. L’argent sur votre Wave.';
+      'Organisez votre cotisation. Gardez le suivi clair.';
 
-  /// API Next.js (Postgres + OpenWA + Paystack)
+  /// API Mastercota (Postgres + OpenWA + prestataires de paiement)
   static const String apiBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'https://mastercota.com',
