@@ -880,6 +880,46 @@ app.patch("/api/profile", async (c) => {
   return c.json({ user: rows[0] });
 });
 
+app.delete("/api/profile", async c => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const body = await c.req.json().catch(() => ({}));
+  if (body?.confirmation !== "SUPPRIMER") {
+    return c.json({ error: "Confirmation de suppression invalide" }, 400);
+  }
+
+  const deleted = await transaction(async client => {
+    const { rows } = await client.query<{ id: string; phone: string }>(
+      "SELECT id,phone FROM users WHERE id=$1 FOR UPDATE",
+      [session.id]
+    );
+    const user = rows[0];
+    if (!user) return false;
+
+    // Preserve other organizers' accounting totals while removing this person's PII.
+    await client.query(
+      `UPDATE contributions
+       SET contributor_name='Compte supprimé',
+           contributor_phone='deleted:' || id::text,
+           note=NULL
+       WHERE contributor_phone=$1`,
+      [user.phone]
+    );
+
+    // Phone-based authentication and free-tier history are personal data too.
+    await client.query("DELETE FROM otp_codes WHERE phone=$1", [user.phone]);
+    await client.query("DELETE FROM phone_entitlements WHERE phone=$1", [user.phone]);
+
+    // users -> cotisations / platform_payments / notifications are configured with cascading deletes.
+    const result = await client.query("DELETE FROM users WHERE id=$1", [user.id]);
+    return (result.rowCount ?? 0) > 0;
+  });
+
+  const domain = cookieDomain();
+  deleteCookie(c, COOKIE, { path: "/", ...(domain ? { domain } : {}) });
+  return c.json({ ok: deleted });
+});
+
 app.get("/api/site-config", async (c) => {
   const { rows } = await query(`SELECT * FROM site_config WHERE id = 1`);
   return c.json({ config: rows[0] ?? null });
