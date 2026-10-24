@@ -10,6 +10,14 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [
       {
+        source: "/.well-known/assetlinks.json",
+        destination: "/mobile-association/android",
+      },
+      {
+        source: "/.well-known/apple-app-site-association",
+        destination: "/mobile-association/apple",
+      },
+      {
         source: "/api/:path*",
         destination: `${backend}/api/:path*`,
       },

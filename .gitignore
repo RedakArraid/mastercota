@@ -67,6 +67,10 @@ backend/dist/
 android/key.properties
 *.jks
 *.keystore
+*.p12
+*.p8
+*.mobileprovision
+ios/ExportOptions.plist
 backups/
 frontend/playwright-report/
 frontend/test-results/
