@@ -117,9 +117,9 @@ export default function PayoutSettingsPage() {
         <h1 className="text-2xl font-extrabold text-ink sm:text-3xl">Recevoir via Wave</h1>
         <p className="mt-3 text-base leading-relaxed text-muted-foreground">
           Choisissez <strong className="font-semibold text-foreground">un seul mode</strong>.
-          Les contributions arrivent chez vous sur Wave. Mastercota ne prend
-          0&nbsp;% sur ces montants. Prenez le temps de lire les deux options
-          avant de décider.
+          Les contributions sont versées directement chez vous. Mastercota ne
+          conserve pas les fonds et prélève 0&nbsp;% sur les contributions.
+          Aujourd’hui, la réception est assurée via Wave.
         </p>
       </div>
 
@@ -141,7 +141,7 @@ export default function PayoutSettingsPage() {
             </span>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Lien pay.wave.com, 1 clic, montant prérempli. Gratuit à créer.
+            Lien pay.wave.com, parcours plus simple et montant prérempli.
           </p>
         </button>
 
