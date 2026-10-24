@@ -218,27 +218,42 @@ test('checkout retries reuse one reference and verify checks ownership and amoun
   assert.equal(result.body.payment.status, 'paid');
 });
 
-test('PI-SPI platform fee uses explicit provider, canonical status and signed webhook', async () => {
-  process.env.PLATFORM_PAYMENT_PRIMARY = 'pispi';
+test('only admin controls payment routing and clients never see or choose the provider', async () => {
   const owner = await user();
+  const admin = await user('+2250500000000');
+  await query("UPDATE users SET role='admin' WHERE id=$1", [admin.id]);
+
+  assert.equal((await request('/api/admin/payment-routing', 'GET', undefined, owner.token)).status, 403);
+  const switched = await request(
+    '/api/admin/payment-routing',
+    'PATCH',
+    { provider: 'pispi', note: 'Test du rail principal' },
+    admin.token
+  );
+  assert.equal(switched.status, 200, JSON.stringify(switched.body));
+  assert.equal(switched.body.active_provider, 'pispi');
+
   const created = await create(owner, false);
-  assert.equal(created.provider, 'pispi');
   assert.equal(created.payment_required, true);
-  assert.equal(created.payment_action_required, 'payer_alias');
+  assert.equal(created.payment_action_required, 'payment_identifier');
+  assert.equal('provider' in created, false);
+  assert.equal('providers' in created, false);
   assert.equal(initializeCalls, 0);
 
   const payerAlias = '22222222-2222-4222-8222-222222222222';
   const started = await request(
     `/api/cotisations/${created.cotisation.id}/pay-fee`,
     'POST',
-    { provider: 'pispi', payer_alias: payerAlias },
+    { provider: 'paystack', payment_identifier: payerAlias },
     owner.token
   );
   assert.equal(started.status, 200, JSON.stringify(started.body));
-  assert.equal(started.body.provider, 'pispi');
-  assert.equal(started.body.provider_status, 'ENVOYE');
+  assert.equal(started.body.payment_status, 'pending');
+  assert.equal('provider' in started.body, false);
+  assert.equal('provider_status' in started.body, false);
   assert.ok(started.body.reference);
   assert.equal(pispiTokenCalls, 1);
+  assert.equal(initializeCalls, 0);
 
   const row = (await query('SELECT * FROM platform_payments WHERE id=$1', [started.body.reference])).rows[0];
   assert.equal(row.provider, 'pispi');
@@ -246,15 +261,24 @@ test('PI-SPI platform fee uses explicit provider, canonical status and signed we
   assert.equal(row.paystack_reference, null);
   assert.equal(row.status, 'pending');
 
-  const crossProvider = await request(
+  const fallback = await request(
+    '/api/admin/payment-routing',
+    'PATCH',
+    { provider: 'paystack', note: 'Incident simulé PI-SPI' },
+    admin.token
+  );
+  assert.equal(fallback.status, 200);
+  assert.equal(fallback.body.active_provider, 'paystack');
+
+  const retryWhileInFlight = await request(
     `/api/cotisations/${created.cotisation.id}/pay-fee`,
     'POST',
     { provider: 'paystack' },
     owner.token
   );
-  assert.equal(crossProvider.status, 400);
-  assert.match(crossProvider.body.error, /autre moyen/);
+  assert.equal(retryWhileInFlight.status, 400);
   assert.equal(initializeCalls, 0);
+  assert.doesNotMatch(retryWhileInFlight.body.error, /PI-SPI|Paystack|prestataire/i);
 
   const remote = pispiRequests.get(started.body.reference);
   remote.statut = 'IRREVOCABLE';
@@ -267,12 +291,18 @@ test('PI-SPI platform fee uses explicit provider, canonical status and signed we
 
   const verified = await request(`/api/platform-payments/verify/${started.body.reference}`, 'GET', undefined, owner.token);
   assert.equal(verified.status, 200);
-  assert.equal(verified.body.provider, 'pispi');
-  assert.equal(verified.body.provider_status, 'IRREVOCABLE');
+  assert.equal(verified.body.payment_status, 'paid');
+  assert.equal('provider' in verified.body, false);
+  assert.equal('provider_status' in verified.body, false);
+  assert.equal('paystack_status' in verified.body, false);
   assert.equal(verified.body.payment.status, 'paid');
   assert.equal(verified.body.payment.application_status, 'applied');
   assert.equal(verified.body.payment.cotisation_status, 'active');
-  assert.equal(initializeCalls, 0);
+
+  const routing = await request('/api/admin/payment-routing', 'GET', undefined, admin.token);
+  assert.equal(routing.status, 200);
+  assert.equal(routing.body.active_provider, 'paystack');
+  assert.ok(routing.body.history.length >= 2);
 });
 
 test('webhook signature and duplicate extension delivery', async () => {
