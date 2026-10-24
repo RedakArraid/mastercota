@@ -290,7 +290,7 @@ export default function CreateCotisationPage() {
             </p>
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
               <Button disabled={loading} onClick={onSubmit}>
-                {loading ? "Vérification…" : "Reprendre"}
+                {loading ? "Vérification…" : "Reprendre la création"}
               </Button>
               <Button asChild variant="ghost">
                 <Link href="/home">Retour au tableau de bord</Link>
