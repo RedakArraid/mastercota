@@ -105,7 +105,7 @@ export default async function PublicContributionPage({ params }: Props) {
           <Logo href="/" size="sm" />
           <div className="inline-flex items-center gap-2 rounded-full border border-border/80 bg-white/75 px-3 py-1.5 text-[11px] font-semibold text-muted-foreground shadow-sm backdrop-blur">
             <ShieldCheck className="size-3.5 text-emerald-600" />
-            Suivi sécurisé par Mastercota
+            Suivi organisé avec Mastercota
           </div>
         </header>
 

@@ -239,7 +239,7 @@ export default function CreateCotisationPage() {
         <div className="grid grid-cols-3 gap-2">
           {[
             ["01", "Informations"],
-            ["02", "Durée & frais"],
+            ["02", "Durée & forfait"],
             ["03", "Visibilité"],
           ].map(([number, label]) => (
             <div
@@ -265,8 +265,9 @@ export default function CreateCotisationPage() {
               <div>
                 <p className="font-bold text-ink">Configurez la réception avant de partager</p>
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  Votre cotisation peut être préparée maintenant, mais un moyen
-                  de réception doit être configuré pour recevoir les contributions.
+                  Votre cotisation peut être préparée maintenant, mais vous
+                  devez indiquer où les participants enverront leurs
+                  contributions. Aujourd’hui, Mastercota prend en charge Wave.
                 </p>
               </div>
             </div>
@@ -365,7 +366,7 @@ export default function CreateCotisationPage() {
             <section className="mc-panel p-5 sm:p-7">
               <StepHeading
                 number="02"
-                title="Durée & frais"
+                title="Durée & forfait"
                 description="Choisissez une durée simple. La période commence au moment de l’activation."
                 icon={WalletCards}
               />

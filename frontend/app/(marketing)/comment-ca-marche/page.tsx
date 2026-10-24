@@ -7,7 +7,7 @@ import { Reveal } from "@/components/motion";
 export const metadata: Metadata = {
   title: "Comment ça marche",
   description:
-    "Quatre étapes pour créer une cotisation WhatsApp et recevoir sur Wave avec Mastercota.",
+    "Quatre étapes pour créer, partager et suivre une cotisation de groupe avec Mastercota.",
 };
 
 export default function CommentCaMarchePage() {
@@ -23,8 +23,9 @@ export default function CommentCaMarchePage() {
               Quatre étapes, sans surprise
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Vous créez une page, vous la partagez, vos proches paient via Wave.
-              L’argent arrive chez vous, pas dans Mastercota.
+              Vous créez une page, vous la partagez dans votre groupe et vous
+              suivez les contributions au même endroit. Les fonds sont versés
+              directement à l’organisateur, pas encaissés par Mastercota.
             </p>
           </Reveal>
 
@@ -36,7 +37,7 @@ export default function CommentCaMarchePage() {
           >
             <Button asChild size="lg" className="w-full sm:w-auto">
               <Link href="/auth/phone">
-                Créer ma cotisation (gratuit 35 jours)
+                Créer ma première cotisation
               </Link>
             </Button>
             <Button

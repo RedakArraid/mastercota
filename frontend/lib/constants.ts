@@ -1,5 +1,5 @@
 export const APP_NAME = "Mastercota";
-export const APP_TAGLINE = "Une cotisation WhatsApp. L’argent sur votre Wave.";
+export const APP_TAGLINE = "Organisez votre cotisation. Gardez le suivi clair.";
 
 export const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL ?? "https://mastercota.com";

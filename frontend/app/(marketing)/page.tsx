@@ -17,11 +17,11 @@ import { getSiteChrome, type LandingContent } from "@/lib/site";
 export default async function LandingPage() {
   const { config } = await getSiteChrome();
   const landing: LandingContent = config.landing ?? {
-    hero_title: "Une cotisation WhatsApp. L’argent arrive sur votre Wave.",
+    hero_title: "Organisez votre cotisation. Gardez le suivi clair.",
     hero_subtitle:
-      "Créez une page, partagez le lien. Vos proches paient via Wave. Mastercota prend 0 % sur ce qu’ils envoient.",
-    cta_primary: "Créer ma cotisation (gratuit 35 jours)",
-    cta_secondary: "Voir les frais",
+      "Créez une page, partagez-la dans votre groupe et suivez les contributions au même endroit. L’argent va directement à l’organisateur : Mastercota prend 0 % sur les contributions.",
+    cta_primary: "Créer ma première cotisation",
+    cta_secondary: "Comment ça marche",
     features: [],
   };
 
@@ -37,11 +37,11 @@ export default async function LandingPage() {
             </div>
 
             <div
-              className="mc-enter inline-flex items-center gap-2 rounded-full border border-primary/20 bg-white/[0.07]5 px-3 py-1.5 text-xs font-bold text-ink shadow-sm backdrop-blur"
+              className="mc-enter inline-flex items-center gap-2 rounded-full border border-primary/20 bg-white/75 px-3 py-1.5 text-xs font-bold text-ink shadow-sm backdrop-blur"
               style={{ ["--mc-delay" as string]: "80ms" }}
             >
               <Sparkles className="size-3.5 text-primary" />
-              La cotisation de groupe, sans le chaos du suivi manuel
+              La cotisation de groupe, sans listes ni captures d’écran
             </div>
 
             <h1
@@ -69,7 +69,7 @@ export default async function LandingPage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline" className="w-full sm:w-auto">
-                <Link href="/frais">{landing.cta_secondary}</Link>
+                <Link href="/comment-ca-marche">{landing.cta_secondary}</Link>
               </Button>
             </div>
 
@@ -79,8 +79,8 @@ export default async function LandingPage() {
             >
               {[
                 "0 % sur les contributions",
-                "Argent direct à l’organisateur",
-                "Pensé pour WhatsApp",
+                "Fonds versés directement à l’organisateur",
+                "Pensé pour les groupes WhatsApp",
               ].map((item) => (
                 <span key={item} className="inline-flex items-center gap-1.5">
                   <span className="grid size-5 place-items-center rounded-full bg-emerald-50 text-emerald-700">
@@ -97,7 +97,7 @@ export default async function LandingPage() {
             style={{ ["--mc-delay" as string]: "220ms" }}
           >
             <div className="absolute -inset-6 rounded-[2.5rem] bg-[radial-gradient(circle_at_50%_40%,rgb(244_184_41_/_22%),transparent_65%)] blur-2xl" />
-            <div className="relative overflow-hidden rounded-[2rem] border border-white/[0.08]0 bg-white/92 p-4 shadow-[0_40px_90px_-46px_rgb(20_50_104_/_65%)] backdrop-blur sm:p-6">
+            <div className="relative overflow-hidden rounded-[2rem] border border-white/80 bg-white/95 p-4 shadow-[0_40px_90px_-46px_rgb(20_50_104_/_65%)] backdrop-blur sm:p-6">
               <div className="rounded-[1.55rem] bg-[linear-gradient(145deg,#143268_0%,#204a86_100%)] p-5 text-white sm:p-6">
                 <div className="flex items-start justify-between gap-4">
                   <div>
@@ -131,7 +131,7 @@ export default async function LandingPage() {
                   {[
                     ["68 %", "atteint"],
                     ["42", "contributions"],
-                    ["0 %", "commission"],
+                    ["0 %", "Mastercota"],
                   ].map(([value, label]) => (
                     <div key={label} className="rounded-xl bg-white/[0.07] px-2 py-3">
                       <p className="text-sm font-bold text-gold-bright">{value}</p>
@@ -153,7 +153,7 @@ export default async function LandingPage() {
                   <Wallet className="size-4 text-primary" />
                   <p className="mt-2 text-sm font-bold text-ink">Suivi centralisé</p>
                   <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    Qui a payé, combien et où en est l’objectif.
+                    Qui a contribué, combien et où en est l’objectif.
                   </p>
                 </div>
               </div>
@@ -165,9 +165,9 @@ export default async function LandingPage() {
       <section className="border-y border-border/70 bg-white/65">
         <div className="mx-auto grid max-w-7xl gap-3 px-4 py-5 sm:grid-cols-3 sm:px-6 lg:px-8">
           {[
-            ["Paiement direct", "Les fonds arrivent chez l’organisateur."],
+            ["Fonds directs", "Les contributions sont versées directement à l’organisateur."],
             ["Suivi lisible", "Contributions, confirmations et progression au même endroit."],
-            ["Prix prévisible", "Pas de pourcentage prélevé sur la cagnotte."],
+            ["Prix prévisible", "Le forfait dépend de la durée, pas du montant collecté."],
           ].map(([title, body]) => (
             <div key={title} className="flex items-start gap-3 rounded-2xl px-3 py-3">
               <span className="mt-0.5 size-2 shrink-0 rounded-full bg-primary" />
@@ -191,7 +191,7 @@ export default async function LandingPage() {
               <p className="max-w-2xl text-base leading-7 text-muted-foreground lg:justify-self-end">
                 Mariage, funérailles, entraide, association ou projet commun :
                 Mastercota remplace les captures d’écran, les listes manuelles et
-                les relances difficiles par un suivi partagé et compréhensible.
+                les calculs dispersés par une page commune et un suivi compréhensible.
               </p>
             </div>
           </Reveal>
@@ -225,7 +225,7 @@ export default async function LandingPage() {
           <Reveal>
             <p className="mc-kicker">Confiance & frais</p>
             <h2 className="mt-3 max-w-2xl text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">
-              Vous organisez la cotisation. Nous organisons le suivi.
+              L’argent reste chez l’organisateur. Le suivi reste dans Mastercota.
             </h2>
           </Reveal>
 
@@ -239,8 +239,8 @@ export default async function LandingPage() {
                   0 % sur les contributions
                 </h3>
                 <p className="mt-3 text-sm leading-7 text-muted-foreground sm:text-base">
-                  Si un proche envoie 10 000 F, l’organisateur reçoit 10 000 F.
-                  Mastercota ne prélève pas de pourcentage sur cette somme.
+                  Mastercota ne prélève aucun pourcentage sur les contributions.
+                  Les fonds ne sont ni encaissés ni redistribués par Mastercota.
                 </p>
               </div>
             </Reveal>
@@ -254,9 +254,9 @@ export default async function LandingPage() {
                   Un forfait pour utiliser l’outil
                 </h3>
                 <p className="mt-3 text-sm leading-7 text-muted-foreground sm:text-base">
-                  L’organisateur paie les frais Mastercota pour la période de
-                  collecte. La première cotisation est offerte selon les
-                  conditions affichées dans l’application.
+                  L’organisateur paie un forfait Mastercota selon la durée de la
+                  cotisation. Le prix ne dépend pas de la somme collectée. La
+                  première cotisation est offerte selon les conditions affichées.
                 </p>
                 <Link
                   href="/frais"
@@ -281,8 +281,8 @@ export default async function LandingPage() {
                 Votre prochaine cotisation peut être beaucoup plus simple.
               </h2>
               <p className="mt-4 max-w-xl text-sm leading-6 text-white/60 sm:text-base">
-                Créez la page, partagez le lien et gardez un suivi propre dès la
-                première contribution.
+                Créez la page, partagez le lien et gardez un historique clair
+                des contributions signalées et confirmées.
               </p>
             </div>
 

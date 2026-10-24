@@ -15,7 +15,7 @@ import {
 export const metadata: Metadata = {
   title: "Frais",
   description:
-    "0 % sur les contributions. Frais de durée Mastercota et réception Wave, conditions claires.",
+    "Un forfait Mastercota selon la durée de la cotisation, 0 % sur les contributions et des frais de paiement clairement séparés.",
 };
 
 export default function FraisPage() {
@@ -28,12 +28,13 @@ export default function FraisPage() {
               Frais
             </p>
             <h1 className="mt-3 max-w-2xl text-3xl font-extrabold tracking-tight text-ink sm:text-4xl md:text-5xl">
-              0&nbsp;% sur les contributions. Frais seulement pour la durée.
+              Un forfait clair pour l’outil. 0&nbsp;% sur les contributions.
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Mastercota ne prend rien sur ce que vos proches envoient. Vous
-              payez uniquement pour garder la page ouverte. Wave a ses propres
-              règles selon comment vous êtes payé.
+              L’organisateur paie Mastercota selon la durée choisie. Le prix ne
+              dépend pas de la somme collectée. Les contributions sont versées
+              directement à l’organisateur et les éventuels frais du moyen de
+              paiement restent séparés des frais Mastercota.
             </p>
           </Reveal>
 
@@ -49,13 +50,14 @@ export default function FraisPage() {
                     Frais Mastercota
                   </p>
                   <h2 className="text-2xl font-extrabold text-ink">
-                    Durée de la cotisation
+                    Forfait de cotisation
                   </h2>
                 </div>
               </div>
               <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                Vous payez une fois pour la durée choisie. Ce n’est jamais un
-                prélèvement sur les contributions.
+                Vous payez un forfait fixe pour activer l’outil pendant la
+                durée choisie : page publique, suivi, confirmations et
+                progression. Ce n’est jamais un pourcentage de la collecte.
               </p>
             </Reveal>
 
@@ -75,8 +77,8 @@ export default function FraisPage() {
                     1re cotisation · {FREE_DURATION_DAYS} jours · 0&nbsp;F
                   </h3>
                   <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-                    Pour tester Mastercota. Une seule fois par numéro de
-                    téléphone.
+                    Pour découvrir le parcours complet avant de payer un
+                    forfait Mastercota. Une seule fois par numéro de téléphone.
                   </p>
                   <ul className="mt-5 space-y-2 text-sm text-foreground/85">
                     <li className="flex gap-2">
@@ -92,7 +94,7 @@ export default function FraisPage() {
                     <li className="flex gap-2">
                       <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary" />
                       <span>
-                        Connexion WhatsApp + Wave à configurer avant de partager
+                        Connexion WhatsApp + mode de réception à configurer avant de partager
                       </span>
                     </li>
                   </ul>
@@ -108,7 +110,7 @@ export default function FraisPage() {
                     Après l’essai / autres durées
                   </p>
                   <h3 className="mt-3 text-xl font-extrabold text-ink">
-                    Grille des durées
+                    Forfaits actuels
                   </h3>
                   <ul className="mt-5 space-y-3 text-sm">
                     {DURATION_PRESETS.map((p) => (
@@ -132,16 +134,17 @@ export default function FraisPage() {
                     </li>
                   </ul>
                   <p className="mt-5 text-sm leading-relaxed text-muted-foreground">
-                    Max {MAX_DURATION_DAYS} jours. Une prolongation max, sans
-                    dépasser le plafond. Payé par l’organisateur.
+                    Jusqu’à {MAX_DURATION_DAYS} jours au total, avec une seule
+                    prolongation possible. Le forfait est payé par
+                    l’organisateur, jamais par les participants.
                   </p>
                 </article>
               </Reveal>
             </div>
           </div>
 
-          {/* Bloc 2 — Wave */}
-          <div id="wave" className="mt-14 scroll-mt-24 border-t border-border pt-12 sm:mt-20 sm:pt-16">
+          {/* Bloc 2 — réception des contributions */}
+          <div id="reception" className="mt-14 scroll-mt-24 border-t border-border pt-12 sm:mt-20 sm:pt-16">
             <Reveal>
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/15 text-primary">
@@ -152,14 +155,16 @@ export default function FraisPage() {
                     Comment vous êtes payé
                   </p>
                   <h2 className="text-2xl font-extrabold text-ink">
-                    Réception via Wave
+                    Fonds versés directement
                   </h2>
                 </div>
               </div>
               <p className="mt-4 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-                L’argent ne passe pas par Mastercota. Il arrive sur votre Wave.
-                Mastercota : toujours 0&nbsp;% sur les contributions. Les frais
-                éventuels viennent de Wave, pas de nous.
+                Mastercota n’encaisse pas l’argent de la cotisation. Les
+                contributions sont envoyées directement à l’organisateur.
+                Aujourd’hui, le parcours prend en charge Wave. Mastercota
+                prélève 0&nbsp;% sur les contributions ; les éventuels frais du
+                moyen de paiement relèvent de son fournisseur.
               </p>
             </Reveal>
 
@@ -184,8 +189,8 @@ export default function FraisPage() {
                     <li className="flex gap-2">
                       <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-primary" />
                       <span>
-                        Frais Wave marchand : selon Wave (voir dans votre app).
-                        Support CI : 1315
+                        Éventuels frais Wave : selon votre offre et les
+                        conditions affichées par Wave
                       </span>
                     </li>
                   </ul>
@@ -211,8 +216,8 @@ export default function FraisPage() {
                     <li className="flex gap-2">
                       <span className="mt-2 h-1 w-1 shrink-0 rounded-full bg-ink/40" />
                       <span>
-                        Frais d’envoi Wave éventuels côté expéditeur (grille
-                        Wave)
+                        Éventuels frais d’envoi : selon les conditions Wave du
+                        participant
                       </span>
                     </li>
                   </ul>
@@ -222,9 +227,10 @@ export default function FraisPage() {
 
             <Reveal delayMs={200}>
               <p className="mt-6 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-                Dans les deux cas : après le paiement Wave, le proche clique «
-                J’ai payé ». Vous validez dans Mastercota. Sans validation, le
-                total affiché n’augmente pas.
+                Dans les deux cas : après le transfert, le participant le
+                signale dans Mastercota. L’organisateur vérifie la réception
+                puis confirme. Sans confirmation, le montant n’entre pas dans
+                le total collecté.
               </p>
             </Reveal>
           </div>
@@ -235,7 +241,7 @@ export default function FraisPage() {
           >
             <Button asChild size="lg" className="w-full sm:w-auto">
               <Link href="/auth/phone">
-                Créer ma cotisation (gratuit 35 jours)
+                Créer ma première cotisation
               </Link>
             </Button>
             <Button

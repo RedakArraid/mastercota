@@ -186,7 +186,7 @@ class _CreateCotisationScreenState
               Text('Durée : ${_free ? 35 : _days} jours'),
               Text('Frais organisateur : $_fee FCFA'),
               const Text(
-                'Les contributions arrivent sur votre Wave. Vous confirmez leur réception.',
+                'Les contributions sont versées directement chez vous. Vous vérifiez puis confirmez leur réception dans Mastercota.',
               ),
             ],
           ),
@@ -244,11 +244,11 @@ class _CreateCotisationScreenState
                     'Une demande est en attente de confirmation. Réessayez avec les mêmes informations pour retrouver la cotisation sans en créer une seconde.',
                   ),
                 const Text(
-                  'Configurez votre réception Wave avant de publier. Aucun pourcentage Mastercota sur les contributions.',
+                  'Configurez où recevoir les contributions avant de publier. Aujourd’hui, Mastercota prend en charge Wave et prélève 0 % sur les contributions.',
                 ),
                 TextButton(
                   onPressed: () => context.push('/profile/payout'),
-                  child: const Text('Configurer Wave'),
+                  child: const Text('Configurer la réception'),
                 ),
                 TextFormField(
                   controller: _title,

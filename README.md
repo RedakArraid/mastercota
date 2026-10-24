@@ -1,10 +1,12 @@
 # Mastercota
 
-Plateforme de cotisations : web Next.js, application Flutter, API Hono et PostgreSQL.
+Plateforme de gestion et de suivi de cotisations communautaires : web Next.js, application Flutter, API Hono et PostgreSQL.
 
-Les contributions arrivent directement sur le Wave de l’organisateur, par lien Business ou transfert vers son numéro. Le contributeur signale son paiement ; l’organisateur vérifie dans Wave, puis confirme ou refuse. Mastercota ne vérifie pas automatiquement les transferts Wave et ne prélève aucune commission sur les contributions.
+Mastercota vend l’outil d’organisation, pas la conservation de l’argent. Les contributions sont versées directement à l’organisateur. Aujourd’hui, le produit prend en charge Wave Business ou un transfert vers son numéro Wave. Le contributeur signale son transfert ; l’organisateur vérifie la réception, puis confirme ou refuse. Seuls les montants confirmés alimentent le total. Mastercota prélève 0 % sur les contributions.
 
-L’organisateur paie les frais de durée via Paystack : première cotisation de 35 jours gratuite par numéro, puis 2 000 FCFA pour 1–15 jours, 4 000 pour 16–35 jours ou 10 000 pour 36–60 jours. Une prolongation de 10 jours coûte 2 000 FCFA, avec une limite totale de 60 jours. Une cotisation payante n’est publiée qu’après confirmation du paiement ; sa durée commence à l’activation.
+L’organisateur paie un forfait Mastercota selon la durée : première cotisation de 35 jours offerte par numéro, puis 2 000 FCFA pour 1–15 jours, 4 000 pour 16–35 jours ou 10 000 pour 36–60 jours. Une prolongation de 10 jours coûte 2 000 FCFA, avec une limite totale de 60 jours. Le forfait n’est pas calculé sur le montant collecté. Une cotisation payante n’est publiée qu’après confirmation du paiement ; sa durée commence à l’activation.
+
+Pour les frais Mastercota, l’architecture de paiement est conçue pour utiliser PI-SPI comme rail principal dès qu’un participant homologué est validé en production, avec Paystack comme secours explicite. Tant que les prérequis PI-SPI production (partenaire, contrat, mTLS/PICERT et identifiants) ne sont pas réunis, le rail actif peut rester Paystack. Le fournisseur de paiement des frais reste un détail d’infrastructure et n’est pas exposé comme proposition de valeur au client.
 
 ## Cycle d’une cotisation
 
@@ -80,7 +82,7 @@ flutter analyze
 flutter test
 ```
 
-Les tests API utilisent PostgreSQL réel. Paystack est simulé et aucun message WhatsApp ni paiement réel n’est déclenché. Les tests navigateur démarrent une API isolée sur 4001 et le web sur 3100. Ne pas lancer simultanément tests API et tests navigateur contre la même base. L’intégration continue exécute ces vérifications sur chaque push et PR.
+Les tests API utilisent PostgreSQL réel. Les prestataires de paiement sont simulés et aucun message WhatsApp ni paiement réel n’est déclenché. Les tests navigateur démarrent une API isolée sur 4001 et le web sur 3100. Ne pas lancer simultanément tests API et tests navigateur contre la même base. L’intégration continue exécute ces vérifications sur chaque push et PR.
 
 La recette automatisée couvre notamment les reprises après réponse perdue, les requêtes concurrentes, la fin de journée, les clôtures et réouvertures, l’objectif atteint puis augmenté, les signalements tardifs, les conflits d’édition et les frais reçus mais non appliqués. Les scénarios navigateur vérifient les formulaires pendant l’actualisation et la reprise après rechargement. Flutter vérifie les états, l’édition et les reprises après redémarrage. Les appels prestataires restent simulés : une recette sur les vrais comptes et appareils est nécessaire avant ouverture publique.
 
@@ -88,17 +90,17 @@ Les polices web sont incluses dans `frontend/public/fonts` avec leurs licences :
 
 ## Production
 
-1. Renseigner `.env` à partir de `.env.example` : mot de passe PostgreSQL, secret JWT aléatoire de 32 caractères minimum, `NEXT_PUBLIC_APP_URL` HTTPS, clé Paystack et paramètres OpenWA. Ne jamais définir `OTP_DEV_CODE` ou `OTP_DEV_LOG` en production : l’API refuse alors de démarrer.
+1. Renseigner `.env` à partir de `.env.example` : mot de passe PostgreSQL, secret JWT aléatoire de 32 caractères minimum, `NEXT_PUBLIC_APP_URL` HTTPS, paramètres du prestataire de paiement actif et paramètres OpenWA. Ne jamais définir `OTP_DEV_CODE` ou `OTP_DEV_LOG` en production : l’API refuse alors de démarrer.
 2. Connecter la session OpenWA utilisée pour les OTP. `ADMIN_PHONES` contient les numéros internationaux autorisés à devenir administrateurs lors de leur connexion.
 3. Préparer les réseaux externes Traefik `traefik_network` et OpenWA `openwa-network`, les DNS et les certificats HTTPS.
 4. Sauvegarder la base existante avec `scripts/backup.sh` avant mise à jour.
 5. Compiler avec `docker compose build`, puis suspendre les écritures de l’ancienne version avec `docker compose stop backend frontend` avant `docker compose up -d`. Prévoir cette courte interruption lors de la mise à jour : les anciennes et nouvelles API ne doivent pas écrire simultanément pendant la migration du cycle de vie. Le service `migrate` applique les migrations une fois, sous verrou ; le backend démarre après sa réussite. Les migrations fonctionnent également sur une base déjà initialisée. Distribuer également le client mobile compatible avec les identifiants de requête obligatoires.
-6. Configurer le webhook Paystack : `https://mastercota.com/api/paystack/webhook`.
+6. Configurer le webhook du prestataire actif. Pour Paystack : `https://mastercota.com/api/paystack/webhook`. Pour PI-SPI, suivre le contrat du participant retenu et n’activer la production qu’après validation mTLS/PICERT.
 7. Exécuter `scripts/check-health.sh`, puis valider connexion WhatsApp, cotisation gratuite, paiement de frais, retour du navigateur, contribution Wave et confirmation par l’organisateur.
 
 `TRUST_PROXY=true` suppose un backend accessible uniquement derrière le proxy de confiance qui fixe `X-Real-IP`. Ne pas exposer le port backend directement en production. Les sessions mobiles utilisent Keychain/Keystore ; la déconnexion révoque toutes les sessions du compte. Les codes expirent au bout de 10 minutes avec 5 essais maximum ; les limites d’envoi sont persistées dans PostgreSQL.
 
-Les montants Paystack sont en XOF multipliés par 100, comme spécifié dans la [documentation officielle](https://paystack.com/docs/api/). La signature, la référence, le montant et la devise sont vérifiés avant activation. Les confirmations répétées sont traitées une fois. Les tentatives de paiement existantes sont réutilisées ; une interruption réseau ne supprime pas leur référence.
+Pour les frais Mastercota, chaque tentative reste liée à son prestataire d’origine. La référence, le montant, la devise et le statut sont vérifiés avant activation. Les confirmations répétées sont traitées une fois. Une interruption réseau ne supprime pas une référence existante et un changement de prestataire ne doit jamais déclencher automatiquement un second débit.
 
 ## Sauvegarde et exploitation
 
@@ -111,7 +113,7 @@ docker compose logs --tail=100 backend migrate
 
 Le test de restauration crée une base distincte et ne remplace jamais la principale. Programmer la sauvegarde quotidienne, copier les sauvegardes hors du serveur et surveiller `/ready` (API + accès base), le processus OpenWA et les erreurs backend. Ces scripts préparent l’exploitation ; leur planification et les alertes doivent être configurées sur le serveur réellement utilisé.
 
-Les anciens paiements Paystack de contribution peuvent encore être vérifiés ; les nouveaux utilisent Wave. Un paiement supplémentaire pour un service déjà activé reste dans l’historique, passe en examen et ne réapplique pas ce service. Un échec ou une interruption d’initialisation ne supprime jamais l’ancienne référence. Une vérification prestataire indisponible ne déclenche pas un second paiement. Le support doit examiner les éventuels remboursements dans le tableau de bord Paystack.
+Les anciens paiements Paystack de contribution peuvent encore être vérifiés ; les nouvelles contributions utilisent le parcours direct vers l’organisateur. Un paiement supplémentaire pour un service déjà activé reste dans l’historique, passe en examen et ne réapplique pas ce service. Un échec ou une interruption d’initialisation ne supprime jamais l’ancienne référence. Une vérification prestataire indisponible ne déclenche pas un second paiement. Le support doit examiner les éventuels remboursements dans le tableau de bord Paystack.
 
 ## Livraison mobile
 

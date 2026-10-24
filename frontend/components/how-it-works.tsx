@@ -19,18 +19,18 @@ export const HOW_IT_WORKS_STEPS: {
   },
   {
     icon: Wallet,
-    title: "2. Dites comment vous voulez être payé",
-    body: "Recommandé : Wave Business, vos proches paient en un clic. Sinon : votre numéro Wave, ils envoient à la main.",
+    title: "2. Configurez la réception",
+    body: "Les contributions sont versées directement chez vous. Aujourd’hui, Mastercota prend en charge Wave Business ou un numéro Wave.",
   },
   {
     icon: Share2,
-    title: "3. Créez la cotisation et partagez le lien",
-    body: "Titre, objectif, durée. Vous envoyez le lien sur WhatsApp. Personne n’a besoin de compte pour contribuer.",
+    title: "3. Créez et partagez la cotisation",
+    body: "Ajoutez un titre, un objectif et une durée, puis partagez le lien dans votre groupe. Les participants n’ont pas besoin de compte.",
   },
   {
     icon: LineChart,
-    title: "4. Confirmez les paiements",
-    body: "Après Wave, le proche clique « J’ai payé ». Vous vérifiez, vous validez d’un tap. Le total se met à jour.",
+    title: "4. Gardez le suivi fiable",
+    body: "Après son transfert, le participant le signale. Vous vérifiez la réception puis vous confirmez : seuls les montants confirmés alimentent le total.",
   },
 ];
 

@@ -8,12 +8,12 @@ const STEPS = [
   {
     title: "Téléchargez Wave Business",
     detail:
-      "App gratuite (Android / iPhone), distincte de Wave perso. Support CI : 1315.",
+      "Utilisez l’app Wave Business disponible sur Android et iPhone.",
   },
   {
     title: "Créez votre compte marchand",
     detail:
-      "Inscrivez-vous avec votre numéro. C’est gratuit et rapide. Wave le présente pour les petites activités.",
+      "Suivez le parcours d’inscription proposé par Wave pour activer votre espace Business.",
   },
   {
     title: "Créez un lien de paiement",
@@ -42,8 +42,9 @@ export function WaveBusinessGuide({ compact = false }: { compact?: boolean }) {
             Comment obtenir le lien (gratuit)
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Pas besoin de compte API ni de RCCM pour ce parcours. L’app Wave
-            Business suffit.
+            Cette configuration sert uniquement à recevoir les contributions.
+            Vérifiez les conditions d’éligibilité et d’usage directement dans
+            Wave Business.
           </p>
         </div>
       ) : null}
@@ -84,15 +85,11 @@ export function WaveBusinessGuide({ compact = false }: { compact?: boolean }) {
       </div>
 
       {!compact ? (
-        <p className="text-xs text-muted-foreground">
-          Frais Wave (pas Mastercota) : les{" "}
-          <strong className="font-medium text-foreground">
-            20&nbsp;000 F/jour
-          </strong>{" "}
-          de paiements marchands sont gratuits pour vous, puis environ{" "}
-          <strong className="font-medium text-foreground">1&nbsp;%</strong>. Les
-          contributeurs ne paient pas de frais Wave sur ce paiement. Retrait
-          vers Wave perso / agent : gratuit.
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Les éventuels frais, plafonds ou conditions Wave sont fixés par Wave
+          et peuvent évoluer. Consultez l’app ou les conditions Wave avant
+          d’activer ce mode. Mastercota ne prélève aucun pourcentage sur la
+          contribution.
         </p>
       ) : null}
     </div>

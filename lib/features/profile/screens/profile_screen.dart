@@ -127,7 +127,7 @@ class ProfileScreen extends ConsumerWidget {
                 ),
                 ListTile(
                   leading: const Icon(Icons.account_balance_wallet_outlined),
-                  title: const Text('Réception Wave'),
+                  title: const Text('Réception des contributions'),
                   subtitle: Text(wave as String? ?? 'À configurer'),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.push('/profile/payout'),
