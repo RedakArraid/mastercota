@@ -27,7 +27,7 @@ permissions:
 jobs:
   android:
     if: inputs.platform == 'both' || inputs.platform == 'android'
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-latest
     env:
       MASTERCOTA_REQUIRE_SIGNED_RELEASE: "true"
     steps:
