@@ -602,7 +602,7 @@ class _PayoutWarningBanner extends StatelessWidget {
             const SizedBox(width: 12),
             Expanded(
               child: Text(
-                'Configurez Wave pour recevoir vos contributions.',
+                'Configurez où recevoir vos contributions. Aujourd’hui, Mastercota prend en charge Wave.',
                 style: AppTextStyles.bodySmall.copyWith(
                   color: AppColors.warn,
                   height: 1.4,
