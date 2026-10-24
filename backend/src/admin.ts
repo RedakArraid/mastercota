@@ -14,6 +14,12 @@ import {
   pingOpenWa,
   sendTextMessage,
 } from "./lib/openwa.js";
+import {
+  activePlatformPaymentProvider,
+  platformPaymentAvailability,
+  setActivePlatformPaymentProvider,
+  type PlatformPaymentProvider,
+} from "./lib/platform-payment-provider.js";
 
 const COOKIE = "mc_session";
 
@@ -50,6 +56,41 @@ adminRoutes.use("*", async (c, next) => {
   const admin = await requireAdmin(c);
   if (!admin) return c.json({ error: "Accès admin requis" }, 403);
   await next();
+});
+
+adminRoutes.get('/payment-routing', async c => {
+  const activeProvider = await activePlatformPaymentProvider();
+  const { rows: history } = await query(`SELECT e.id,e.from_provider,e.to_provider,e.note,e.created_at,u.name AS changed_by_name,u.phone AS changed_by_phone
+    FROM platform_payment_provider_events e
+    LEFT JOIN users u ON u.id=e.changed_by
+    ORDER BY e.created_at DESC LIMIT 20`);
+  return c.json({
+    active_provider: activeProvider,
+    providers: platformPaymentAvailability(),
+    history,
+  });
+});
+
+adminRoutes.patch('/payment-routing', async c => {
+  const admin = await requireAdmin(c);
+  if (!admin) return c.json({ error: 'Accès admin requis' }, 403);
+  const body = await c.req.json();
+  const provider = body.provider as PlatformPaymentProvider;
+  if (provider !== 'pispi' && provider !== 'paystack') return c.json({ error: 'Fournisseur invalide' }, 400);
+  const note = textField(body.note, 'Motif de bascule', 500);
+  try {
+    const result = await setActivePlatformPaymentProvider({
+      provider,
+      adminId: admin.id,
+      note,
+    });
+    return c.json({
+      ...result,
+      providers: platformPaymentAvailability(),
+    });
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Bascule impossible' }, 400);
+  }
 });
 
 adminRoutes.get('/platform-payments', async c => {
