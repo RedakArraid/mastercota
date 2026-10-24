@@ -241,10 +241,10 @@ export default async function PublicContributionPage({ params }: Props) {
             </div>
 
             <ul className="overflow-hidden rounded-[1.35rem] border border-border/80 bg-white/80 shadow-[0_18px_50px_-40px_rgb(20_50_104_/_45%)]">
-              {contributions.map((contribution, index) => (
+              {contributions.map((contribution) => (
                 <li
                   key={contribution.id}
-                  className="flex items-center justify-between gap-4 px-4 py-3.5 text-sm sm:px-5"
+                  className="flex items-center justify-between gap-4 border-b border-border/70 px-4 py-3.5 text-sm last:border-b-0 sm:px-5"
                 >
                   <div className="flex min-w-0 items-center gap-3">
                     <span className="grid size-9 shrink-0 place-items-center rounded-full bg-secondary text-xs font-bold text-ink">
@@ -257,9 +257,6 @@ export default async function PublicContributionPage({ params }: Props) {
                   <span className="shrink-0 font-bold text-muted-foreground">
                     {formatAmount(Number(contribution.amount))}
                   </span>
-                  {index < contributions.length - 1 ? (
-                    <span className="absolute" aria-hidden="true" />
-                  ) : null}
                 </li>
               ))}
             </ul>
