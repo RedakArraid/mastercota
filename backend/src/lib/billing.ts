@@ -1,13 +1,25 @@
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import { pool, query, transaction } from './db.js';
 import { paystackFetch } from './paystack.js';
 import { createPispiRequestToPay, getPispiRequestToPay, PispiApiError, pispiEndToEndId, pispiStatus, type PispiRequestToPay } from './pispi.js';
 import { canExtend, deadlineFromDuration, FREE_COTISATIONS_PER_PHONE, FREE_DURATION_DAYS, MAX_DURATION_DAYS, quoteDuration, EXTENSION_FEE, EXTENSION_DAYS } from './fees.js';
 
+export function phoneEntitlementFingerprint(phone: string): string {
+  const secret = (process.env.DATA_RETENTION_SECRET || process.env.JWT_SECRET || '').trim();
+  if (secret.length < 32) throw new Error('Secret de rétention insuffisant');
+  return createHmac('sha256', secret).update(phone).digest('hex');
+}
+
 export async function freeEligibleForPhone(phone: string): Promise<boolean> {
-  const { rows } = await query(`SELECT free_cotisations_used FROM phone_entitlements WHERE phone = $1`, [phone]);
-  return Number(rows[0]?.free_cotisations_used ?? 0) < FREE_COTISATIONS_PER_PHONE;
+  const fingerprint = phoneEntitlementFingerprint(phone);
+  const { rows } = await query(
+    `SELECT
+       COALESCE((SELECT free_cotisations_used FROM phone_entitlements WHERE phone = $1), 0) AS used,
+       EXISTS(SELECT 1 FROM free_cotisation_history WHERE phone_fingerprint = $2) AS retained_used`,
+    [phone, fingerprint]
+  );
+  return Number(rows[0]?.used ?? 0) < FREE_COTISATIONS_PER_PHONE && rows[0]?.retained_used !== true;
 }
 
 export async function getOwnerPhone(userId: string): Promise<string | null> {
