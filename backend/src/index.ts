@@ -501,17 +501,6 @@ app.post("/api/paystack/webhook", async c => {
   return c.json({ received: true });
 });
 
-app.get("/api/platform-payments/options", async c => {
-  const session = await requireUser(c);
-  if (!session) return c.json({ error: "Unauthorized" }, 401);
-  const primary = primaryPlatformPaymentProvider();
-  return c.json({
-    primary,
-    backup: backupPlatformPaymentProvider(primary),
-    providers: platformPaymentAvailability(),
-  });
-});
-
 app.post("/api/pispi/webhook", async c => {
   const raw = await c.req.text();
   if (!verifyPispiWebhookSignature(raw, c.req.header("x-signature"))) {
@@ -562,7 +551,7 @@ app.get("/api/platform-payments/verify/:reference", async c => {
   const payment = owned[0];
   if (!payment) return c.json({ error: "Introuvable" }, 404);
   const provider = (payment.provider || "paystack") as PlatformPaymentProvider;
-  let status = payment.status === "paid"
+  let providerStatus = payment.status === "paid"
     ? (provider === "pispi" ? "IRREVOCABLE" : "success")
     : String(payment.metadata?.pispi_status || "pending");
 
@@ -571,42 +560,51 @@ app.get("/api/platform-payments/verify/:reference", async c => {
     if (provider === "pispi") {
       let remote;
       try { remote = await getPispiRequestToPay(reference); }
-      catch { return c.json({ error: "Vérification PI-SPI temporairement indisponible" }, 502); }
-      status = pispiStatus(remote);
-      if (status === "IRREVOCABLE") {
+      catch { return c.json({ error: "Vérification temporairement indisponible" }, 502); }
+      providerStatus = pispiStatus(remote);
+      if (providerStatus === "IRREVOCABLE") {
         const result = await activatePispiPlatformPayment(reference, remote);
         if (!result.ok) return c.json({ error: result.error }, 409);
-      } else if (["REJETE", "ANNULE"].includes(status)) {
+      } else if (["REJETE", "ANNULE"].includes(providerStatus)) {
         await query(
           "UPDATE platform_payments SET status='failed',metadata=metadata || $2::jsonb WHERE id=$1 AND status='pending'",
-          [payment.id, JSON.stringify({ pispi_status: status, pispi_reason: remote.statutRaison ?? null })]
+          [payment.id, JSON.stringify({ pispi_status: providerStatus, pispi_reason: remote.statutRaison ?? null })]
         );
       } else {
         await query(
           "UPDATE platform_payments SET metadata=metadata || $2::jsonb WHERE id=$1",
-          [payment.id, JSON.stringify({ pispi_status: status })]
+          [payment.id, JSON.stringify({ pispi_status: providerStatus })]
         );
       }
     } else {
       const { ok, data } = await paystackFetch(`/transaction/verify/${encodeURIComponent(reference)}`);
       if (!ok) return c.json({ error: "Vérification temporairement indisponible" }, 502);
-      status = data.data?.status;
-      if (status === "success") {
+      providerStatus = data.data?.status;
+      if (providerStatus === "success") {
         const result = await activatePlatformPayment(reference, data.data);
         if (!result.ok) return c.json({ error: result.error }, 409);
+      } else if (["failed", "abandoned", "reversed"].includes(providerStatus)) {
+        await query(
+          "UPDATE platform_payments SET status='failed',metadata=metadata || $2::jsonb WHERE id=$1 AND status='pending'",
+          [payment.id, JSON.stringify({ provider_status: providerStatus })]
+        );
       }
     }
   }
 
   const { rows } = await query(
-    "SELECT pp.*, c.slug, c.title, c.status AS cotisation_status FROM platform_payments pp LEFT JOIN cotisations c ON c.id=pp.cotisation_id WHERE pp.id=$1",
+    `SELECT pp.status,pp.amount,pp.purpose,pp.application_status,pp.review_reason,
+            pp.review_resolved_at,pp.review_resolved_by,pp.review_resolution_note,
+            c.slug,c.title,c.status AS cotisation_status
+     FROM platform_payments pp
+     LEFT JOIN cotisations c ON c.id=pp.cotisation_id
+     WHERE pp.id=$1`,
     [payment.id]
   );
+  const current = rows[0];
   return c.json({
-    provider,
-    provider_status: status,
-    ...(provider === "paystack" ? { paystack_status: status } : {}),
-    payment: rows[0],
+    payment_status: current?.status ?? "pending",
+    payment: current ?? null,
   });
 });
 
