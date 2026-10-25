@@ -44,10 +44,14 @@ function optionalUrl(value: unknown): string | null {
   if (!text) return null;
   try {
     const url = new URL(text);
-    if (!["https:", "http:"].includes(url.protocol)) throw new Error();
-    return text;
+    const localHttp =
+      process.env.NODE_ENV !== "production" &&
+      url.protocol === "http:" &&
+      ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
+    if (url.protocol !== "https:" && !localHttp) throw new Error();
+    return url.toString();
   } catch {
-    throw new HTTPException(400, { message: "URL invalide" });
+    throw new HTTPException(400, { message: "URL HTTPS invalide" });
   }
 }
 
