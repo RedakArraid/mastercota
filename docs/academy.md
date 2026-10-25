@@ -28,8 +28,8 @@ Le modèle financier reste cohérent avec Mastercota :
 - déblocage différé ;
 - quiz avec score minimum et nombre de tentatives ;
 - questions à choix unique, multiple et vrai/faux côté API ;
-- coupons pourcentage ou montant fixe ;
-- invitations limitées et éventuellement réservées à un numéro ;
+- coupons pourcentage ou montant fixe avec limites d’usage atomiques ;
+- invitations limitées et éventuellement réservées à un numéro, protégées contre les consommations concurrentes ;
 - annonces envoyées aux inscrits ;
 - signalements de paiement à confirmer / rejeter ;
 - analytics : inscriptions, complétion, progression moyenne, volume confirmé, avis et complétion par leçon.
@@ -88,7 +88,11 @@ Pour les cours séquentiels, les leçons précédentes doivent être terminées.
 
 Pour le drip content, la date d'inscription détermine le déblocage.
 
-Les bonnes réponses aux quiz ne sont jamais renvoyées par l'endpoint de lecture. La notation est effectuée côté serveur.
+Les bonnes réponses aux quiz ne sont jamais renvoyées par l'endpoint de lecture. La notation est effectuée côté serveur. Les options et réponses correctes sont validées lors de la création, et le mélange des questions est réellement appliqué lorsque l'option correspondante est activée.
+
+Un cours ne peut pas être publié avec une leçon incomplète (vidéo sans URL, live sans lien, ressource vide, texte vide) ni avec un quiz sans question. Les mêmes règles s'appliquent à une publication effectuée par un administrateur.
+
+Les URLs externes de contenu doivent utiliser HTTPS hors développement local.
 
 ## Paiements
 
@@ -113,7 +117,7 @@ Le certificat est émis quand :
 - toutes les leçons publiées sont terminées ;
 - tous les quiz du cours ont au moins une tentative réussie.
 
-Chaque certificat possède un code public de vérification.
+Chaque certificat possède un code public de vérification. La page publique expose le nom affiché, le cours, la date et le code, mais jamais le numéro de téléphone de l'apprenant.
 
 ## Administration
 
