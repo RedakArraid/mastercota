@@ -8,6 +8,10 @@ export function validateEnvironment() {
   if (process.env.NODE_ENV !== "production") return;
   const secret = process.env.JWT_SECRET ?? "";
   if (secret.length < 32 || /change.?me|dev-mastercota/i.test(secret)) throw new Error("JWT_SECRET doit être un secret aléatoire d'au moins 32 caractères");
+  const retentionSecret = (process.env.DATA_RETENTION_SECRET || "").trim();
+  if (retentionSecret.length < 32 || /change.?me|dev-mastercota/i.test(retentionSecret)) {
+    throw new Error("DATA_RETENTION_SECRET doit être un secret aléatoire distinct d'au moins 32 caractères en production");
+  }
   if (process.env.OTP_DEV_CODE || process.env.OTP_DEV_LOG === "1") throw new Error("Les options OTP de développement sont interdites en production");
   if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL manquant");
   if (!process.env.APP_URL?.startsWith("https://")) throw new Error("APP_URL HTTPS requis en production");
