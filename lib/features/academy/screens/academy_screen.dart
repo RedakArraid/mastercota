@@ -221,7 +221,7 @@ class _AcademyScreenState extends State<AcademyScreen> {
                               height: 120,
                               width: double.infinity,
                               decoration: const BoxDecoration(
-                                gradient: AppColors.inkGradient,
+                                gradient: const LinearGradient(colors: [AppColors.ink, AppColors.ink2]),
                               ),
                               child: const Icon(
                                 Icons.school_rounded,
