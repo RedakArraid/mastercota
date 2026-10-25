@@ -134,3 +134,8 @@ La CI vérifie désormais :
 - build iOS release sans signature sur macOS.
 
 Le workflow manuel `Mobile Release` produit les artefacts signés avec les secrets de publication réels. Les clés, certificats et profils de provisioning ne doivent jamais être commités.
+
+
+## Runtime readiness
+
+`GET /ready` vérifie désormais explicitement PostgreSQL, la disponibilité OTP/WhatsApp, le rail actif des frais Mastercota et le verrou PI-SPI production. En production, une dépendance requise indisponible renvoie HTTP 503 avec le détail des composants au lieu de présenter l'application comme entièrement opérationnelle.

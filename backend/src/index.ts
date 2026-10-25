@@ -37,6 +37,7 @@ import { normalizeWavePhone, normalizeWavePayLink } from "./lib/wave.js";
 import { getPispiRequestToPay, pispiStatus, pispiWebhookTxIds, verifyPispiWebhookSignature } from "./lib/pispi.js";
 import { activePlatformPaymentProvider, assertPlatformPaymentProviderAvailable, type PlatformPaymentProvider } from "./lib/platform-payment-provider.js";
 import { adminRoutes } from "./admin.js";
+import { runtimeReadiness } from "./lib/runtime-readiness.js";
 
 export const app = new Hono();
 const COOKIE = "mc_session";
@@ -96,8 +97,8 @@ app.onError((error, c) => {
 
 app.get("/health", c => c.json({ ok: true, service: "mastercota-backend" }));
 app.get("/ready", async c => {
-  try { await query("SELECT 1 FROM request_limits LIMIT 1"); return c.json({ ok: true }); }
-  catch { return c.json({ ok: false }, 503); }
+  const readiness = await runtimeReadiness();
+  return c.json(readiness, readiness.ok ? 200 : 503);
 });
 
 app.post("/api/auth/send-otp", async c => {

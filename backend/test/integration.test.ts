@@ -29,6 +29,7 @@ const { signSession } = await import('../src/lib/auth.js');
 const { activatePlatformPayment, initializePlatformFeePaystack } = await import('../src/lib/billing.js');
 const { resetPispiTokenCacheForTests } = await import('../src/lib/pispi.js');
 const { validateEnvironment } = await import('../src/lib/security.js');
+const { runtimeReadiness } = await import('../src/lib/runtime-readiness.js');
 const { normalizeWavePhone } = await import('../src/lib/wave.js');
 const charges = new Map<string, any>();
 const originalFetch = globalThis.fetch;
@@ -111,6 +112,21 @@ function webhook(charge: any) {
   const body = JSON.stringify({ event: 'charge.success', data: charge });
   return app.request('/api/paystack/webhook', { method: 'POST', headers: { 'x-paystack-signature': createHmac('sha512', process.env.PAYSTACK_SECRET_KEY!).update(body).digest('hex'), 'Content-Type': 'application/json' }, body });
 }
+
+test('readiness reports degraded production dependencies without pretending they are operational', async () => {
+  const dev = await runtimeReadiness();
+  assert.equal(dev.ok, true);
+  assert.equal(dev.checks.database.ok, true);
+  assert.equal(dev.checks.otp.required, false);
+
+  process.env.NODE_ENV = 'production';
+  const prod = await runtimeReadiness();
+  assert.equal(prod.ok, false);
+  assert.equal(prod.checks.database.ok, true);
+  assert.equal(prod.checks.otp.required, true);
+  assert.equal(prod.checks.otp.ok, false);
+  process.env.NODE_ENV = 'test';
+});
 
 test('OTP requires issuance, limits guesses, expires and cannot be reused', async () => {
   const phone = '+2250700000000';
