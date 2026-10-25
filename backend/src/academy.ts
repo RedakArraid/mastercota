@@ -454,6 +454,11 @@ academyRoutes.patch("/instructor/courses/:id", async c => {
   const accessType = body.access_type && ["free", "paid", "invite"].includes(body.access_type)
     ? body.access_type
     : course.access_type;
+  const level = body.level === undefined
+    ? null
+    : (["beginner", "intermediate", "advanced", "all"].includes(String(body.level))
+        ? String(body.level)
+        : (() => { throw new HTTPException(400, { message: "Niveau invalide" }); })());
   const price = accessType === "paid"
     ? numberField(body.price ?? course.price, "Prix", 0, 1_000_000_000)
     : 0;
@@ -473,7 +478,7 @@ academyRoutes.patch("/instructor/courses/:id", async c => {
       body.subtitle === undefined ? course.subtitle : nullableText(body.subtitle, 240),
       body.description === undefined ? course.description : nullableText(body.description, 12000),
       body.category === undefined ? null : nullableText(body.category, 100),
-      body.level === undefined ? null : String(body.level),
+      level,
       body.language === undefined ? null : nullableText(body.language, 10),
       body.cover_url === undefined ? course.cover_url : optionalUrl(body.cover_url),
       body.trailer_url === undefined ? course.trailer_url : optionalUrl(body.trailer_url),
@@ -945,20 +950,36 @@ academyRoutes.post("/enrollments/:id/payment-report", async c => {
   const enrollment = rows[0];
   if (!enrollment) throw new HTTPException(404, { message: "Inscription introuvable" });
   if (enrollment.status !== "pending") throw new HTTPException(400, { message: "Cette inscription n'attend pas de paiement" });
+  const reference = nullableText(body.reference, 160);
+  const note = nullableText(body.note, 2000);
+  const { rows: existingReports } = await query(
+    "SELECT * FROM academy_payment_reports WHERE enrollment_id=$1 AND status='pending' ORDER BY created_at DESC LIMIT 1",
+    [enrollment.id]
+  );
+  if (existingReports[0]) {
+    return c.json({ report: existingReports[0], already_reported: true });
+  }
   const { rows: reports } = await query(
     `INSERT INTO academy_payment_reports(enrollment_id,course_id,user_id,amount,currency,reference,note)
-     VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+     VALUES($1,$2,$3,$4,$5,$6,$7)
+     ON CONFLICT DO NOTHING
+     RETURNING *`,
     [
       enrollment.id,
       enrollment.course_id,
       user.id,
       enrollment.price_paid,
       enrollment.currency,
-      nullableText(body.reference, 160),
-      nullableText(body.note, 2000),
+      reference,
+      note,
     ]
   );
-  return c.json({ report: reports[0] }, 201);
+  if (reports[0]) return c.json({ report: reports[0] }, 201);
+  const { rows: retryRows } = await query(
+    "SELECT * FROM academy_payment_reports WHERE enrollment_id=$1 AND status='pending' ORDER BY created_at DESC LIMIT 1",
+    [enrollment.id]
+  );
+  return c.json({ report: retryRows[0], already_reported: true });
 });
 
 academyRoutes.get("/learning/:courseId", async c => {
@@ -1033,7 +1054,7 @@ academyRoutes.post("/lessons/:id/progress", async c => {
     [user.id, lesson.course_id, lesson.id]
   );
   const completion = status === "completed"
-    ? await transaction(async () => maybeCompleteCourse(user.id, lesson.course_id))
+    ? await maybeCompleteCourse(user.id, lesson.course_id)
     : null;
   return c.json({ progress: rows[0], completion });
 });
@@ -1082,7 +1103,7 @@ academyRoutes.post("/quizzes/:id/attempt", async c => {
      VALUES($1,$2,$3,$4,$5,$6::jsonb) RETURNING id,attempt_no,score,passed,submitted_at`,
     [quiz.id, user.id, attemptNo, score, passed, JSON.stringify(submitted)]
   );
-  const completion = passed ? await transaction(async () => maybeCompleteCourse(user.id, quiz.course_id)) : null;
+  const completion = passed ? await maybeCompleteCourse(user.id, quiz.course_id) : null;
   return c.json({ attempt: inserted[0], feedback, completion });
 });
 
