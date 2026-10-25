@@ -277,6 +277,28 @@ test('Academy supports premium course lifecycle from instructor to certificate',
   assert.equal(Number(analytics.body.revenue), 15000);
   assert.equal(Number(analytics.body.rating), 5);
 
+  const revoked = await request(`/api/academy/instructor/enrollments/${enroll.body.enrollment.id}`, 'PATCH', {
+    action: 'revoke',
+    reason: 'Remboursement de test'
+  }, instructor.token);
+  assert.equal(revoked.status, 200, JSON.stringify(revoked.body));
+  assert.equal(revoked.body.enrollment.status, 'revoked');
+  assert.equal((await request(`/api/academy/learning/${course.id}`, 'GET', undefined, learner.token)).status, 403);
+  const revokedCertificate = await request(`/api/academy/certificates/${attempt.body.completion.certificate.verification_code}`);
+  assert.equal(revokedCertificate.status, 200);
+  assert.equal(revokedCertificate.body.valid, false);
+  assert.equal(revokedCertificate.body.revoked, true);
+
+  const restored = await request(`/api/academy/instructor/enrollments/${enroll.body.enrollment.id}`, 'PATCH', {
+    action: 'restore'
+  }, instructor.token);
+  assert.equal(restored.status, 200);
+  assert.equal(restored.body.enrollment.status, 'completed');
+  assert.equal((await request(`/api/academy/learning/${course.id}`, 'GET', undefined, learner.token)).status, 200);
+  const restoredCertificate = await request(`/api/academy/certificates/${attempt.body.completion.certificate.verification_code}`);
+  assert.equal(restoredCertificate.status, 200);
+  assert.equal(restoredCertificate.body.valid, true);
+
   const coupon = await request(`/api/academy/instructor/courses/${course.id}/coupons`, 'POST', {
     code: 'FREE100',
     discount_type: 'percent',
