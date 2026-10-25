@@ -27,6 +27,7 @@ import {
   deadlineFromDuration,
   freeEligibleForPhone,
   getOwnerPhone,
+  phoneEntitlementFingerprint,
   initializePlatformFeePaystack,
   initializePlatformFeePispi,
   quoteDuration,
@@ -880,6 +881,79 @@ app.patch("/api/profile", async (c) => {
     ]
   );
   return c.json({ user: rows[0] });
+});
+
+app.delete("/api/profile", async c => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const body = await c.req.json().catch(() => ({}));
+  if (body?.confirmation !== "SUPPRIMER") {
+    return c.json({ error: "Confirmation de suppression invalide" }, 400);
+  }
+
+  const deleted = await transaction(async client => {
+    const { rows } = await client.query<{ id: string; phone: string; role: string }>(
+      "SELECT id,phone,role FROM users WHERE id=$1 FOR UPDATE",
+      [session.id]
+    );
+    const user = rows[0];
+    if (!user) return false;
+
+    const { rows: pendingAcademy } = await client.query(
+      `SELECT p.id
+       FROM academy_payment_reports p
+       JOIN academy_courses c ON c.id=p.course_id
+       WHERE c.instructor_id=$1 AND p.status='pending'
+       LIMIT 1`,
+      [user.id]
+    );
+    if (pendingAcademy[0]) {
+      throw new HTTPException(409, {
+        message: "Résolvez d’abord les paiements Academy en attente avant de supprimer ce compte.",
+      });
+    }
+
+    // Keep already-sold Academy content available to learners without keeping instructor PII.
+    await client.query(
+      `UPDATE academy_courses
+       SET instructor_id='00000000-0000-0000-0000-000000000001'::uuid,
+           status='archived',
+           updated_at=now()
+       WHERE instructor_id=$1`,
+      [user.id]
+    );
+
+    // Preserve other organizers' confirmed accounting while removing contributor PII.
+    await client.query(
+      `UPDATE contributions
+       SET contributor_name='Compte supprimé',
+           contributor_phone='deleted:' || id::text,
+           note=NULL
+       WHERE contributor_phone=$1`,
+      [user.phone]
+    );
+
+    await client.query("DELETE FROM otp_codes WHERE phone=$1", [user.phone]);
+
+    const { rows: entitlements } = await client.query(
+      "SELECT free_cotisations_used FROM phone_entitlements WHERE phone=$1 FOR UPDATE",
+      [user.phone]
+    );
+    if (Number(entitlements[0]?.free_cotisations_used ?? 0) > 0) {
+      await client.query(
+        "INSERT INTO free_cotisation_history(phone_fingerprint) VALUES($1) ON CONFLICT DO NOTHING",
+        [phoneEntitlementFingerprint(user.phone)]
+      );
+    }
+    await client.query("DELETE FROM phone_entitlements WHERE phone=$1", [user.phone]);
+
+    const result = await client.query("DELETE FROM users WHERE id=$1", [user.id]);
+    return (result.rowCount ?? 0) > 0;
+  });
+
+  const domain = cookieDomain();
+  deleteCookie(c, COOKIE, { path: "/", ...(domain ? { domain } : {}) });
+  return c.json({ ok: deleted });
 });
 
 app.get("/api/site-config", async (c) => {
