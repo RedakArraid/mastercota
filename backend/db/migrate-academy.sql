@@ -95,6 +95,14 @@ CREATE TABLE IF NOT EXISTS academy_coupons (
   UNIQUE(course_id, code)
 );
 
+CREATE TABLE IF NOT EXISTS academy_coupon_redemptions (
+  coupon_id uuid NOT NULL REFERENCES academy_coupons(id) ON DELETE CASCADE,
+  course_id uuid NOT NULL REFERENCES academy_courses(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(coupon_id,user_id)
+);
+
 CREATE TABLE IF NOT EXISTS academy_invites (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   course_id uuid NOT NULL REFERENCES academy_courses(id) ON DELETE CASCADE,
@@ -106,6 +114,14 @@ CREATE TABLE IF NOT EXISTS academy_invites (
   active boolean NOT NULL DEFAULT true,
   created_by uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS academy_invite_redemptions (
+  invite_id uuid NOT NULL REFERENCES academy_invites(id) ON DELETE CASCADE,
+  course_id uuid NOT NULL REFERENCES academy_courses(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(invite_id,user_id)
 );
 
 CREATE TABLE IF NOT EXISTS academy_enrollments (
