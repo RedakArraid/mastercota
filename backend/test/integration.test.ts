@@ -128,6 +128,184 @@ test('readiness reports degraded production dependencies without pretending they
   process.env.NODE_ENV = 'test';
 });
 
+test('Academy supports premium course lifecycle from instructor to certificate', async () => {
+  const instructor = await user('+2250700000101');
+  await query("UPDATE users SET name='Awa Formatrice' WHERE id=$1", [instructor.id]);
+  const learner = await user('+2250700000102');
+  await query("UPDATE users SET name='Moussa Élève' WHERE id=$1", [learner.id]);
+
+  const profile = await request('/api/academy/instructor/profile', 'POST', {
+    headline: 'Experte marketing digital',
+    bio: 'Cours pratiques pour entrepreneurs.'
+  }, instructor.token);
+  assert.equal(profile.status, 201, JSON.stringify(profile.body));
+
+  const created = await request('/api/academy/instructor/courses', 'POST', {
+    title: 'Marketing WhatsApp de A à Z',
+    subtitle: 'Construire une audience et vendre proprement',
+    description: 'Un cours complet.',
+    category: 'Marketing',
+    level: 'beginner',
+    access_type: 'paid',
+    price: 15000,
+    sequential: true,
+    certificate_enabled: true
+  }, instructor.token);
+  assert.equal(created.status, 201, JSON.stringify(created.body));
+  const course = created.body.course;
+
+  const section = await request(`/api/academy/instructor/courses/${course.id}/sections`, 'POST', {
+    title: 'Fondamentaux',
+    position: 1
+  }, instructor.token);
+  assert.equal(section.status, 201);
+
+  const lesson = await request(`/api/academy/instructor/sections/${section.body.section.id}/lessons`, 'POST', {
+    title: 'Construire son offre',
+    lesson_type: 'video',
+    content: 'Résumé et plan action.',
+    video_url: 'https://example.com/video.mp4',
+    duration_minutes: 20,
+    position: 1,
+    preview: false,
+    published: true
+  }, instructor.token);
+  assert.equal(lesson.status, 201);
+
+  const quiz = await request(`/api/academy/instructor/lessons/${lesson.body.lesson.id}/quiz`, 'POST', {
+    title: 'Validation',
+    passing_score: 70,
+    max_attempts: 3
+  }, instructor.token);
+  assert.equal(quiz.status, 201);
+
+  const question = await request(`/api/academy/instructor/quizzes/${quiz.body.quiz.id}/questions`, 'POST', {
+    prompt: 'Quelle est la bonne réponse ?',
+    question_type: 'single',
+    options: ['A', 'B'],
+    correct_answers: ['B'],
+    explanation: 'B est correcte.',
+    points: 1,
+    position: 1
+  }, instructor.token);
+  assert.equal(question.status, 201);
+
+  const published = await request(`/api/academy/instructor/courses/${course.id}`, 'PATCH', {
+    status: 'published'
+  }, instructor.token);
+  assert.equal(published.status, 200, JSON.stringify(published.body));
+
+  const catalogue = await request('/api/academy/courses?q=Marketing');
+  assert.equal(catalogue.status, 200);
+  assert.ok(catalogue.body.courses.some((item: any) => item.id === course.id));
+
+  const publicCourse = await request(`/api/academy/courses/${published.body.course.slug}`);
+  assert.equal(publicCourse.status, 200);
+  assert.equal(publicCourse.body.course.price, '15000.00');
+  assert.equal(publicCourse.body.outline[0].lessons[0].content, undefined);
+
+  const enroll = await request(`/api/academy/courses/${course.id}/enroll`, 'POST', {}, learner.token);
+  assert.equal(enroll.status, 200);
+  assert.equal(enroll.body.payment_required, true);
+  assert.equal(Number(enroll.body.amount_due), 15000);
+  assert.equal(enroll.body.payout.wave_phone, instructor.phone);
+
+  assert.equal((await request(`/api/academy/learning/${course.id}`, 'GET', undefined, learner.token)).status, 403);
+
+  const report = await request(`/api/academy/enrollments/${enroll.body.enrollment.id}/payment-report`, 'POST', {
+    reference: 'WAVE-COURSE-001',
+    note: 'Paiement envoyé'
+  }, learner.token);
+  assert.equal(report.status, 201);
+
+  const confirmed = await request(`/api/academy/instructor/payment-reports/${report.body.report.id}/confirm`, 'POST', {}, instructor.token);
+  assert.equal(confirmed.status, 200);
+
+  const learning = await request(`/api/academy/learning/${course.id}`, 'GET', undefined, learner.token);
+  assert.equal(learning.status, 200);
+  assert.equal(learning.body.outline[0].lessons[0].id, lesson.body.lesson.id);
+
+  const lessonAccess = await request(`/api/academy/lessons/${lesson.body.lesson.id}`, 'GET', undefined, learner.token);
+  assert.equal(lessonAccess.status, 200);
+  assert.equal(lessonAccess.body.lesson.content, 'Résumé et plan action.');
+  assert.equal(lessonAccess.body.quiz.questions[0].correct_answers, undefined);
+
+  const progress = await request(`/api/academy/lessons/${lesson.body.lesson.id}/progress`, 'POST', {
+    status: 'completed',
+    progress_seconds: 1200
+  }, learner.token);
+  assert.equal(progress.status, 200);
+  assert.equal(progress.body.completion, null);
+
+  const attempt = await request(`/api/academy/quizzes/${quiz.body.quiz.id}/attempt`, 'POST', {
+    answers: { [question.body.question.id]: 'B' }
+  }, learner.token);
+  assert.equal(attempt.status, 200, JSON.stringify(attempt.body));
+  assert.equal(attempt.body.attempt.passed, true);
+  assert.equal(attempt.body.attempt.score, 100);
+  assert.equal(attempt.body.completion.completed, true);
+  assert.ok(attempt.body.completion.certificate.verification_code);
+
+  const certificate = await request(`/api/academy/certificates/${attempt.body.completion.certificate.verification_code}`);
+  assert.equal(certificate.status, 200);
+  assert.equal(certificate.body.valid, true);
+  assert.equal(certificate.body.certificate.course_title, 'Marketing WhatsApp de A à Z');
+
+  const review = await request(`/api/academy/courses/${course.id}/reviews`, 'POST', {
+    rating: 5,
+    body: 'Très concret.'
+  }, learner.token);
+  assert.equal(review.status, 201);
+
+  const discussion = await request(`/api/academy/courses/${course.id}/discussions`, 'POST', {
+    lesson_id: lesson.body.lesson.id,
+    body: 'Question sur le plan action.'
+  }, learner.token);
+  assert.equal(discussion.status, 201);
+
+  const analytics = await request(`/api/academy/instructor/courses/${course.id}/analytics`, 'GET', undefined, instructor.token);
+  assert.equal(analytics.status, 200);
+  assert.equal(Number(analytics.body.enrollments.completed), 1);
+  assert.equal(Number(analytics.body.revenue), 15000);
+  assert.equal(Number(analytics.body.rating), 5);
+
+  const coupon = await request(`/api/academy/instructor/courses/${course.id}/coupons`, 'POST', {
+    code: 'FREE100',
+    discount_type: 'percent',
+    discount_value: 100,
+    max_uses: 1
+  }, instructor.token);
+  assert.equal(coupon.status, 201);
+
+  const learner2 = await user('+2250700000103');
+  const couponEnroll = await request(`/api/academy/courses/${course.id}/enroll`, 'POST', {
+    coupon_code: 'FREE100'
+  }, learner2.token);
+  assert.equal(couponEnroll.status, 200);
+  assert.equal(couponEnroll.body.payment_required, false);
+  assert.equal(couponEnroll.body.enrollment.status, 'active');
+
+  const inviteCourse = await request('/api/academy/instructor/courses', 'POST', {
+    title: 'Mentorat privé',
+    access_type: 'invite'
+  }, instructor.token);
+  const inviteSection = await request(`/api/academy/instructor/courses/${inviteCourse.body.course.id}/sections`, 'POST', { title: 'Session', position: 1 }, instructor.token);
+  await request(`/api/academy/instructor/sections/${inviteSection.body.section.id}/lessons`, 'POST', { title: 'Bienvenue', content: 'Contenu privé', published: true }, instructor.token);
+  await request(`/api/academy/instructor/courses/${inviteCourse.body.course.id}`, 'PATCH', { status: 'published' }, instructor.token);
+  const invite = await request(`/api/academy/instructor/courses/${inviteCourse.body.course.id}/invites`, 'POST', {
+    code: 'VIP-MOUSSA',
+    phone: '+2250700000104'
+  }, instructor.token);
+  assert.equal(invite.status, 201);
+  const learner3 = await user('+2250700000104');
+  const inviteEnroll = await request(`/api/academy/courses/${inviteCourse.body.course.id}/enroll`, 'POST', {
+    invite_code: 'VIP-MOUSSA'
+  }, learner3.token);
+  assert.equal(inviteEnroll.status, 200);
+  assert.equal(inviteEnroll.body.enrollment.access_source, 'invite');
+  assert.equal(inviteEnroll.body.enrollment.status, 'active');
+});
+
 test('OTP requires issuance, limits guesses, expires and cannot be reused', async () => {
   const phone = '+2250700000000';
   assert.equal((await request('/api/auth/verify-otp', 'POST', { phone, token: '123456' })).status, 401);
