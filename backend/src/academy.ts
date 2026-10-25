@@ -89,6 +89,66 @@ async function instructorOwnsCourse(userId: string, courseId: string) {
   return rows[0];
 }
 
+async function validateCoursePublishable(options: {
+  courseId: string;
+  instructorId: string;
+  accessType: string;
+  price: number;
+}) {
+  const { rows: invalidLessons } = await query(
+    `SELECT l.id,l.title,l.lesson_type
+     FROM academy_lessons l
+     WHERE l.course_id=$1 AND l.published=true AND (
+       (l.lesson_type='text' AND (l.content IS NULL OR length(trim(l.content))=0)) OR
+       (l.lesson_type='video' AND (l.video_url IS NULL OR length(trim(l.video_url))=0)) OR
+       (l.lesson_type='live' AND (l.live_url IS NULL OR length(trim(l.live_url))=0)) OR
+       (l.lesson_type='download' AND (l.resource_url IS NULL OR length(trim(l.resource_url))=0)
+         AND jsonb_array_length(COALESCE(l.resources,'[]'::jsonb))=0)
+     )
+     LIMIT 1`,
+    [options.courseId]
+  );
+  const { rows: lessonCount } = await query(
+    "SELECT count(*)::int AS n FROM academy_lessons WHERE course_id=$1 AND published=true",
+    [options.courseId]
+  );
+  if (!Number(lessonCount[0]?.n)) {
+    throw new HTTPException(400, { message: "Ajoutez au moins une leçon publiée" });
+  }
+  if (invalidLessons[0]) {
+    throw new HTTPException(400, {
+      message: `Complétez le contenu requis de la leçon « ${invalidLessons[0].title} » avant publication`,
+    });
+  }
+  const { rows: emptyQuiz } = await query(
+    `SELECT q.id,q.title FROM academy_quizzes q
+     JOIN academy_lessons l ON l.id=q.lesson_id
+     WHERE l.course_id=$1 AND l.published=true
+       AND NOT EXISTS (SELECT 1 FROM academy_quiz_questions qq WHERE qq.quiz_id=q.id)
+     LIMIT 1`,
+    [options.courseId]
+  );
+  if (emptyQuiz[0]) {
+    throw new HTTPException(400, {
+      message: `Ajoutez au moins une question au quiz « ${emptyQuiz[0].title} » avant publication`,
+    });
+  }
+  if (options.accessType === "paid") {
+    if (!Number.isFinite(options.price) || options.price <= 0) {
+      throw new HTTPException(400, { message: "Un cours payant doit avoir un prix supérieur à zéro" });
+    }
+    const { rows: payout } = await query(
+      "SELECT wave_phone,wave_pay_link FROM users WHERE id=$1",
+      [options.instructorId]
+    );
+    if (!payout[0]?.wave_phone && !payout[0]?.wave_pay_link) {
+      throw new HTTPException(400, {
+        message: "Configurez la réception des paiements avant de publier un cours payant",
+      });
+    }
+  }
+}
+
 async function accessFor(user: Record<string, any>, courseId: string): Promise<CourseAccess> {
   const { rows: courses } = await query(
     `SELECT c.*,u.name AS instructor_name,u.wave_phone AS instructor_wave_phone,
@@ -326,7 +386,7 @@ academyRoutes.get("/courses/:slug", async c => {
 academyRoutes.get("/certificates/:code", async c => {
   const { rows } = await query(
     `SELECT cert.verification_code,cert.issued_at,cert.metadata,c.title AS course_title,
-            u.name AS learner_name,u.phone AS learner_phone
+            u.name AS learner_name
      FROM academy_certificates cert
      JOIN academy_courses c ON c.id=cert.course_id
      JOIN users u ON u.id=cert.user_id
@@ -397,7 +457,7 @@ academyRoutes.post("/instructor/courses", async c => {
   const body = await c.req.json();
   const title = textField(body.title, "Titre", 160);
   const accessType = ["free", "paid", "invite"].includes(body.access_type) ? body.access_type : "free";
-  const price = accessType === "paid" ? numberField(body.price, "Prix", 0, 1_000_000_000) : 0;
+  const price = accessType === "paid" ? numberField(body.price, "Prix", 0.01, 1_000_000_000) : 0;
   const level = ["beginner", "intermediate", "advanced", "all"].includes(body.level) ? body.level : "all";
   const { rows } = await query(
     `INSERT INTO academy_courses(
@@ -438,30 +498,22 @@ academyRoutes.patch("/instructor/courses/:id", async c => {
   const accessType = body.access_type && ["free", "paid", "invite"].includes(body.access_type)
     ? body.access_type
     : course.access_type;
-  if (nextStatus === "published") {
-    const { rows: lessons } = await query(
-      "SELECT count(*)::int AS n FROM academy_lessons WHERE course_id=$1 AND published=true",
-      [course.id]
-    );
-    if (!Number(lessons[0]?.n)) throw new HTTPException(400, { message: "Ajoutez au moins une leçon publiée" });
-    if (accessType === "paid") {
-      const { rows: payout } = await query(
-        "SELECT wave_phone,wave_pay_link,wave_payout_mode FROM users WHERE id=$1",
-        [user.id]
-      );
-      if (!payout[0]?.wave_phone && !payout[0]?.wave_pay_link) {
-        throw new HTTPException(400, { message: "Configurez la réception des paiements avant de publier un cours payant" });
-      }
-    }
-  }
   const level = body.level === undefined
     ? null
     : (["beginner", "intermediate", "advanced", "all"].includes(String(body.level))
         ? String(body.level)
         : (() => { throw new HTTPException(400, { message: "Niveau invalide" }); })());
   const price = accessType === "paid"
-    ? numberField(body.price ?? course.price, "Prix", 0, 1_000_000_000)
+    ? numberField(body.price ?? course.price, "Prix", 0.01, 1_000_000_000)
     : 0;
+  if (nextStatus === "published") {
+    await validateCoursePublishable({
+      courseId: course.id,
+      instructorId: user.id,
+      accessType,
+      price,
+    });
+  }
   const { rows } = await query(
     `UPDATE academy_courses SET
       title=COALESCE($2,title),subtitle=$3,description=$4,category=COALESCE($5,category),
@@ -1134,6 +1186,15 @@ academyRoutes.post("/courses/:id/discussions", async c => {
     if (!rows[0]) throw new HTTPException(400, { message: "Leçon invalide" });
   }
   const parentId = body.parent_id ? String(body.parent_id) : null;
+  if (parentId) {
+    const { rows: parents } = await query(
+      "SELECT id,lesson_id FROM academy_discussions WHERE id=$1 AND course_id=$2 AND status='published'",
+      [parentId, access.course.id]
+    );
+    if (!parents[0] || (lessonId && parents[0].lesson_id && parents[0].lesson_id !== lessonId)) {
+      throw new HTTPException(400, { message: "Discussion parente invalide" });
+    }
+  }
   const { rows } = await query(
     `INSERT INTO academy_discussions(course_id,lesson_id,user_id,parent_id,body)
      VALUES($1,$2,$3,$4,$5) RETURNING *`,
@@ -1161,8 +1222,22 @@ academyRoutes.patch("/admin/courses/:id", async c => {
   const body = await c.req.json();
   const status = String(body.status || "");
   if (!["draft", "published", "archived"].includes(status)) throw new HTTPException(400, { message: "Statut invalide" });
+  const { rows: courseRows } = await query(
+    "SELECT id,instructor_id,access_type,price FROM academy_courses WHERE id=$1",
+    [c.req.param("id")]
+  );
+  const course = courseRows[0];
+  if (!course) throw new HTTPException(404, { message: "Cours introuvable" });
+  if (status === "published") {
+    await validateCoursePublishable({
+      courseId: course.id,
+      instructorId: course.instructor_id,
+      accessType: course.access_type,
+      price: Number(course.price),
+    });
+  }
   const { rows } = await query(
-    "UPDATE academy_courses SET status=$2,updated_at=now() WHERE id=$1 RETURNING *",
+    "UPDATE academy_courses SET status=$2,published_at=CASE WHEN $2='published' AND published_at IS NULL THEN now() ELSE published_at END,updated_at=now() WHERE id=$1 RETURNING *",
     [c.req.param("id"), status]
   );
   if (!rows[0]) throw new HTTPException(404, { message: "Cours introuvable" });
