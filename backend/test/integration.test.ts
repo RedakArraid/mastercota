@@ -351,6 +351,10 @@ test('Academy rejects incomplete premium publication and enforces coupon and inv
   assert.equal(invalidVideoPublish.status, 400);
   assert.match(invalidVideoPublish.body.error, /Complétez le contenu requis/);
 
+  const insecureVideo = await request(`/api/academy/instructor/lessons/${lesson.body.lesson.id}`, 'PATCH', {
+    video_url: 'http://example.com/course.mp4'
+  }, instructor.token);
+  assert.equal(insecureVideo.status, 400);
   await request(`/api/academy/instructor/lessons/${lesson.body.lesson.id}`, 'PATCH', {
     video_url: 'https://example.com/course.mp4'
   }, instructor.token);
@@ -366,6 +370,14 @@ test('Academy rejects incomplete premium publication and enforces coupon and inv
   }, instructor.token);
   assert.equal(emptyQuizPublish.status, 400);
   assert.match(emptyQuizPublish.body.error, /au moins une question/i);
+
+  const invalidAnswer = await request(`/api/academy/instructor/quizzes/${quiz.body.quiz.id}/questions`, 'POST', {
+    prompt: 'Question invalide',
+    question_type: 'single',
+    options: ['A', 'B'],
+    correct_answers: ['C']
+  }, instructor.token);
+  assert.equal(invalidAnswer.status, 400);
 
   await request(`/api/academy/instructor/quizzes/${quiz.body.quiz.id}/questions`, 'POST', {
     prompt: 'Valider ?',
