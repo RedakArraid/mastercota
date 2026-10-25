@@ -98,3 +98,100 @@ export type SiteConfig = {
     features: { title: string; body: string }[];
   };
 };
+
+
+export type AcademyCourse = {
+  id: string;
+  slug: string;
+  instructor_id: string;
+  instructor_name?: string | null;
+  instructor_headline?: string | null;
+  instructor_bio?: string | null;
+  title: string;
+  subtitle?: string | null;
+  description?: string | null;
+  category: string;
+  level: "beginner" | "intermediate" | "advanced" | "all";
+  language: string;
+  cover_url?: string | null;
+  trailer_url?: string | null;
+  price: number | string;
+  currency: string;
+  access_type: "free" | "paid" | "invite";
+  status?: "draft" | "published" | "archived";
+  sequential?: boolean;
+  drip_days?: number;
+  certificate_enabled?: boolean;
+  estimated_minutes?: number;
+  rating?: number | string;
+  reviews_count?: number;
+  learners_count?: number;
+  lessons_count?: number;
+  created_at?: string;
+  updated_at?: string;
+};
+
+export type AcademyLesson = {
+  id: string;
+  course_id?: string;
+  section_id: string;
+  title: string;
+  lesson_type: "text" | "video" | "live" | "download";
+  content?: string | null;
+  video_url?: string | null;
+  live_url?: string | null;
+  resource_url?: string | null;
+  resources?: Array<{ title?: string; url?: string }>;
+  duration_minutes: number;
+  position: number;
+  preview: boolean;
+  published?: boolean;
+  unlock_after_days?: number;
+  quiz_id?: string | null;
+  quiz_title?: string | null;
+};
+
+export type AcademySection = {
+  id: string;
+  course_id: string;
+  title: string;
+  position: number;
+  lessons: AcademyLesson[];
+};
+
+export type AcademyEnrollment = {
+  id: string;
+  course_id: string;
+  user_id: string;
+  status: "pending" | "active" | "completed" | "revoked";
+  access_source: "free" | "payment" | "coupon" | "invite" | "admin";
+  price_paid: number | string;
+  currency: string;
+  enrolled_at?: string | null;
+  completed_at?: string | null;
+  last_lesson_id?: string | null;
+  title?: string;
+  slug?: string;
+  subtitle?: string | null;
+  cover_url?: string | null;
+  instructor_name?: string | null;
+  lessons_count?: number;
+  completed_lessons?: number;
+};
+
+export type AcademyQuiz = {
+  id: string;
+  title: string;
+  passing_score: number;
+  max_attempts: number;
+  attempts_used: number;
+  passed: boolean;
+  questions: Array<{
+    id: string;
+    prompt: string;
+    question_type: "single" | "multiple" | "true_false";
+    options: string[];
+    points: number;
+    position: number;
+  }>;
+};
