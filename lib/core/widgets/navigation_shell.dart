@@ -16,8 +16,9 @@ class NavigationShell extends StatelessWidget {
 
   int _getSelectedIndex() {
     final loc = state.matchedLocation;
-    if (loc.startsWith('/cotisation/create')) return 1;
-    if (loc.startsWith('/profile')) return 2;
+    if (loc.startsWith('/academy')) return 1;
+    if (loc.startsWith('/cotisation/create')) return 2;
+    if (loc.startsWith('/profile')) return 3;
     return 0;
   }
 
@@ -28,9 +29,12 @@ class NavigationShell extends StatelessWidget {
         context.go('/home');
         break;
       case 1:
-        context.push('/cotisation/create');
+        context.go('/academy');
         break;
       case 2:
+        context.push('/cotisation/create');
+        break;
+      case 3:
         context.go('/profile');
         break;
     }
@@ -82,18 +86,26 @@ class NavigationShell extends StatelessWidget {
                     ),
                     Expanded(
                       child: _NavItem(
-                        icon: Icons.add_rounded,
-                        label: 'Créer',
+                        icon: Icons.school_rounded,
+                        label: 'Academy',
                         isSelected: selected == 1,
                         onTap: () => _onItemTapped(context, 1),
                       ),
                     ),
                     Expanded(
                       child: _NavItem(
-                        icon: Icons.person_rounded,
-                        label: 'Profil',
+                        icon: Icons.add_rounded,
+                        label: 'Créer',
                         isSelected: selected == 2,
                         onTap: () => _onItemTapped(context, 2),
+                      ),
+                    ),
+                    Expanded(
+                      child: _NavItem(
+                        icon: Icons.person_rounded,
+                        label: 'Profil',
+                        isSelected: selected == 3,
+                        onTap: () => _onItemTapped(context, 3),
                       ),
                     ),
                   ],
