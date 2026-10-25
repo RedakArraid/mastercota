@@ -7,6 +7,7 @@ if (!url || !new URL(url).pathname.endsWith('/mastercota_test')) throw new Error
 process.env.DATABASE_URL = url;
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = 'mastercota-test-secret-at-least-32-characters';
+process.env.DATA_RETENTION_SECRET = 'mastercota-retention-test-secret-at-least-32-chars';
 process.env.OTP_DEV_CODE = '123456';
 process.env.OPENWA_ENABLED = 'false';
 process.env.PAYSTACK_SECRET_KEY = 'sk_test_isolated_mock';
@@ -77,6 +78,9 @@ globalThis.fetch = async (input, init) => {
 };
 beforeEach(async () => {
   await query('TRUNCATE users, otp_codes, phone_entitlements, request_limits RESTART IDENTITY CASCADE');
+  await query(
+    "INSERT INTO users(id,phone,name,role) VALUES('00000000-0000-0000-0000-000000000001','system:academy-deleted-instructor','Instructeur supprimé','user') ON CONFLICT(id) DO NOTHING"
+  );
   charges.clear(); initializeCalls = 0; lostInitializeResponse = false; failVerification = false; waitForFullPool = false;
   pispiRequests.clear(); pispiTokenCalls = 0; resetPispiTokenCacheForTests();
   process.env.PLATFORM_PAYMENT_PRIMARY = 'paystack';
