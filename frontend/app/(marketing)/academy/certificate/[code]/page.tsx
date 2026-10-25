@@ -9,6 +9,7 @@ type Certificate = {
   issued_at: string;
   course_title: string;
   learner_name?: string | null;
+  revoked_at?: string | null;
   metadata?: {
     course_title?: string;
     learner_name?: string;
@@ -22,12 +23,14 @@ export default async function CertificatePage({
 }) {
   const { code } = await params;
   let certificate: Certificate;
+  let valid = false;
   try {
-    const data = await backendFetch<{ valid: boolean; certificate: Certificate }>(
+    const data = await backendFetch<{ valid: boolean; revoked?: boolean; certificate: Certificate }>(
       `/api/academy/certificates/${encodeURIComponent(code)}`
     );
-    if (!data.valid || !data.certificate) notFound();
+    if (!data.certificate) notFound();
     certificate = data.certificate;
+    valid = data.valid;
   } catch {
     notFound();
   }
@@ -38,10 +41,12 @@ export default async function CertificatePage({
         <section className="relative overflow-hidden rounded-[2rem] border border-border/80 bg-white p-7 text-center shadow-[0_35px_90px_-50px_rgb(20_50_104_/_60%)] sm:p-10">
           <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-[radial-gradient(ellipse_at_top,_rgb(244_184_41_/_22%),_transparent_70%)]" />
           <div className="relative">
-            <span className="mx-auto grid size-16 place-items-center rounded-2xl bg-accent text-primary">
+            <span className={`mx-auto grid size-16 place-items-center rounded-2xl ${valid ? "bg-accent text-primary" : "bg-red-50 text-red-600"}`}>
               <Award className="size-8" />
             </span>
-            <p className="mc-kicker mt-6">Certificat vérifié</p>
+            <p className={`mt-6 text-[0.72rem] font-bold uppercase tracking-[0.18em] ${valid ? "text-primary" : "text-red-600"}`}>
+              {valid ? "Certificat vérifié" : "Certificat révoqué"}
+            </p>
             <h1 className="mt-2 text-3xl font-extrabold tracking-[-0.04em] text-ink sm:text-4xl">
               {certificate.course_title || certificate.metadata?.course_title}
             </h1>
@@ -57,14 +62,16 @@ export default async function CertificatePage({
                 <p className="mt-1 font-mono text-sm font-bold text-ink">{certificate.verification_code}</p>
               </div>
               <div className="rounded-2xl bg-secondary/60 p-4">
-                <CheckCircle2 className="mx-auto size-5 text-emerald-600" />
+                <CheckCircle2 className={`mx-auto size-5 ${valid ? "text-emerald-600" : "text-red-600"}`} />
                 <p className="mt-2 text-xs font-semibold text-muted-foreground">Date d’émission</p>
                 <p className="mt-1 text-sm font-bold text-ink">{new Date(certificate.issued_at).toLocaleDateString("fr-FR")}</p>
               </div>
             </div>
 
             <p className="mx-auto mt-7 max-w-xl text-sm leading-6 text-muted-foreground">
-              Ce certificat a été émis par Mastercota Academy après validation du parcours et des évaluations requises.
+              {valid
+                ? "Ce certificat a été émis par Mastercota Academy après validation du parcours et des évaluations requises."
+                : "Ce certificat a bien existé mais n’est plus valide. L’accès associé a été suspendu par l’instructeur."}
             </p>
 
             <Button asChild variant="outline" className="mt-7">
