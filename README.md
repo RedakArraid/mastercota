@@ -139,3 +139,12 @@ Le workflow manuel `Mobile Release` produit les artefacts signés avec les secre
 ## Runtime readiness
 
 `GET /ready` vérifie désormais explicitement PostgreSQL, la disponibilité OTP/WhatsApp, le rail actif des frais Mastercota et le verrou PI-SPI production. En production, une dépendance requise indisponible renvoie HTTP 503 avec le détail des composants au lieu de présenter l'application comme entièrement opérationnelle.
+
+
+## Mastercota Academy
+
+Le dépôt contient désormais un LMS premium intégré à Mastercota : catalogue de cours, espace instructeur, accès gratuit/payant/invitation, paiement direct à l'instructeur, progression, quiz, certificats vérifiables, coupons, Q&R, annonces et analytics.
+
+Le détail fonctionnel et le modèle d'accès sont documentés dans [`docs/academy.md`](docs/academy.md).
+
+Le flux de vente d'un cours respecte le principe de non-custody de Mastercota : l'apprenant paie directement l'instructeur, signale le transfert et l'instructeur confirme avant activation de l'accès.
