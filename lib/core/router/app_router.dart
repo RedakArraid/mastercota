@@ -11,6 +11,10 @@ import '../../features/cotisation/screens/cotisation_detail_screen.dart';
 import '../../features/cotisation/screens/public_contribution_page.dart';
 import '../../features/profile/screens/profile_screen.dart';
 import '../../features/profile/screens/payout_settings_screen.dart';
+import '../../features/academy/screens/academy_screen.dart';
+import '../../features/academy/screens/academy_course_screen.dart';
+import '../../features/academy/screens/academy_learning_screen.dart';
+import '../../features/academy/screens/academy_lesson_screen.dart';
 import '../services/api_service.dart';
 import '../widgets/navigation_shell.dart';
 
@@ -66,10 +70,34 @@ final routerProvider = Provider<GoRouter>((ref) {
             builder: (ctx, state) => const HomeScreen(),
           ),
           GoRoute(
+            path: '/academy',
+            builder: (ctx, state) => const AcademyScreen(),
+          ),
+          GoRoute(
             path: '/profile',
             builder: (ctx, state) => const ProfileScreen(),
           ),
         ],
+      ),
+
+      GoRoute(
+        path: '/academy/course/:slug',
+        builder: (ctx, state) => AcademyCourseScreen(
+          slug: state.pathParameters['slug']!,
+        ),
+      ),
+      GoRoute(
+        path: '/academy/learn/:courseId',
+        builder: (ctx, state) => AcademyLearningScreen(
+          courseId: state.pathParameters['courseId']!,
+        ),
+      ),
+      GoRoute(
+        path: '/academy/learn/:courseId/lesson/:lessonId',
+        builder: (ctx, state) => AcademyLessonScreen(
+          courseId: state.pathParameters['courseId']!,
+          lessonId: state.pathParameters['lessonId']!,
+        ),
       ),
 
       GoRoute(
