@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Plus, User, Menu, ArrowUpRight } from "lucide-react";
+import { Home, Plus, User, Menu, ArrowUpRight, BookOpen, GraduationCap } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
@@ -10,7 +10,9 @@ import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/home", label: "Accueil", icon: Home },
-  { href: "/cotisation/create", label: "Créer", icon: Plus },
+  { href: "/learn", label: "Cours", icon: BookOpen },
+  { href: "/teach", label: "Enseigner", icon: GraduationCap },
+  { href: "/cotisation/create", label: "Cotisation", icon: Plus },
   { href: "/profile", label: "Profil", icon: User },
 ];
 
@@ -63,7 +65,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <div className="px-2 pb-8 pt-1">
             <Logo href="/home" />
             <p className="mt-2 pl-11 text-xs leading-5 text-muted-foreground">
-              Vos cotisations, clairement suivies.
+              Cotisations et apprentissage, au même endroit.
             </p>
           </div>
 
@@ -89,16 +91,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               Mastercota
             </p>
             <p className="mt-2 text-sm font-semibold leading-5">
-              0 % de commission sur les contributions.
+              Academy pour apprendre et transmettre.
             </p>
             <p className="mt-2 text-xs leading-5 text-white/60">
-              Vous gardez la maîtrise de vos fonds. Mastercota simplifie le suivi.
+              Cours, progression, quiz, certificats et paiements directs.
             </p>
           </div>
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-white/[0.08]0 px-4 py-3 backdrop-blur-xl md:hidden">
+          <header className="sticky top-0 z-30 flex items-center justify-between border-b border-border/70 bg-white/80 px-4 py-3 backdrop-blur-xl md:hidden">
             <Logo href="/home" size="sm" />
             <Sheet>
               <SheetTrigger asChild>
@@ -124,7 +126,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             {children}
           </main>
 
-          <nav className="fixed inset-x-3 bottom-3 z-30 grid grid-cols-3 rounded-[1.4rem] border border-white/20 bg-ink/95 p-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] shadow-[0_20px_50px_-22px_rgb(20_50_104_/_90%)] backdrop-blur-xl md:hidden">
+          <nav className="fixed inset-x-3 bottom-3 z-30 grid grid-cols-5 rounded-[1.4rem] border border-white/20 bg-ink/95 p-1.5 pb-[calc(0.375rem+env(safe-area-inset-bottom))] shadow-[0_20px_50px_-22px_rgb(20_50_104_/_90%)] backdrop-blur-xl md:hidden">
             {nav.map((item) => {
               const active = isActive(pathname, item.href);
               const Icon = item.icon;
