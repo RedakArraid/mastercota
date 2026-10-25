@@ -218,6 +218,13 @@ test('Academy supports premium course lifecycle from instructor to certificate',
   }, learner.token);
   assert.equal(report.status, 201);
 
+  const duplicateReport = await request(`/api/academy/enrollments/${enroll.body.enrollment.id}/payment-report`, 'POST', {
+    reference: 'WAVE-COURSE-001-BIS'
+  }, learner.token);
+  assert.equal(duplicateReport.status, 200);
+  assert.equal(duplicateReport.body.already_reported, true);
+  assert.equal(duplicateReport.body.report.id, report.body.report.id);
+
   const confirmed = await request(`/api/academy/instructor/payment-reports/${report.body.report.id}/confirm`, 'POST', {}, instructor.token);
   assert.equal(confirmed.status, 200);
 
