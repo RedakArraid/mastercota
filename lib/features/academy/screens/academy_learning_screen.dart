@@ -115,7 +115,7 @@ class _AcademyLearningScreenState extends State<AcademyLearningScreen> {
             Container(
               padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
-                gradient: AppColors.inkGradient,
+                gradient: const LinearGradient(colors: [AppColors.ink, AppColors.ink2]),
                 borderRadius: BorderRadius.circular(AppColors.radiusXl),
               ),
               child: Column(
