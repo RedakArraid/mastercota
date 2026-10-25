@@ -435,7 +435,7 @@ class _MediaCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 22),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: AppColors.inkGradient,
+        gradient: const LinearGradient(colors: [AppColors.ink, AppColors.ink2]),
         borderRadius: BorderRadius.circular(AppColors.radiusXl),
       ),
       child: Column(
