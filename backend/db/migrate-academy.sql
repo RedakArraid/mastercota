@@ -137,6 +137,10 @@ CREATE TABLE IF NOT EXISTS academy_enrollments (
   coupon_id uuid REFERENCES academy_coupons(id) ON DELETE SET NULL,
   enrolled_at timestamptz,
   completed_at timestamptz,
+  revoked_from_status text CHECK (revoked_from_status IS NULL OR revoked_from_status IN ('active','completed')),
+  revoked_at timestamptz,
+  revoked_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  revocation_reason text,
   last_lesson_id uuid,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
@@ -274,9 +278,24 @@ CREATE TABLE IF NOT EXISTS academy_certificates (
   user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   verification_code text NOT NULL UNIQUE,
   issued_at timestamptz NOT NULL DEFAULT now(),
+  revoked_at timestamptz,
+  revoked_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  revocation_reason text,
   metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
   UNIQUE(course_id, user_id)
 );
 
 CREATE INDEX IF NOT EXISTS academy_certificates_user_idx
   ON academy_certificates(user_id, issued_at DESC);
+
+
+ALTER TABLE academy_enrollments
+  ADD COLUMN IF NOT EXISTS revoked_from_status text,
+  ADD COLUMN IF NOT EXISTS revoked_at timestamptz,
+  ADD COLUMN IF NOT EXISTS revoked_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS revocation_reason text;
+
+ALTER TABLE academy_certificates
+  ADD COLUMN IF NOT EXISTS revoked_at timestamptz,
+  ADD COLUMN IF NOT EXISTS revoked_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS revocation_reason text;
