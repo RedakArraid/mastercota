@@ -26,7 +26,7 @@ process.env.APP_URL = 'http://localhost:3000';
 const { app } = await import('../src/index.js');
 const { pool, query } = await import('../src/lib/db.js');
 const { signSession } = await import('../src/lib/auth.js');
-const { activatePlatformPayment, initializePlatformFeePaystack } = await import('../src/lib/billing.js');
+const { activatePlatformPayment, initializePlatformFeePaystack, freeEligibleForPhone } = await import('../src/lib/billing.js');
 const { resetPispiTokenCacheForTests } = await import('../src/lib/pispi.js');
 const { validateEnvironment } = await import('../src/lib/security.js');
 const { runtimeReadiness } = await import('../src/lib/runtime-readiness.js');
@@ -492,6 +492,85 @@ test('Academy rejects incomplete premium publication and enforces coupon and inv
   }, admin.token);
   assert.equal(adminPublish.status, 400);
   assert.match(adminPublish.body.error, /leçon publiée/i);
+});
+
+test('account deletion preserves sold Academy access, blocks pending sales and keeps free-tier abuse protection', async () => {
+  const instructor = await user('+2250700000301');
+  await query("UPDATE users SET name='Instructeur à supprimer' WHERE id=$1", [instructor.id]);
+  await request('/api/academy/instructor/profile', 'POST', { headline: 'Formateur' }, instructor.token);
+
+  const freeCourse = await request('/api/academy/instructor/courses', 'POST', {
+    title: 'Cours déjà acquis',
+    access_type: 'free'
+  }, instructor.token);
+  const freeSection = await request(`/api/academy/instructor/courses/${freeCourse.body.course.id}/sections`, 'POST', {
+    title: 'Module',
+    position: 1
+  }, instructor.token);
+  await request(`/api/academy/instructor/sections/${freeSection.body.section.id}/lessons`, 'POST', {
+    title: 'Leçon conservée',
+    lesson_type: 'text',
+    content: 'Contenu acheté à préserver',
+    published: true
+  }, instructor.token);
+  await request(`/api/academy/instructor/courses/${freeCourse.body.course.id}`, 'PATCH', { status: 'published' }, instructor.token);
+
+  const learner = await user('+2250700000302');
+  const active = await request(`/api/academy/courses/${freeCourse.body.course.id}/enroll`, 'POST', {}, learner.token);
+  assert.equal(active.status, 200);
+  assert.equal(active.body.enrollment.status, 'active');
+
+  const paidCourse = await request('/api/academy/instructor/courses', 'POST', {
+    title: 'Cours avec paiement en attente',
+    access_type: 'paid',
+    price: 9000
+  }, instructor.token);
+  const paidSection = await request(`/api/academy/instructor/courses/${paidCourse.body.course.id}/sections`, 'POST', {
+    title: 'Module',
+    position: 1
+  }, instructor.token);
+  await request(`/api/academy/instructor/sections/${paidSection.body.section.id}/lessons`, 'POST', {
+    title: 'Leçon',
+    lesson_type: 'text',
+    content: 'Contenu',
+    published: true
+  }, instructor.token);
+  await request(`/api/academy/instructor/courses/${paidCourse.body.course.id}`, 'PATCH', { status: 'published' }, instructor.token);
+
+  const buyer = await user('+2250700000303');
+  const pending = await request(`/api/academy/courses/${paidCourse.body.course.id}/enroll`, 'POST', {}, buyer.token);
+  const report = await request(`/api/academy/enrollments/${pending.body.enrollment.id}/payment-report`, 'POST', {
+    reference: 'PENDING-DELETE-TEST'
+  }, buyer.token);
+  assert.equal(report.status, 201);
+
+  const blocked = await request('/api/profile', 'DELETE', { confirmation: 'SUPPRIMER' }, instructor.token);
+  assert.equal(blocked.status, 409);
+  assert.match(blocked.body.error, /paiements Academy en attente/i);
+
+  await request(`/api/academy/instructor/payment-reports/${report.body.report.id}/reject`, 'POST', {}, instructor.token);
+  const deleted = await request('/api/profile', 'DELETE', { confirmation: 'SUPPRIMER' }, instructor.token);
+  assert.equal(deleted.status, 200, JSON.stringify(deleted.body));
+  assert.equal(deleted.body.ok, true);
+  assert.equal((await request('/api/auth/me', 'GET', undefined, instructor.token)).status, 401);
+
+  const archived = (await query("SELECT status,instructor_id FROM academy_courses WHERE id=$1", [freeCourse.body.course.id])).rows[0];
+  assert.equal(archived.status, 'archived');
+  assert.equal(archived.instructor_id, '00000000-0000-0000-0000-000000000001');
+  assert.equal((await request(`/api/academy/learning/${freeCourse.body.course.id}`, 'GET', undefined, learner.token)).status, 200);
+  assert.equal((await request(`/api/academy/courses/${freeCourse.body.course.slug}`)).status, 404);
+
+  const freeUserPhone = '+2250700000304';
+  const freeUser = await user(freeUserPhone);
+  const first = await create(freeUser, true);
+  assert.equal(first.cotisation.is_free_tier, true);
+  assert.equal(await freeEligibleForPhone(freeUserPhone), false);
+  assert.equal((await request('/api/profile', 'DELETE', { confirmation: 'SUPPRIMER' }, freeUser.token)).status, 200);
+  assert.equal(await freeEligibleForPhone(freeUserPhone), false);
+  const recreated = await user(freeUserPhone);
+  const billing = await request('/api/cotisations/billing-info', 'GET', undefined, recreated.token);
+  assert.equal(billing.status, 200);
+  assert.equal(billing.body.freeEligible, false);
 });
 
 test('OTP requires issuance, limits guesses, expires and cannot be reused', async () => {
