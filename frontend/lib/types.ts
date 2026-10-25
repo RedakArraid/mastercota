@@ -169,6 +169,9 @@ export type AcademyEnrollment = {
   currency: string;
   enrolled_at?: string | null;
   completed_at?: string | null;
+  revoked_from_status?: "active" | "completed" | null;
+  revoked_at?: string | null;
+  revocation_reason?: string | null;
   last_lesson_id?: string | null;
   title?: string;
   slug?: string;
