@@ -14,6 +14,8 @@ import {
   Send,
   Settings2,
   TicketPercent,
+  UserCheck,
+  UserX,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,11 +38,27 @@ type Analytics = {
   lessons: Array<{ id: string; title: string; completions: number }>;
 };
 
+type CourseLearner = {
+  id: string;
+  status: "pending" | "active" | "completed" | "revoked";
+  access_source: string;
+  price_paid: number | string;
+  currency: string;
+  enrolled_at?: string | null;
+  completed_at?: string | null;
+  revoked_at?: string | null;
+  revocation_reason?: string | null;
+  learner_name?: string | null;
+  learner_phone: string;
+  progress_percent: number;
+};
+
 export default function CourseBuilderPage({ params }: { params: Promise<{ courseId: string }> }) {
   const [courseId, setCourseId] = useState("");
   const [course, setCourse] = useState<AcademyCourse | null>(null);
   const [outline, setOutline] = useState<AcademySection[]>([]);
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [learners, setLearners] = useState<CourseLearner[]>([]);
   const [busy, setBusy] = useState(false);
 
   const [sectionTitle, setSectionTitle] = useState("");
@@ -51,13 +69,15 @@ export default function CourseBuilderPage({ params }: { params: Promise<{ course
   const [quizDraft, setQuizDraft] = useState({ lessonId: "", title: "Quiz", passing: "70", attempts: "3", prompt: "", options: "A\nB\nC", correct: "A", explanation: "" });
 
   async function load(id: string) {
-    const [detail, stats] = await Promise.all([
+    const [detail, stats, learnerData] = await Promise.all([
       api<{ course: AcademyCourse; outline: AcademySection[] }>(`/api/academy/instructor/courses/${id}`),
       api<Analytics>(`/api/academy/instructor/courses/${id}/analytics`).catch(() => null),
+      api<{ enrollments: CourseLearner[] }>(`/api/academy/instructor/courses/${id}/enrollments`).catch(() => ({ enrollments: [] })),
     ]);
     setCourse(detail.course);
     setOutline(detail.outline || []);
     setAnalytics(stats);
+    setLearners(learnerData.enrollments || []);
     setQuizDraft(current => current.lessonId ? current : { ...current, lessonId: detail.outline.flatMap(section => section.lessons)[0]?.id || "" });
   }
 
@@ -217,6 +237,26 @@ export default function CourseBuilderPage({ params }: { params: Promise<{ course
     }
   }
 
+  async function updateLearnerAccess(enrollment: CourseLearner, action: "revoke" | "restore") {
+    const reason = action === "revoke"
+      ? window.prompt("Motif de la suspension (remboursement, fraude, erreur, autre)")
+      : null;
+    if (action === "revoke" && !reason?.trim()) return;
+    setBusy(true);
+    try {
+      await api(`/api/academy/instructor/enrollments/${enrollment.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ action, ...(reason ? { reason: reason.trim() } : {}) }),
+      });
+      await load(courseId);
+      toast.success(action === "revoke" ? "Accès suspendu" : "Accès restauré");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Modification d’accès impossible");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function sendAnnouncement() {
     if (!announcement.title.trim() || !announcement.body.trim()) return;
     setBusy(true);
@@ -265,6 +305,7 @@ export default function CourseBuilderPage({ params }: { params: Promise<{ course
           <TabsTrigger value="content"><BookOpen className="size-4" /> Contenu</TabsTrigger>
           <TabsTrigger value="settings"><Settings2 className="size-4" /> Réglages</TabsTrigger>
           <TabsTrigger value="sales"><TicketPercent className="size-4" /> Vente</TabsTrigger>
+          <TabsTrigger value="learners"><Users className="size-4" /> Apprenants</TabsTrigger>
           <TabsTrigger value="analytics"><BarChart3 className="size-4" /> Analytics</TabsTrigger>
         </TabsList>
 
@@ -411,6 +452,52 @@ export default function CourseBuilderPage({ params }: { params: Promise<{ course
             <Input className="mt-4" value={announcement.title} onChange={event => setAnnouncement(current => ({ ...current, title: event.target.value }))} placeholder="Titre de l’annonce" />
             <Textarea className="mt-3" value={announcement.body} onChange={event => setAnnouncement(current => ({ ...current, body: event.target.value }))} placeholder="Nouveau module, live, ressource…" />
             <Button className="mt-3" onClick={sendAnnouncement} disabled={busy || !announcement.title.trim() || !announcement.body.trim()}><Send className="size-4" /> Envoyer l’annonce</Button>
+          </section>
+        </TabsContent>
+
+        <TabsContent value="learners">
+          <section className="mc-panel overflow-hidden">
+            <div className="border-b border-border/70 p-5 sm:p-6">
+              <p className="mc-kicker">Accès au cours</p>
+              <h2 className="mt-1 text-xl font-bold text-ink">Apprenants</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Suspendez un accès après un remboursement, une fraude ou une erreur. Mastercota ne rembourse pas les fonds : le remboursement reste à effectuer directement par l’instructeur.
+              </p>
+            </div>
+            {learners.length ? (
+              <div className="divide-y divide-border/70">
+                {learners.map(learner => (
+                  <div key={learner.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-bold text-ink">{learner.learner_name || learner.learner_phone}</p>
+                        <span className="rounded-full bg-secondary px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                          {learner.status === "completed" ? "Terminé" : learner.status === "active" ? "Actif" : learner.status === "revoked" ? "Suspendu" : "Paiement en attente"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {learner.learner_phone} · {learner.progress_percent || 0}% · {learner.access_source}
+                        {Number(learner.price_paid) > 0 ? ` · ${formatAmount(Number(learner.price_paid))}` : ""}
+                      </p>
+                      {learner.status === "revoked" && learner.revocation_reason ? (
+                        <p className="mt-2 text-xs text-destructive">Motif : {learner.revocation_reason}</p>
+                      ) : null}
+                    </div>
+                    {learner.status === "active" || learner.status === "completed" ? (
+                      <Button variant="outline" size="sm" disabled={busy} onClick={() => updateLearnerAccess(learner, "revoke")}>
+                        <UserX className="size-4" /> Suspendre
+                      </Button>
+                    ) : learner.status === "revoked" ? (
+                      <Button variant="outline" size="sm" disabled={busy} onClick={() => updateLearnerAccess(learner, "restore")}>
+                        <UserCheck className="size-4" /> Restaurer
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-sm text-muted-foreground">Aucun apprenant pour l’instant.</div>
+            )}
           </section>
         </TabsContent>
 
