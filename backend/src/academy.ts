@@ -1,7 +1,7 @@
 import { Hono, type Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
-import { randomUUID } from "node:crypto";
+import { randomInt, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { query, transaction } from "./lib/db.js";
 import { verifyToken } from "./lib/auth.js";
@@ -382,6 +382,15 @@ async function reserveInvite(
   }
 }
 
+function shuffled<T>(items: T[]): T[] {
+  const result = [...items];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 function discountedPrice(course: Record<string, any>, coupon: Record<string, any> | null) {
   const base = Number(course.price);
   if (!coupon) return base;
@@ -754,9 +763,19 @@ academyRoutes.post("/instructor/quizzes/:id/questions", async c => {
   if (!quizzes[0]) throw new HTTPException(404, { message: "Quiz introuvable" });
   const body = await c.req.json();
   const type = ["single", "multiple", "true_false"].includes(body.question_type) ? body.question_type : "single";
-  const options = Array.isArray(body.options) ? body.options.slice(0, 20) : [];
-  const correct = Array.isArray(body.correct_answers) ? body.correct_answers.slice(0, 20) : [];
+  const rawOptions = type === "true_false"
+    ? ["true", "false"]
+    : (Array.isArray(body.options) ? body.options.slice(0, 20) : []);
+  const options = [...new Set(rawOptions.map((value: unknown) => String(value).trim()).filter(Boolean))];
+  const correct = [...new Set((Array.isArray(body.correct_answers) ? body.correct_answers : []).map((value: unknown) => String(value).trim()).filter(Boolean))];
+  if (options.length < 2) throw new HTTPException(400, { message: "Au moins deux options sont requises" });
   if (!correct.length) throw new HTTPException(400, { message: "Au moins une réponse correcte est requise" });
+  if ((type === "single" || type === "true_false") && correct.length !== 1) {
+    throw new HTTPException(400, { message: "Une seule réponse correcte est requise pour ce type de question" });
+  }
+  if (correct.some(answer => !options.includes(answer))) {
+    throw new HTTPException(400, { message: "Chaque réponse correcte doit appartenir aux options proposées" });
+  }
   const { rows } = await query(
     `INSERT INTO academy_quiz_questions(
       quiz_id,prompt,question_type,options,correct_answers,explanation,points,position
@@ -1153,7 +1172,10 @@ academyRoutes.get("/lessons/:id", async c => {
       "SELECT id,prompt,question_type,options,points,position FROM academy_quiz_questions WHERE quiz_id=$1 ORDER BY position,id",
       [quiz.id]
     );
-    quiz = { ...quiz, questions };
+    quiz = {
+      ...quiz,
+      questions: quiz.shuffle_questions ? shuffled(questions) : questions,
+    };
   }
   return c.json({ lesson, course: access.course, enrollment: access.enrollment, preview, progress: progress[0] ?? null, quiz, discussions });
 });
