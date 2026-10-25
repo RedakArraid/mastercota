@@ -269,7 +269,11 @@ async function maybeCompleteCourse(userId: string, courseId: string) {
   const { rows: certs } = await query(
     `INSERT INTO academy_certificates(course_id,user_id,verification_code,metadata)
      VALUES($1,$2,$3,$4::jsonb)
-     ON CONFLICT(course_id,user_id) DO UPDATE SET metadata=academy_certificates.metadata
+     ON CONFLICT(course_id,user_id) DO UPDATE SET
+       metadata=academy_certificates.metadata,
+       revoked_at=NULL,
+       revoked_by=NULL,
+       revocation_reason=NULL
      RETURNING *`,
     [
       courseId,
@@ -456,16 +460,21 @@ academyRoutes.get("/courses/:slug", async c => {
 
 academyRoutes.get("/certificates/:code", async c => {
   const { rows } = await query(
-    `SELECT cert.verification_code,cert.issued_at,cert.metadata,c.title AS course_title,
-            u.name AS learner_name
+    `SELECT cert.verification_code,cert.issued_at,cert.revoked_at,cert.metadata,
+            c.title AS course_title,u.name AS learner_name
      FROM academy_certificates cert
      JOIN academy_courses c ON c.id=cert.course_id
      JOIN users u ON u.id=cert.user_id
      WHERE cert.verification_code=$1`,
     [c.req.param("code").toUpperCase()]
   );
-  if (!rows[0]) return c.json({ valid: false }, 404);
-  return c.json({ valid: true, certificate: rows[0] });
+  const certificate = rows[0];
+  if (!certificate) return c.json({ valid: false }, 404);
+  return c.json({
+    valid: !certificate.revoked_at,
+    revoked: Boolean(certificate.revoked_at),
+    certificate,
+  });
 });
 
 // Authenticated learner/instructor state
@@ -910,6 +919,119 @@ academyRoutes.post("/instructor/courses/:id/announcements", async c => {
     [course.id, rows[0].title, rows[0].body]
   );
   return c.json({ announcement: rows[0] }, 201);
+});
+
+academyRoutes.get("/instructor/courses/:id/enrollments", async c => {
+  const { user } = await requireInstructor(c);
+  const course = await instructorOwnsCourse(user.id, c.req.param("id"));
+  const { rows } = await query(
+    `SELECT e.id,e.status,e.access_source,e.price_paid,e.currency,e.enrolled_at,e.completed_at,
+            e.revoked_at,e.revocation_reason,u.id AS user_id,u.name AS learner_name,u.phone AS learner_phone,
+            CASE WHEN lesson_counts.total=0 THEN 0
+                 ELSE round(100.0*COALESCE(progress_counts.completed,0)/lesson_counts.total) END::int AS progress_percent
+     FROM academy_enrollments e
+     JOIN users u ON u.id=e.user_id
+     CROSS JOIN LATERAL (
+       SELECT count(*)::numeric AS total FROM academy_lessons l
+       WHERE l.course_id=e.course_id AND l.published=true
+     ) lesson_counts
+     LEFT JOIN LATERAL (
+       SELECT count(*)::numeric AS completed FROM academy_lesson_progress p
+       JOIN academy_lessons l ON l.id=p.lesson_id
+       WHERE p.user_id=e.user_id AND p.course_id=e.course_id
+         AND p.status='completed' AND l.published=true
+     ) progress_counts ON true
+     WHERE e.course_id=$1
+     ORDER BY e.created_at DESC
+     LIMIT 500`,
+    [course.id]
+  );
+  return c.json({ enrollments: rows });
+});
+
+academyRoutes.patch("/instructor/enrollments/:id", async c => {
+  const { user } = await requireInstructor(c);
+  const body = await c.req.json().catch(() => ({}));
+  const action = String(body.action || "");
+  if (!["revoke", "restore"].includes(action)) {
+    throw new HTTPException(400, { message: "Action d'accès invalide" });
+  }
+  const reason = action === "revoke"
+    ? textField(body.reason, "Motif", 500)
+    : null;
+
+  const result = await transaction(async client => {
+    const { rows } = await client.query(
+      `SELECT e.*,c.instructor_id,c.title AS course_title
+       FROM academy_enrollments e
+       JOIN academy_courses c ON c.id=e.course_id
+       WHERE e.id=$1
+       FOR UPDATE`,
+      [c.req.param("id")]
+    );
+    const enrollment = rows[0];
+    if (!enrollment || enrollment.instructor_id !== user.id) {
+      throw new HTTPException(404, { message: "Inscription introuvable" });
+    }
+
+    if (action === "revoke") {
+      if (enrollment.status === "revoked") return enrollment;
+      if (!["active", "completed"].includes(enrollment.status)) {
+        throw new HTTPException(400, { message: "Seul un accès actif ou terminé peut être révoqué" });
+      }
+      const { rows: updated } = await client.query(
+        `UPDATE academy_enrollments
+         SET revoked_from_status=status,status='revoked',revoked_at=now(),revoked_by=$2,
+             revocation_reason=$3,updated_at=now()
+         WHERE id=$1 RETURNING *`,
+        [enrollment.id, user.id, reason]
+      );
+      await client.query(
+        `UPDATE academy_certificates
+         SET revoked_at=now(),revoked_by=$2,revocation_reason=$3
+         WHERE course_id=$1 AND user_id=$4 AND revoked_at IS NULL`,
+        [enrollment.course_id, user.id, reason, enrollment.user_id]
+      );
+      await client.query(
+        "INSERT INTO notifications(user_id,title,body) VALUES($1,$2,$3)",
+        [
+          enrollment.user_id,
+          "Accès au cours suspendu",
+          `Votre accès au cours « ${enrollment.course_title} » a été suspendu. Contactez l'instructeur si vous avez besoin d'une clarification.`,
+        ]
+      );
+      return updated[0];
+    }
+
+    if (enrollment.status !== "revoked") return enrollment;
+    const restoredStatus = ["active", "completed"].includes(enrollment.revoked_from_status)
+      ? enrollment.revoked_from_status
+      : "active";
+    const { rows: updated } = await client.query(
+      `UPDATE academy_enrollments
+       SET status=$2,revoked_from_status=NULL,revoked_at=NULL,revoked_by=NULL,
+           revocation_reason=NULL,updated_at=now()
+       WHERE id=$1 RETURNING *`,
+      [enrollment.id, restoredStatus]
+    );
+    await client.query(
+      `UPDATE academy_certificates
+       SET revoked_at=NULL,revoked_by=NULL,revocation_reason=NULL
+       WHERE course_id=$1 AND user_id=$2`,
+      [enrollment.course_id, enrollment.user_id]
+    );
+    await client.query(
+      "INSERT INTO notifications(user_id,title,body) VALUES($1,$2,$3)",
+      [
+        enrollment.user_id,
+        "Accès au cours restauré",
+        `Votre accès au cours « ${enrollment.course_title} » est de nouveau actif.`,
+      ]
+    );
+    return updated[0];
+  });
+
+  return c.json({ enrollment: result });
 });
 
 academyRoutes.get("/instructor/courses/:id/analytics", async c => {
