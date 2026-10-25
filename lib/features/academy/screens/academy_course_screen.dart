@@ -248,7 +248,7 @@ class _AcademyCourseScreenState extends State<AcademyCourseScreen> {
           Container(
             height: 180,
             decoration: BoxDecoration(
-              gradient: AppColors.inkGradient,
+              gradient: const LinearGradient(colors: [AppColors.ink, AppColors.ink2]),
               borderRadius: BorderRadius.circular(AppColors.radiusXl),
             ),
             child: const Icon(
@@ -312,6 +312,7 @@ class _AcademyCourseScreenState extends State<AcademyCourseScreen> {
           if (accessType == 'invite')
             TextField(
               controller: _invite,
+              onChanged: (_) => setState(() {}),
               decoration: const InputDecoration(
                 labelText: 'Code d’invitation',
               ),
