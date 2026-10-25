@@ -2,6 +2,7 @@ import { Hono, type Context } from "hono";
 import { getCookie } from "hono/cookie";
 import { HTTPException } from "hono/http-exception";
 import { randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
 import { query, transaction } from "./lib/db.js";
 import { verifyToken } from "./lib/auth.js";
 import { generateSlug } from "./lib/format.js";
@@ -322,6 +323,63 @@ async function lessonAccess(user: Record<string, any>, lessonId: string) {
     }
   }
   return { lesson, access, preview: false };
+}
+
+async function reserveCoupon(
+  client: PoolClient,
+  coupon: Record<string, any>,
+  courseId: string,
+  userId: string
+) {
+  const { rows: redemption } = await client.query(
+    `INSERT INTO academy_coupon_redemptions(coupon_id,course_id,user_id)
+     VALUES($1,$2,$3)
+     ON CONFLICT(coupon_id,user_id) DO NOTHING
+     RETURNING coupon_id`,
+    [coupon.id, courseId, userId]
+  );
+  if (!redemption[0]) return;
+  const { rows: updated } = await client.query(
+    `UPDATE academy_coupons
+     SET uses_count=uses_count+1
+     WHERE id=$1 AND course_id=$2 AND active=true
+       AND (valid_from IS NULL OR valid_from<=now())
+       AND (valid_until IS NULL OR valid_until>=now())
+       AND (max_uses IS NULL OR uses_count<max_uses)
+     RETURNING id`,
+    [coupon.id, courseId]
+  );
+  if (!updated[0]) {
+    throw new HTTPException(400, { message: "Coupon invalide, expiré ou épuisé" });
+  }
+}
+
+async function reserveInvite(
+  client: PoolClient,
+  invite: Record<string, any>,
+  courseId: string,
+  userId: string
+) {
+  const { rows: redemption } = await client.query(
+    `INSERT INTO academy_invite_redemptions(invite_id,course_id,user_id)
+     VALUES($1,$2,$3)
+     ON CONFLICT(invite_id,user_id) DO NOTHING
+     RETURNING invite_id`,
+    [invite.id, courseId, userId]
+  );
+  if (!redemption[0]) return;
+  const { rows: updated } = await client.query(
+    `UPDATE academy_invites
+     SET uses_count=uses_count+1
+     WHERE id=$1 AND course_id=$2 AND active=true
+       AND uses_count<max_uses
+       AND (expires_at IS NULL OR expires_at>=now())
+     RETURNING id`,
+    [invite.id, courseId]
+  );
+  if (!updated[0]) {
+    throw new HTTPException(403, { message: "Invitation invalide, expirée ou épuisée" });
+  }
 }
 
 function discountedPrice(course: Record<string, any>, coupon: Record<string, any> | null) {
@@ -906,6 +964,20 @@ academyRoutes.post("/courses/:id/enroll", async c => {
   if (existing?.status === "active" || existing?.status === "completed") {
     return c.json({ enrollment: existing, payment_required: false });
   }
+  if (existing?.status === "pending" && existing.access_source === "payment") {
+    return c.json({
+      enrollment: existing,
+      payment_required: true,
+      amount_due: Number(existing.price_paid),
+      currency: existing.currency,
+      payout: {
+        mode: course.wave_payout_mode,
+        wave_phone: course.wave_phone,
+        wave_pay_link: course.wave_pay_link,
+        instructor_name: course.instructor_name,
+      },
+    });
+  }
 
   let coupon: Record<string, any> | null = null;
   if (body.coupon_code) {
@@ -932,15 +1004,15 @@ academyRoutes.post("/courses/:id/enroll", async c => {
     const invite = invites[0];
     if (!invite) throw new HTTPException(403, { message: "Invitation invalide ou expirée" });
     const result = await transaction(async client => {
+      await reserveInvite(client, invite, course.id, user.id);
       const { rows } = await client.query(
         `INSERT INTO academy_enrollments(course_id,user_id,status,access_source,price_paid,enrolled_at)
          VALUES($1,$2,'active','invite',0,now())
          ON CONFLICT(course_id,user_id) DO UPDATE SET status='active',access_source='invite',
-           enrolled_at=COALESCE(academy_enrollments.enrolled_at,now()),updated_at=now()
+           price_paid=0,coupon_id=NULL,enrolled_at=COALESCE(academy_enrollments.enrolled_at,now()),updated_at=now()
          RETURNING *`,
         [course.id, user.id]
       );
-      await client.query("UPDATE academy_invites SET uses_count=uses_count+1 WHERE id=$1", [invite.id]);
       return rows[0];
     });
     return c.json({ enrollment: result, payment_required: false });
@@ -950,6 +1022,7 @@ academyRoutes.post("/courses/:id/enroll", async c => {
   if (amountDue === 0) {
     const result = await transaction(async client => {
       const source = coupon ? "coupon" : "free";
+      if (coupon) await reserveCoupon(client, coupon, course.id, user.id);
       const { rows } = await client.query(
         `INSERT INTO academy_enrollments(course_id,user_id,status,access_source,price_paid,coupon_id,enrolled_at)
          VALUES($1,$2,'active',$3,0,$4,now())
@@ -958,7 +1031,6 @@ academyRoutes.post("/courses/:id/enroll", async c => {
          RETURNING *`,
         [course.id, user.id, source, coupon?.id ?? null]
       );
-      if (coupon) await client.query("UPDATE academy_coupons SET uses_count=uses_count+1 WHERE id=$1", [coupon.id]);
       return rows[0];
     });
     return c.json({ enrollment: result, payment_required: false });
@@ -968,16 +1040,20 @@ academyRoutes.post("/courses/:id/enroll", async c => {
     throw new HTTPException(409, { message: "L'instructeur doit configurer la réception avant de vendre ce cours" });
   }
 
-  const { rows: enrollments } = await query(
-    `INSERT INTO academy_enrollments(course_id,user_id,status,access_source,price_paid,currency,coupon_id)
-     VALUES($1,$2,'pending','payment',$3,$4,$5)
-     ON CONFLICT(course_id,user_id) DO UPDATE SET status='pending',access_source='payment',
-       price_paid=$3,currency=$4,coupon_id=$5,updated_at=now()
-     RETURNING *`,
-    [course.id, user.id, amountDue, course.currency, coupon?.id ?? null]
-  );
+  const enrollment = await transaction(async client => {
+    if (coupon) await reserveCoupon(client, coupon, course.id, user.id);
+    const { rows } = await client.query(
+      `INSERT INTO academy_enrollments(course_id,user_id,status,access_source,price_paid,currency,coupon_id)
+       VALUES($1,$2,'pending','payment',$3,$4,$5)
+       ON CONFLICT(course_id,user_id) DO UPDATE SET status='pending',access_source='payment',
+         price_paid=$3,currency=$4,coupon_id=$5,updated_at=now()
+       RETURNING *`,
+      [course.id, user.id, amountDue, course.currency, coupon?.id ?? null]
+    );
+    return rows[0];
+  });
   return c.json({
-    enrollment: enrollments[0],
+    enrollment,
     payment_required: true,
     amount_due: amountDue,
     currency: course.currency,
