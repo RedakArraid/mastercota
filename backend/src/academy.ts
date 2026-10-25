@@ -435,13 +435,16 @@ academyRoutes.patch("/instructor/courses/:id", async c => {
   if (!["draft", "published", "archived"].includes(nextStatus)) {
     throw new HTTPException(400, { message: "Statut invalide" });
   }
+  const accessType = body.access_type && ["free", "paid", "invite"].includes(body.access_type)
+    ? body.access_type
+    : course.access_type;
   if (nextStatus === "published") {
     const { rows: lessons } = await query(
       "SELECT count(*)::int AS n FROM academy_lessons WHERE course_id=$1 AND published=true",
       [course.id]
     );
     if (!Number(lessons[0]?.n)) throw new HTTPException(400, { message: "Ajoutez au moins une leçon publiée" });
-    if (course.access_type === "paid") {
+    if (accessType === "paid") {
       const { rows: payout } = await query(
         "SELECT wave_phone,wave_pay_link,wave_payout_mode FROM users WHERE id=$1",
         [user.id]
@@ -451,9 +454,6 @@ academyRoutes.patch("/instructor/courses/:id", async c => {
       }
     }
   }
-  const accessType = body.access_type && ["free", "paid", "invite"].includes(body.access_type)
-    ? body.access_type
-    : course.access_type;
   const level = body.level === undefined
     ? null
     : (["beginner", "intermediate", "advanced", "all"].includes(String(body.level))
@@ -533,7 +533,7 @@ academyRoutes.patch("/instructor/sections/:id", async c => {
 academyRoutes.post("/instructor/sections/:id/lessons", async c => {
   const { user } = await requireInstructor(c);
   const { rows: sectionRows } = await query(
-    `SELECT s.*,c.instructor_id FROM academy_sections s
+    `SELECT s.*,c.instructor_id,c.drip_days AS course_drip_days FROM academy_sections s
      JOIN academy_courses c ON c.id=s.course_id
      WHERE s.id=$1 AND c.instructor_id=$2`,
     [c.req.param("id"), user.id]
@@ -562,7 +562,7 @@ academyRoutes.post("/instructor/sections/:id/lessons", async c => {
       intField(body.position ?? 0, "Position", 0, 10000),
       Boolean(body.preview),
       body.published !== false,
-      intField(body.unlock_after_days ?? 0, "Déblocage", 0, 3650),
+      intField(body.unlock_after_days ?? section.course_drip_days ?? 0, "Déblocage", 0, 3650),
     ]
   );
   return c.json({ lesson: rows[0] }, 201);
