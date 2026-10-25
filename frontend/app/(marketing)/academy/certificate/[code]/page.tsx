@@ -9,7 +9,6 @@ type Certificate = {
   issued_at: string;
   course_title: string;
   learner_name?: string | null;
-  learner_phone?: string | null;
   metadata?: {
     course_title?: string;
     learner_name?: string;
@@ -48,7 +47,7 @@ export default async function CertificatePage({
             </h1>
             <p className="mt-5 text-sm text-muted-foreground">Attribué à</p>
             <p className="mt-1 text-xl font-bold text-ink">
-              {certificate.learner_name || certificate.metadata?.learner_name || certificate.learner_phone || "Apprenant Mastercota"}
+              {certificate.learner_name || certificate.metadata?.learner_name || "Apprenant Mastercota"}
             </p>
 
             <div className="mx-auto mt-7 grid max-w-xl gap-3 sm:grid-cols-2">
