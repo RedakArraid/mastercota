@@ -1521,6 +1521,17 @@ academyRoutes.put("/instructor/lessons/:id/assignment", async c => {
     throw new HTTPException(404, { message: "Leçon introuvable" });
   }
   const body = await c.req.json();
+  if (body.required !== false) {
+    const { rows: completed } = await query(
+      "SELECT 1 FROM academy_enrollments WHERE course_id=$1 AND status='completed' LIMIT 1",
+      [lesson.course_id]
+    );
+    if (completed[0]) {
+      throw new HTTPException(409, {
+        message: "Un devoir obligatoire ne peut pas être ajouté après la certification d’apprenants. Créez une nouvelle version du cours.",
+      });
+    }
+  }
   const submissionType = ["text", "url", "text_or_url"].includes(body.submission_type)
     ? body.submission_type
     : "text";
@@ -1679,6 +1690,28 @@ academyRoutes.post("/assignments/:id/submit", async c => {
   const assignment = assignments[0];
   if (!assignment) throw new HTTPException(404, { message: "Devoir introuvable" });
   await lessonAccess(user, assignment.lesson_id);
+  const { rows: enrollmentRows } = await query(
+    "SELECT enrolled_at,created_at,status FROM academy_enrollments WHERE course_id=$1 AND user_id=$2",
+    [assignment.course_id, user.id]
+  );
+  const enrollment = enrollmentRows[0];
+  if (!enrollment || !["active", "completed"].includes(enrollment.status)) {
+    throw new HTTPException(403, { message: "Inscription active requise" });
+  }
+  if (assignment.due_after_days !== null && assignment.due_after_days !== undefined) {
+    const base = new Date(enrollment.enrolled_at || enrollment.created_at).getTime();
+    const deadline = base + Number(assignment.due_after_days) * 86400000;
+    if (Date.now() > deadline) {
+      throw new HTTPException(403, { message: "La date limite de remise est dépassée" });
+    }
+  }
+  const { rows: existingSubmissions } = await query(
+    "SELECT status,passed FROM academy_assignment_submissions WHERE assignment_id=$1 AND user_id=$2",
+    [assignment.id, user.id]
+  );
+  if (existingSubmissions[0]?.status === "graded" && existingSubmissions[0]?.passed === true) {
+    throw new HTTPException(409, { message: "Ce devoir est déjà validé" });
+  }
   const body = await c.req.json();
   const textContent = nullableText(body.text_content, 30000);
   const submissionUrl = optionalUrl(body.submission_url);
@@ -1744,6 +1777,11 @@ academyRoutes.post("/instructor/cohorts/:id/members/:userId", async c => {
       [cohort.course_id, c.req.param("userId")]
     );
     if (!enrollmentRows[0]) throw new HTTPException(400, { message: "Inscription active requise" });
+    const { rows: existingMembers } = await client.query(
+      "SELECT 1 FROM academy_cohort_members WHERE cohort_id=$1 AND user_id=$2",
+      [cohort.id, c.req.param("userId")]
+    );
+    if (existingMembers[0]) return null;
     if (cohort.capacity) {
       const { rows: countRows } = await client.query(
         "SELECT count(*)::int AS n FROM academy_cohort_members WHERE cohort_id=$1",
@@ -1776,6 +1814,13 @@ academyRoutes.post("/instructor/cohorts/:id/sessions", async c => {
     throw new HTTPException(404, { message: "Cohorte introuvable" });
   }
   const body = await c.req.json();
+  const sessionStartsAt = requiredDate(body.starts_at, "Date de session");
+  if (new Date(sessionStartsAt).getTime() < new Date(cohort.starts_at).getTime()) {
+    throw new HTTPException(400, { message: "La session ne peut pas précéder le début de la cohorte" });
+  }
+  if (cohort.ends_at && new Date(sessionStartsAt).getTime() > new Date(cohort.ends_at).getTime()) {
+    throw new HTTPException(400, { message: "La session ne peut pas dépasser la fin de la cohorte" });
+  }
   const meetingUrl = optionalUrl(body.meeting_url);
   if (!meetingUrl) throw new HTTPException(400, { message: "Lien live HTTPS requis" });
   const { rows } = await query(
@@ -1786,7 +1831,7 @@ academyRoutes.post("/instructor/cohorts/:id/sessions", async c => {
       cohort.id,
       cohort.course_id,
       textField(body.title, "Titre de session", 180),
-      requiredDate(body.starts_at, "Date de session"),
+      sessionStartsAt,
       intField(body.duration_minutes ?? 60, "Durée", 1, 1440),
       meetingUrl,
       optionalUrl(body.recording_url),
