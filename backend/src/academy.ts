@@ -1825,3 +1825,51 @@ academyRoutes.get("/learning/:courseId/schedule", async c => {
   );
   return c.json({ schedule: rows });
 });
+
+
+academyRoutes.get("/instructor/courses/:id/premium", async c => {
+  const { user } = await requireInstructor(c);
+  const course = await instructorOwnsCourse(user.id, c.req.param("id"));
+  const [assignments, cohorts, learners] = await Promise.all([
+    query(
+      `SELECT a.*,l.title AS lesson_title,
+        COALESCE((SELECT json_agg(json_build_object(
+          'id',s.id,'user_id',s.user_id,'learner_name',u.name,'learner_phone',u.phone,
+          'status',s.status,'score',s.score,'passed',s.passed,'feedback',s.feedback,
+          'text_content',s.text_content,'submission_url',s.submission_url,
+          'submitted_at',s.submitted_at,'graded_at',s.graded_at
+        ) ORDER BY s.submitted_at)
+        FROM academy_assignment_submissions s
+        JOIN users u ON u.id=s.user_id
+        WHERE s.assignment_id=a.id),'[]'::json) AS submissions
+       FROM academy_assignments a
+       JOIN academy_lessons l ON l.id=a.lesson_id
+       WHERE a.course_id=$1 ORDER BY l.position,a.created_at`,
+      [course.id]
+    ),
+    query(
+      `SELECT ch.*,
+        COALESCE((SELECT json_agg(json_build_object(
+          'id',s.id,'title',s.title,'starts_at',s.starts_at,'duration_minutes',s.duration_minutes,
+          'meeting_url',s.meeting_url,'recording_url',s.recording_url,'notes',s.notes
+        ) ORDER BY s.starts_at) FROM academy_cohort_sessions s WHERE s.cohort_id=ch.id),'[]'::json) AS sessions,
+        COALESCE((SELECT json_agg(json_build_object(
+          'user_id',m.user_id,'learner_name',u.name,'learner_phone',u.phone
+        ) ORDER BY m.joined_at) FROM academy_cohort_members m JOIN users u ON u.id=m.user_id WHERE m.cohort_id=ch.id),'[]'::json) AS members
+       FROM academy_cohorts ch WHERE ch.course_id=$1 ORDER BY ch.starts_at DESC`,
+      [course.id]
+    ),
+    query(
+      `SELECT e.id,e.user_id,e.status,u.name AS learner_name,u.phone AS learner_phone
+       FROM academy_enrollments e JOIN users u ON u.id=e.user_id
+       WHERE e.course_id=$1 AND e.status IN ('active','completed') ORDER BY u.name NULLS LAST,u.phone`,
+      [course.id]
+    ),
+  ]);
+  return c.json({
+    course: { id: course.id, title: course.title },
+    assignments: assignments.rows,
+    cohorts: cohorts.rows,
+    learners: learners.rows,
+  });
+});
