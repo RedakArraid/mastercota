@@ -251,6 +251,19 @@ async function maybeCompleteCourse(userId: string, courseId: string) {
   );
   if (missingQuizRows[0]) return null;
 
+  const { rows: missingAssignmentRows } = await query(
+    `SELECT a.id FROM academy_assignments a
+     JOIN academy_lessons l ON l.id=a.lesson_id
+     WHERE a.course_id=$2 AND a.required=true AND l.published=true
+       AND NOT EXISTS (
+         SELECT 1 FROM academy_assignment_submissions s
+         WHERE s.assignment_id=a.id AND s.user_id=$1 AND s.status='graded' AND s.passed=true
+       )
+     LIMIT 1`,
+    [userId, courseId]
+  );
+  if (missingAssignmentRows[0]) return null;
+
   if (enrollment.status !== "completed") {
     await query(
       "UPDATE academy_enrollments SET status='completed',completed_at=now(),updated_at=now() WHERE id=$1",
