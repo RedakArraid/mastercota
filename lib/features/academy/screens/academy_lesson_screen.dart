@@ -25,6 +25,13 @@ class _AcademyLessonScreenState extends State<AcademyLessonScreen> {
   Map<String, dynamic>? _quiz;
   Map<String, dynamic>? _progress;
   Map<String, dynamic>? _quizResult;
+  Map<String, dynamic>? _assignment;
+  Map<String, dynamic>? _submission;
+  Map<String, dynamic>? _note;
+  final _noteController = TextEditingController();
+  final _assignmentController = TextEditingController();
+  final _assignmentUrlController = TextEditingController();
+  bool _bookmarked = false;
   final Map<String, dynamic> _answers = {};
 
   @override
@@ -35,9 +42,13 @@ class _AcademyLessonScreenState extends State<AcademyLessonScreen> {
 
   Future<void> _load() async {
     try {
-      final data = await ApiService.get(
-        '/api/academy/lessons/${widget.lessonId}',
-      );
+      final results = await Future.wait([
+        ApiService.get('/api/academy/lessons/${widget.lessonId}'),
+        ApiService.get('/api/academy/lessons/${widget.lessonId}/premium')
+            .catchError((_) => <String, dynamic>{}),
+      ]);
+      final data = results[0];
+      final premium = results[1];
       if (!mounted) return;
       setState(() {
         _lesson = Map<String, dynamic>.from(data['lesson'] as Map);
@@ -47,6 +58,21 @@ class _AcademyLessonScreenState extends State<AcademyLessonScreen> {
         _progress = data['progress'] is Map
             ? Map<String, dynamic>.from(data['progress'] as Map)
             : null;
+        _assignment = premium['assignment'] is Map
+            ? Map<String, dynamic>.from(premium['assignment'] as Map)
+            : null;
+        _submission = premium['submission'] is Map
+            ? Map<String, dynamic>.from(premium['submission'] as Map)
+            : null;
+        _note = premium['note'] is Map
+            ? Map<String, dynamic>.from(premium['note'] as Map)
+            : null;
+        _noteController.text = _note?['body']?.toString() ?? '';
+        _assignmentController.text =
+            _submission?['text_content']?.toString() ?? '';
+        _assignmentUrlController.text =
+            _submission?['submission_url']?.toString() ?? '';
+        _bookmarked = _note?['bookmarked'] == true;
       });
       if (_progress == null) {
         await ApiService.post(
@@ -141,6 +167,68 @@ class _AcademyLessonScreenState extends State<AcademyLessonScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _saveNote() async {
+    setState(() => _busy = true);
+    try {
+      final data = await ApiService.put(
+        '/api/academy/lessons/${widget.lessonId}/note',
+        body: {
+          'body': _noteController.text,
+          'bookmarked': _bookmarked,
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _note = data['note'] is Map
+            ? Map<String, dynamic>.from(data['note'] as Map)
+            : _note;
+      });
+      _snack('Note privée enregistrée');
+    } on ApiException catch (e) {
+      _snack(e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _submitAssignment() async {
+    final assignment = _assignment;
+    if (assignment == null) return;
+    setState(() => _busy = true);
+    try {
+      final data = await ApiService.post(
+        '/api/academy/assignments/${assignment['id']}/submit',
+        body: {
+          'text_content': _assignmentController.text.trim().isEmpty
+              ? null
+              : _assignmentController.text.trim(),
+          'submission_url': _assignmentUrlController.text.trim().isEmpty
+              ? null
+              : _assignmentUrlController.text.trim(),
+        },
+      );
+      if (!mounted) return;
+      setState(() {
+        _submission = data['submission'] is Map
+            ? Map<String, dynamic>.from(data['submission'] as Map)
+            : _submission;
+      });
+      _snack('Devoir remis');
+    } on ApiException catch (e) {
+      _snack(e.message);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  void dispose() {
+    _noteController.dispose();
+    _assignmentController.dispose();
+    _assignmentUrlController.dispose();
+    super.dispose();
   }
 
   void _snack(String message) {
@@ -257,6 +345,128 @@ class _AcademyLessonScreenState extends State<AcademyLessonScreen> {
               ),
             ),
           ),
+          const SizedBox(height: 24),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: AppColors.paper,
+              borderRadius: BorderRadius.circular(AppColors.radiusXl),
+              border: Border.all(color: AppColors.line),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('NOTES PRIVÉES', style: AppTextStyles.caption.copyWith(color: AppColors.accent)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _noteController,
+                  minLines: 3,
+                  maxLines: 7,
+                  decoration: const InputDecoration(
+                    hintText: 'Résumé, idées clés, questions à revoir…',
+                  ),
+                ),
+                CheckboxListTile(
+                  value: _bookmarked,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Ajouter aux favoris'),
+                  onChanged: _busy
+                      ? null
+                      : (value) => setState(() => _bookmarked = value == true),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: OutlinedButton.icon(
+                    onPressed: _busy ? null : _saveNote,
+                    icon: const Icon(Icons.save_outlined),
+                    label: const Text('Enregistrer'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (_assignment != null) ...[
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.paper,
+                borderRadius: BorderRadius.circular(AppColors.radiusXl),
+                border: Border.all(color: AppColors.line),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('DEVOIR', style: AppTextStyles.caption.copyWith(color: AppColors.accent)),
+                  const SizedBox(height: 6),
+                  Text(
+                    _assignment!['title']?.toString() ?? 'Travail pratique',
+                    style: AppTextStyles.headlineLarge.copyWith(fontSize: 20),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _assignment!['instructions']?.toString() ?? '',
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.ink3),
+                  ),
+                  const SizedBox(height: 12),
+                  if (_assignment!['submission_type'] != 'url')
+                    TextField(
+                      controller: _assignmentController,
+                      minLines: 4,
+                      maxLines: 10,
+                      decoration: const InputDecoration(hintText: 'Votre réponse'),
+                    ),
+                  if (_assignment!['submission_type'] != 'text') ...[
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: _assignmentUrlController,
+                      keyboardType: TextInputType.url,
+                      decoration: const InputDecoration(hintText: 'https://…'),
+                    ),
+                  ],
+                  if (_submission != null) ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      _submission!['status'] == 'graded'
+                          ? _submission!['passed'] == true
+                              ? 'Devoir validé'
+                              : 'Devoir corrigé'
+                          : _submission!['status'] == 'revision_requested'
+                              ? 'Nouvelle version demandée'
+                              : 'En attente de correction',
+                      style: AppTextStyles.bodySmall.copyWith(
+                        fontWeight: FontWeight.w700,
+                        color: _submission!['passed'] == true
+                            ? AppColors.success
+                            : AppColors.ink3,
+                      ),
+                    ),
+                    if (_submission!['feedback'] != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          _submission!['feedback'].toString(),
+                          style: AppTextStyles.bodySmall,
+                        ),
+                      ),
+                  ],
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: _busy ? null : _submitAssignment,
+                      icon: const Icon(Icons.send_rounded),
+                      label: Text(
+                        _submission == null
+                            ? 'Remettre le devoir'
+                            : 'Remettre une nouvelle version',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           if (_quiz != null) ...[
             const SizedBox(height: 30),
             _buildQuiz(),
