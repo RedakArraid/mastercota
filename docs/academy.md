@@ -31,6 +31,8 @@ Le modèle financier reste cohérent avec Mastercota :
 - coupons pourcentage ou montant fixe avec limites d’usage atomiques ;
 - invitations limitées et éventuellement réservées à un numéro, protégées contre les consommations concurrentes ;
 - annonces envoyées aux inscrits ;
+- devoirs notés, feedback et demandes de révision ;
+- cohortes, capacité, affectation d’apprenants et sessions live planifiées ;
 - signalements de paiement à confirmer / rejeter ;
 - analytics : inscriptions, complétion, progression moyenne, volume confirmé, avis et complétion par leçon.
 
@@ -49,6 +51,9 @@ Le modèle financier reste cohérent avec Mastercota :
 - ressources ;
 - sessions live ;
 - quiz corrigés côté serveur ;
+- devoirs à remettre et corrections de l’instructeur ;
+- notes privées et favoris par leçon ;
+- calendrier de cohorte, sessions live et replay ;
 - historique de progression ;
 - questions / discussions ;
 - avis après inscription ;
@@ -70,7 +75,10 @@ Android et iOS proposent nativement :
 - lecture des contenus texte ;
 - ouverture des vidéos, lives et ressources ;
 - progression ;
-- quiz.
+- quiz ;
+- devoirs ;
+- notes privées ;
+- calendrier de cohorte et sessions live.
 
 La création et l'administration avancée des cours restent sur l'interface web instructeur, plus adaptée au travail éditorial.
 
@@ -115,7 +123,10 @@ Un cours peut activer ou désactiver le certificat.
 Le certificat est émis quand :
 
 - toutes les leçons publiées sont terminées ;
-- tous les quiz du cours ont au moins une tentative réussie.
+- tous les quiz du cours ont au moins une tentative réussie ;
+- tous les devoirs obligatoires ont été corrigés et validés.
+
+Un devoir obligatoire ne peut pas être ajouté après la certification d’apprenants. Les remises peuvent être limitées dans le temps à partir de la date d’inscription.
 
 Chaque certificat possède un code public de vérification. La page publique expose le nom affiché, le cours, la date et le code, mais jamais le numéro de téléphone de l'apprenant.
 
@@ -138,9 +149,8 @@ Les améliorations futures possibles sont :
 - réconciliation PI-SPI automatisée ;
 - stockage / streaming vidéo managé ;
 - visioconférence intégrée plutôt qu'un lien live ;
-- devoirs avec correction de fichiers ;
+- téléversement de fichiers de devoirs vers un stockage managé ;
 - abonnement Academy Pro ;
-- cohortes et calendrier de sessions ;
 - facturation instructeur.
 
 Ces points ne doivent pas être annoncés comme disponibles avant leur implémentation.
