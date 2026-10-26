@@ -75,6 +75,20 @@ class ApiService {
     return _decode(res);
   }
 
+  static Future<Map<String, dynamic>> put(
+    String path, {
+    Map<String, dynamic>? body,
+  }) async {
+    final res = await client
+        .put(
+          Uri.parse('${AppConstants.apiBaseUrl}$path'),
+          headers: _headers,
+          body: body == null ? null : jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 30));
+    return _decode(res);
+  }
+
   static Future<Map<String, dynamic>> patch(
     String path, {
     Map<String, dynamic>? body,

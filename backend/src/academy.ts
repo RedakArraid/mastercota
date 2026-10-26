@@ -251,6 +251,19 @@ async function maybeCompleteCourse(userId: string, courseId: string) {
   );
   if (missingQuizRows[0]) return null;
 
+  const { rows: missingAssignmentRows } = await query(
+    `SELECT a.id FROM academy_assignments a
+     JOIN academy_lessons l ON l.id=a.lesson_id
+     WHERE a.course_id=$2 AND a.required=true AND l.published=true
+       AND NOT EXISTS (
+         SELECT 1 FROM academy_assignment_submissions s
+         WHERE s.assignment_id=a.id AND s.user_id=$1 AND s.status='graded' AND s.passed=true
+       )
+     LIMIT 1`,
+    [userId, courseId]
+  );
+  if (missingAssignmentRows[0]) return null;
+
   if (enrollment.status !== "completed") {
     await query(
       "UPDATE academy_enrollments SET status='completed',completed_at=now(),updated_at=now() WHERE id=$1",
@@ -1482,5 +1495,427 @@ academyRoutes.get("/admin/stats", async c => {
     enrollments: enrollments.rows[0],
     direct_payment_volume: Number(revenue.rows[0]?.total ?? 0),
     certificates: Number(certificates.rows[0]?.total ?? 0),
+  });
+});
+
+
+function requiredDate(value: unknown, label: string): string {
+  const raw = String(value || "").trim();
+  const date = new Date(raw);
+  if (!raw || Number.isNaN(date.getTime())) {
+    throw new HTTPException(400, { message: `${label} invalide` });
+  }
+  return date.toISOString();
+}
+
+// Premium Academy: assignments, private notes and cohorts.
+academyRoutes.put("/instructor/lessons/:id/assignment", async c => {
+  const { user } = await requireInstructor(c);
+  const { rows: lessons } = await query(
+    `SELECT l.id,l.course_id,c.instructor_id FROM academy_lessons l
+     JOIN academy_courses c ON c.id=l.course_id WHERE l.id=$1`,
+    [c.req.param("id")]
+  );
+  const lesson = lessons[0];
+  if (!lesson || lesson.instructor_id !== user.id) {
+    throw new HTTPException(404, { message: "Leçon introuvable" });
+  }
+  const body = await c.req.json();
+  if (body.required !== false) {
+    const { rows: completed } = await query(
+      "SELECT 1 FROM academy_enrollments WHERE course_id=$1 AND status='completed' LIMIT 1",
+      [lesson.course_id]
+    );
+    if (completed[0]) {
+      throw new HTTPException(409, {
+        message: "Un devoir obligatoire ne peut pas être ajouté après la certification d’apprenants. Créez une nouvelle version du cours.",
+      });
+    }
+  }
+  const submissionType = ["text", "url", "text_or_url"].includes(body.submission_type)
+    ? body.submission_type
+    : "text";
+  const maxScore = intField(body.max_score ?? 100, "Score maximum", 1, 10000);
+  const passingScore = intField(body.passing_score ?? 60, "Seuil de réussite", 0, 100);
+  const dueAfterDays = body.due_after_days === null || body.due_after_days === undefined || body.due_after_days === ""
+    ? null
+    : intField(body.due_after_days, "Délai", 0, 3650);
+  const { rows } = await query(
+    `INSERT INTO academy_assignments(
+       lesson_id,course_id,title,instructions,submission_type,max_score,passing_score,required,due_after_days
+     ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+     ON CONFLICT(lesson_id) DO UPDATE SET
+       title=EXCLUDED.title,instructions=EXCLUDED.instructions,
+       submission_type=EXCLUDED.submission_type,max_score=EXCLUDED.max_score,
+       passing_score=EXCLUDED.passing_score,required=EXCLUDED.required,
+       due_after_days=EXCLUDED.due_after_days,updated_at=now()
+     RETURNING *`,
+    [
+      lesson.id,
+      lesson.course_id,
+      textField(body.title, "Titre du devoir", 180),
+      textField(body.instructions, "Consignes", 12000),
+      submissionType,
+      maxScore,
+      passingScore,
+      body.required !== false,
+      dueAfterDays,
+    ]
+  );
+  return c.json({ assignment: rows[0] });
+});
+
+academyRoutes.get("/instructor/assignments/:id/submissions", async c => {
+  const { user } = await requireInstructor(c);
+  const { rows: assignments } = await query(
+    `SELECT a.*,c.instructor_id FROM academy_assignments a
+     JOIN academy_courses c ON c.id=a.course_id WHERE a.id=$1`,
+    [c.req.param("id")]
+  );
+  if (!assignments[0] || assignments[0].instructor_id !== user.id) {
+    throw new HTTPException(404, { message: "Devoir introuvable" });
+  }
+  const { rows } = await query(
+    `SELECT s.*,u.name AS learner_name,u.phone AS learner_phone
+     FROM academy_assignment_submissions s
+     JOIN users u ON u.id=s.user_id
+     WHERE s.assignment_id=$1
+     ORDER BY (s.status='submitted') DESC,s.submitted_at ASC`,
+    [c.req.param("id")]
+  );
+  return c.json({ assignment: assignments[0], submissions: rows });
+});
+
+academyRoutes.post("/instructor/submissions/:id/grade", async c => {
+  const { user } = await requireInstructor(c);
+  const body = await c.req.json();
+  const result = await transaction(async client => {
+    const { rows } = await client.query(
+      `SELECT s.*,a.max_score,a.passing_score,c.instructor_id
+       FROM academy_assignment_submissions s
+       JOIN academy_assignments a ON a.id=s.assignment_id
+       JOIN academy_courses c ON c.id=s.course_id
+       WHERE s.id=$1 FOR UPDATE`,
+      [c.req.param("id")]
+    );
+    const submission = rows[0];
+    if (!submission || submission.instructor_id !== user.id) {
+      throw new HTTPException(404, { message: "Remise introuvable" });
+    }
+    const score = intField(body.score, "Score", 0, Number(submission.max_score));
+    const percent = Number(submission.max_score)
+      ? Math.round((score / Number(submission.max_score)) * 100)
+      : 0;
+    const passed = percent >= Number(submission.passing_score);
+    const status = body.request_revision === true ? "revision_requested" : "graded";
+    const passedValue = status === "graded" ? passed : null;
+    const { rows: updated } = await client.query(
+      `UPDATE academy_assignment_submissions
+       SET score=$2,passed=$4,status=$3,feedback=$5,graded_by=$6,graded_at=now(),updated_at=now()
+       WHERE id=$1 RETURNING *`,
+      [
+        submission.id,
+        score,
+        status,
+        passedValue,
+        nullableText(body.feedback, 8000),
+        user.id,
+      ]
+    );
+    await client.query(
+      "INSERT INTO notifications(user_id,title,body) VALUES($1,$2,$3)",
+      [
+        submission.user_id,
+        status === "graded" ? "Devoir corrigé" : "Révision demandée",
+        status === "graded"
+          ? `Votre devoir a été corrigé : ${percent} %.`
+          : "Votre instructeur demande une nouvelle version de votre devoir.",
+      ]
+    );
+    return { submission: updated[0], courseId: submission.course_id, learnerId: submission.user_id };
+  });
+  const completion = result.submission.status === "graded" && result.submission.passed
+    ? await maybeCompleteCourse(result.learnerId, result.courseId)
+    : null;
+  return c.json({ submission: result.submission, completion });
+});
+
+academyRoutes.get("/lessons/:id/premium", async c => {
+  const user = await requireUser(c);
+  const { lesson, access, preview } = await lessonAccess(user, c.req.param("id"));
+  if (preview && !hasLearningAccess(access)) {
+    return c.json({ assignment: null, submission: null, note: null });
+  }
+  const [{ rows: assignments }, { rows: notes }] = await Promise.all([
+    query("SELECT * FROM academy_assignments WHERE lesson_id=$1", [lesson.id]),
+    query("SELECT * FROM academy_lesson_notes WHERE user_id=$1 AND lesson_id=$2", [user.id, lesson.id]),
+  ]);
+  let submission = null;
+  if (assignments[0]) {
+    const { rows } = await query(
+      "SELECT * FROM academy_assignment_submissions WHERE assignment_id=$1 AND user_id=$2",
+      [assignments[0].id, user.id]
+    );
+    submission = rows[0] ?? null;
+  }
+  return c.json({ assignment: assignments[0] ?? null, submission, note: notes[0] ?? null });
+});
+
+academyRoutes.put("/lessons/:id/note", async c => {
+  const user = await requireUser(c);
+  const { lesson, access, preview } = await lessonAccess(user, c.req.param("id"));
+  if (preview && !hasLearningAccess(access)) {
+    throw new HTTPException(403, { message: "Inscription requise" });
+  }
+  const body = await c.req.json();
+  const noteBody = nullableText(body.body, 20000) ?? "";
+  const { rows } = await query(
+    `INSERT INTO academy_lesson_notes(user_id,lesson_id,course_id,body,bookmarked)
+     VALUES($1,$2,$3,$4,$5)
+     ON CONFLICT(user_id,lesson_id) DO UPDATE SET
+       body=EXCLUDED.body,bookmarked=EXCLUDED.bookmarked,updated_at=now()
+     RETURNING *`,
+    [user.id, lesson.id, lesson.course_id, noteBody, body.bookmarked === true]
+  );
+  return c.json({ note: rows[0] });
+});
+
+academyRoutes.post("/assignments/:id/submit", async c => {
+  const user = await requireUser(c);
+  const { rows: assignments } = await query(
+    `SELECT a.*,l.id AS lesson_id FROM academy_assignments a
+     JOIN academy_lessons l ON l.id=a.lesson_id WHERE a.id=$1`,
+    [c.req.param("id")]
+  );
+  const assignment = assignments[0];
+  if (!assignment) throw new HTTPException(404, { message: "Devoir introuvable" });
+  await lessonAccess(user, assignment.lesson_id);
+  const { rows: enrollmentRows } = await query(
+    "SELECT enrolled_at,created_at,status FROM academy_enrollments WHERE course_id=$1 AND user_id=$2",
+    [assignment.course_id, user.id]
+  );
+  const enrollment = enrollmentRows[0];
+  if (!enrollment || !["active", "completed"].includes(enrollment.status)) {
+    throw new HTTPException(403, { message: "Inscription active requise" });
+  }
+  if (assignment.due_after_days !== null && assignment.due_after_days !== undefined) {
+    const base = new Date(enrollment.enrolled_at || enrollment.created_at).getTime();
+    const deadline = base + Number(assignment.due_after_days) * 86400000;
+    if (Date.now() > deadline) {
+      throw new HTTPException(403, { message: "La date limite de remise est dépassée" });
+    }
+  }
+  const { rows: existingSubmissions } = await query(
+    "SELECT status,passed FROM academy_assignment_submissions WHERE assignment_id=$1 AND user_id=$2",
+    [assignment.id, user.id]
+  );
+  if (existingSubmissions[0]?.status === "graded" && existingSubmissions[0]?.passed === true) {
+    throw new HTTPException(409, { message: "Ce devoir est déjà validé" });
+  }
+  const body = await c.req.json();
+  const textContent = nullableText(body.text_content, 30000);
+  const submissionUrl = optionalUrl(body.submission_url);
+  if (assignment.submission_type === "text" && !textContent) {
+    throw new HTTPException(400, { message: "Texte du devoir requis" });
+  }
+  if (assignment.submission_type === "url" && !submissionUrl) {
+    throw new HTTPException(400, { message: "Lien HTTPS requis" });
+  }
+  if (assignment.submission_type === "text_or_url" && !textContent && !submissionUrl) {
+    throw new HTTPException(400, { message: "Ajoutez un texte ou un lien" });
+  }
+  const { rows } = await query(
+    `INSERT INTO academy_assignment_submissions(
+       assignment_id,course_id,user_id,text_content,submission_url,status
+     ) VALUES($1,$2,$3,$4,$5,'submitted')
+     ON CONFLICT(assignment_id,user_id) DO UPDATE SET
+       text_content=EXCLUDED.text_content,submission_url=EXCLUDED.submission_url,
+       status='submitted',score=NULL,passed=NULL,feedback=NULL,
+       submitted_at=now(),graded_at=NULL,graded_by=NULL,updated_at=now()
+     RETURNING *`,
+    [assignment.id, assignment.course_id, user.id, textContent, submissionUrl]
+  );
+  return c.json({ submission: rows[0] }, 201);
+});
+
+academyRoutes.post("/instructor/courses/:id/cohorts", async c => {
+  const { user } = await requireInstructor(c);
+  const course = await instructorOwnsCourse(user.id, c.req.param("id"));
+  const body = await c.req.json();
+  const startsAt = requiredDate(body.starts_at, "Date de début");
+  const endsAt = body.ends_at ? requiredDate(body.ends_at, "Date de fin") : null;
+  if (endsAt && new Date(endsAt).getTime() <= new Date(startsAt).getTime()) {
+    throw new HTTPException(400, { message: "La fin doit être après le début" });
+  }
+  const capacity = body.capacity === null || body.capacity === undefined || body.capacity === ""
+    ? null
+    : intField(body.capacity, "Capacité", 1, 100000);
+  const { rows } = await query(
+    `INSERT INTO academy_cohorts(course_id,title,starts_at,ends_at,capacity)
+     VALUES($1,$2,$3,$4,$5) RETURNING *`,
+    [course.id, textField(body.title, "Nom de cohorte", 180), startsAt, endsAt, capacity]
+  );
+  return c.json({ cohort: rows[0] }, 201);
+});
+
+academyRoutes.post("/instructor/cohorts/:id/members/:userId", async c => {
+  const { user } = await requireInstructor(c);
+  const result = await transaction(async client => {
+    const { rows } = await client.query(
+      `SELECT ch.*,c.instructor_id FROM academy_cohorts ch
+       JOIN academy_courses c ON c.id=ch.course_id
+       WHERE ch.id=$1 FOR UPDATE`,
+      [c.req.param("id")]
+    );
+    const cohort = rows[0];
+    if (!cohort || cohort.instructor_id !== user.id) {
+      throw new HTTPException(404, { message: "Cohorte introuvable" });
+    }
+    const { rows: enrollmentRows } = await client.query(
+      `SELECT id FROM academy_enrollments
+       WHERE course_id=$1 AND user_id=$2 AND status IN ('active','completed')`,
+      [cohort.course_id, c.req.param("userId")]
+    );
+    if (!enrollmentRows[0]) throw new HTTPException(400, { message: "Inscription active requise" });
+    const { rows: existingMembers } = await client.query(
+      "SELECT 1 FROM academy_cohort_members WHERE cohort_id=$1 AND user_id=$2",
+      [cohort.id, c.req.param("userId")]
+    );
+    if (existingMembers[0]) return null;
+    if (cohort.capacity) {
+      const { rows: countRows } = await client.query(
+        "SELECT count(*)::int AS n FROM academy_cohort_members WHERE cohort_id=$1",
+        [cohort.id]
+      );
+      if (Number(countRows[0]?.n ?? 0) >= Number(cohort.capacity)) {
+        throw new HTTPException(409, { message: "Cohorte complète" });
+      }
+    }
+    const { rows: inserted } = await client.query(
+      `INSERT INTO academy_cohort_members(cohort_id,course_id,user_id,enrollment_id)
+       VALUES($1,$2,$3,$4)
+       ON CONFLICT(cohort_id,user_id) DO NOTHING RETURNING *`,
+      [cohort.id, cohort.course_id, c.req.param("userId"), enrollmentRows[0].id]
+    );
+    return inserted[0] ?? null;
+  });
+  return c.json({ member: result });
+});
+
+academyRoutes.post("/instructor/cohorts/:id/sessions", async c => {
+  const { user } = await requireInstructor(c);
+  const { rows: cohorts } = await query(
+    `SELECT ch.*,c.instructor_id FROM academy_cohorts ch
+     JOIN academy_courses c ON c.id=ch.course_id WHERE ch.id=$1`,
+    [c.req.param("id")]
+  );
+  const cohort = cohorts[0];
+  if (!cohort || cohort.instructor_id !== user.id) {
+    throw new HTTPException(404, { message: "Cohorte introuvable" });
+  }
+  const body = await c.req.json();
+  const sessionStartsAt = requiredDate(body.starts_at, "Date de session");
+  if (new Date(sessionStartsAt).getTime() < new Date(cohort.starts_at).getTime()) {
+    throw new HTTPException(400, { message: "La session ne peut pas précéder le début de la cohorte" });
+  }
+  if (cohort.ends_at && new Date(sessionStartsAt).getTime() > new Date(cohort.ends_at).getTime()) {
+    throw new HTTPException(400, { message: "La session ne peut pas dépasser la fin de la cohorte" });
+  }
+  const meetingUrl = optionalUrl(body.meeting_url);
+  if (!meetingUrl) throw new HTTPException(400, { message: "Lien live HTTPS requis" });
+  const { rows } = await query(
+    `INSERT INTO academy_cohort_sessions(
+       cohort_id,course_id,title,starts_at,duration_minutes,meeting_url,recording_url,notes
+     ) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [
+      cohort.id,
+      cohort.course_id,
+      textField(body.title, "Titre de session", 180),
+      sessionStartsAt,
+      intField(body.duration_minutes ?? 60, "Durée", 1, 1440),
+      meetingUrl,
+      optionalUrl(body.recording_url),
+      nullableText(body.notes, 8000),
+    ]
+  );
+  return c.json({ session: rows[0] }, 201);
+});
+
+academyRoutes.get("/instructor/courses/:id/cohorts", async c => {
+  const { user } = await requireInstructor(c);
+  const course = await instructorOwnsCourse(user.id, c.req.param("id"));
+  const { rows } = await query(
+    `SELECT ch.*,
+      (SELECT count(*) FROM academy_cohort_members m WHERE m.cohort_id=ch.id)::int AS members,
+      COALESCE((SELECT json_agg(s ORDER BY s.starts_at) FROM academy_cohort_sessions s WHERE s.cohort_id=ch.id),'[]'::json) AS sessions
+     FROM academy_cohorts ch WHERE ch.course_id=$1 ORDER BY ch.starts_at DESC`,
+    [course.id]
+  );
+  return c.json({ cohorts: rows });
+});
+
+academyRoutes.get("/learning/:courseId/schedule", async c => {
+  const user = await requireUser(c);
+  const access = await accessFor(user, c.req.param("courseId"));
+  if (!hasLearningAccess(access)) throw new HTTPException(403, { message: "Accès au cours requis" });
+  const { rows } = await query(
+    `SELECT ch.id AS cohort_id,ch.title AS cohort_title,ch.starts_at AS cohort_starts_at,
+            ch.ends_at AS cohort_ends_at,s.id AS session_id,s.title AS session_title,
+            s.starts_at,s.duration_minutes,s.meeting_url,s.recording_url,s.notes
+     FROM academy_cohort_members m
+     JOIN academy_cohorts ch ON ch.id=m.cohort_id
+     LEFT JOIN academy_cohort_sessions s ON s.cohort_id=ch.id
+     WHERE m.user_id=$1 AND m.course_id=$2
+     ORDER BY s.starts_at NULLS LAST`,
+    [user.id, access.course.id]
+  );
+  return c.json({ schedule: rows });
+});
+
+
+academyRoutes.get("/instructor/courses/:id/premium", async c => {
+  const { user } = await requireInstructor(c);
+  const course = await instructorOwnsCourse(user.id, c.req.param("id"));
+  const [assignments, cohorts, learners] = await Promise.all([
+    query(
+      `SELECT a.*,l.title AS lesson_title,
+        COALESCE((SELECT json_agg(json_build_object(
+          'id',s.id,'user_id',s.user_id,'learner_name',u.name,'learner_phone',u.phone,
+          'status',s.status,'score',s.score,'passed',s.passed,'feedback',s.feedback,
+          'text_content',s.text_content,'submission_url',s.submission_url,
+          'submitted_at',s.submitted_at,'graded_at',s.graded_at
+        ) ORDER BY s.submitted_at)
+        FROM academy_assignment_submissions s
+        JOIN users u ON u.id=s.user_id
+        WHERE s.assignment_id=a.id),'[]'::json) AS submissions
+       FROM academy_assignments a
+       JOIN academy_lessons l ON l.id=a.lesson_id
+       WHERE a.course_id=$1 ORDER BY l.position,a.created_at`,
+      [course.id]
+    ),
+    query(
+      `SELECT ch.*,
+        COALESCE((SELECT json_agg(json_build_object(
+          'id',s.id,'title',s.title,'starts_at',s.starts_at,'duration_minutes',s.duration_minutes,
+          'meeting_url',s.meeting_url,'recording_url',s.recording_url,'notes',s.notes
+        ) ORDER BY s.starts_at) FROM academy_cohort_sessions s WHERE s.cohort_id=ch.id),'[]'::json) AS sessions,
+        COALESCE((SELECT json_agg(json_build_object(
+          'user_id',m.user_id,'learner_name',u.name,'learner_phone',u.phone
+        ) ORDER BY m.joined_at) FROM academy_cohort_members m JOIN users u ON u.id=m.user_id WHERE m.cohort_id=ch.id),'[]'::json) AS members
+       FROM academy_cohorts ch WHERE ch.course_id=$1 ORDER BY ch.starts_at DESC`,
+      [course.id]
+    ),
+    query(
+      `SELECT e.id,e.user_id,e.status,u.name AS learner_name,u.phone AS learner_phone
+       FROM academy_enrollments e JOIN users u ON u.id=e.user_id
+       WHERE e.course_id=$1 AND e.status IN ('active','completed') ORDER BY u.name NULLS LAST,u.phone`,
+      [course.id]
+    ),
+  ]);
+  return c.json({
+    course: { id: course.id, title: course.title },
+    assignments: assignments.rows,
+    cohorts: cohorts.rows,
+    learners: learners.rows,
   });
 });

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../../core/services/api_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_text_styles.dart';
@@ -20,6 +21,7 @@ class _AcademyLearningScreenState extends State<AcademyLearningScreen> {
   List<dynamic> _outline = [];
   List<dynamic> _progress = [];
   List<dynamic> _announcements = [];
+  List<dynamic> _schedule = [];
 
   @override
   void initState() {
@@ -29,9 +31,13 @@ class _AcademyLearningScreenState extends State<AcademyLearningScreen> {
 
   Future<void> _load() async {
     try {
-      final data = await ApiService.get(
-        '/api/academy/learning/${widget.courseId}',
-      );
+      final results = await Future.wait([
+        ApiService.get('/api/academy/learning/${widget.courseId}'),
+        ApiService.get('/api/academy/learning/${widget.courseId}/schedule')
+            .catchError((_) => <String, dynamic>{'schedule': <dynamic>[]}),
+      ]);
+      final data = results[0];
+      final schedule = results[1];
       if (!mounted) return;
       setState(() {
         _course = Map<String, dynamic>.from(data['course'] as Map);
@@ -41,6 +47,7 @@ class _AcademyLearningScreenState extends State<AcademyLearningScreen> {
         _outline = (data['outline'] as List?) ?? [];
         _progress = (data['progress'] as List?) ?? [];
         _announcements = (data['announcements'] as List?) ?? [];
+        _schedule = (schedule['schedule'] as List?) ?? [];
       });
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
@@ -178,6 +185,86 @@ class _AcademyLearningScreenState extends State<AcademyLearningScreen> {
                 ],
               ),
             ),
+            if (_schedule.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppColors.paper,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: AppColors.line),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.calendar_month_rounded, color: AppColors.accent),
+                        const SizedBox(width: 10),
+                        Text(
+                          'Calendrier de cohorte',
+                          style: AppTextStyles.headlineMedium.copyWith(fontSize: 18),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    ..._schedule.where((raw) {
+                      final item = Map<String, dynamic>.from(raw as Map);
+                      return item['session_id'] != null;
+                    }).map((raw) {
+                      final item = Map<String, dynamic>.from(raw as Map);
+                      final starts = DateTime.tryParse(item['starts_at']?.toString() ?? '');
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: AppColors.paper2,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              item['session_title']?.toString() ?? 'Session live',
+                              style: AppTextStyles.bodyMedium.copyWith(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              starts == null
+                                  ? 'Date à confirmer'
+                                  : '${starts.day.toString().padLeft(2, '0')}/${starts.month.toString().padLeft(2, '0')}/${starts.year} · ${item['duration_minutes'] ?? 60} min',
+                              style: AppTextStyles.caption.copyWith(color: AppColors.ink3),
+                            ),
+                            if (item['notes'] != null) ...[
+                              const SizedBox(height: 6),
+                              Text(
+                                item['notes'].toString(),
+                                style: AppTextStyles.bodySmall.copyWith(color: AppColors.ink3),
+                              ),
+                            ],
+                            if (item['meeting_url'] != null) ...[
+                              const SizedBox(height: 8),
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  final uri = Uri.tryParse(item['meeting_url'].toString());
+                                  if (uri != null && await canLaunchUrl(uri)) {
+                                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                  }
+                                },
+                                icon: const Icon(Icons.video_call_rounded),
+                                label: const Text('Rejoindre'),
+                              ),
+                            ],
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+            ],
             if (_announcements.isNotEmpty) ...[
               const SizedBox(height: 18),
               Builder(

@@ -2,13 +2,19 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Download, ExternalLink, MessageCircle, PlayCircle, Send, Video } from "lucide-react";
+import { ArrowLeft, Bookmark, CheckCircle2, ClipboardList, Download, ExternalLink, MessageCircle, Save, Send, Video } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Progress } from "@/components/ui/progress";
-import type { AcademyCourse, AcademyLesson, AcademyQuiz } from "@/lib/types";
+import type { AcademyAssignment, AcademyAssignmentSubmission, AcademyCourse, AcademyLesson, AcademyLessonNote, AcademyQuiz } from "@/lib/types";
+
+type LessonPremiumPayload = {
+  assignment: AcademyAssignment | null;
+  submission: AcademyAssignmentSubmission | null;
+  note: AcademyLessonNote | null;
+};
 
 type LessonPayload = {
   lesson: AcademyLesson;
@@ -29,13 +35,26 @@ export default function LessonPage({
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [quizResult, setQuizResult] = useState<{ score: number; passed: boolean; feedback?: Record<string, { correct: boolean; explanation?: string | null }> } | null>(null);
   const [discussion, setDiscussion] = useState("");
+  const [premium, setPremium] = useState<LessonPremiumPayload>({ assignment: null, submission: null, note: null });
+  const [noteBody, setNoteBody] = useState("");
+  const [bookmarked, setBookmarked] = useState(false);
+  const [assignmentText, setAssignmentText] = useState("");
+  const [assignmentUrl, setAssignmentUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function load(id: string) {
     try {
-      const payload = await api<LessonPayload>(`/api/academy/lessons/${id}`);
+      const [payload, premiumPayload] = await Promise.all([
+        api<LessonPayload>(`/api/academy/lessons/${id}`),
+        api<LessonPremiumPayload>(`/api/academy/lessons/${id}/premium`).catch(() => ({ assignment: null, submission: null, note: null })),
+      ]);
       setData(payload);
+      setPremium(premiumPayload);
+      setNoteBody(premiumPayload.note?.body || "");
+      setBookmarked(premiumPayload.note?.bookmarked === true);
+      setAssignmentText(premiumPayload.submission?.text_content || "");
+      setAssignmentUrl(premiumPayload.submission?.submission_url || "");
       if (!payload.progress) {
         await api(`/api/academy/lessons/${id}/progress`, {
           method: "POST",
@@ -130,6 +149,46 @@ export default function LessonPage({
     }
   }
 
+  async function savePrivateNote() {
+    if (!lessonId) return;
+    setBusy(true);
+    try {
+      const result = await api<{ note: AcademyLessonNote }>(`/api/academy/lessons/${lessonId}/note`, {
+        method: "PUT",
+        body: JSON.stringify({ body: noteBody, bookmarked }),
+      });
+      setPremium(current => ({ ...current, note: result.note }));
+      toast.success("Note privée enregistrée");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Enregistrement impossible");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitAssignment() {
+    if (!premium.assignment) return;
+    setBusy(true);
+    try {
+      const result = await api<{ submission: AcademyAssignmentSubmission }>(
+        `/api/academy/assignments/${premium.assignment.id}/submit`,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            text_content: assignmentText.trim() || null,
+            submission_url: assignmentUrl.trim() || null,
+          }),
+        }
+      );
+      setPremium(current => ({ ...current, submission: result.submission }));
+      toast.success("Devoir remis à l’instructeur");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Remise impossible");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (error) {
     return (
       <div className="mc-page py-16">
@@ -218,6 +277,114 @@ export default function LessonPage({
                 {completed ? "Leçon terminée" : "Marquer comme terminée"}
               </Button>
             </div>
+          </div>
+        </section>
+
+        <section className="grid gap-5 lg:grid-cols-2">
+          <div className="mc-panel p-5 sm:p-6">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-2xl bg-secondary text-ink">
+                <Bookmark className="size-4" />
+              </span>
+              <div>
+                <p className="mc-kicker">Notes privées</p>
+                <h2 className="mt-1 text-lg font-bold text-ink">Votre carnet de cours</h2>
+              </div>
+            </div>
+            <Textarea
+              className="mt-4 min-h-36"
+              value={noteBody}
+              onChange={event => setNoteBody(event.target.value)}
+              placeholder="Résumé, idées à retenir, questions à approfondir…"
+            />
+            <label className="mt-3 flex items-center gap-2 text-sm font-medium text-muted-foreground">
+              <input type="checkbox" checked={bookmarked} onChange={event => setBookmarked(event.target.checked)} />
+              Ajouter cette leçon à mes favoris
+            </label>
+            <Button className="mt-4" variant="outline" onClick={savePrivateNote} disabled={busy}>
+              <Save className="size-4" /> Enregistrer
+            </Button>
+          </div>
+
+          <div className="mc-panel p-5 sm:p-6">
+            <div className="flex items-center gap-3">
+              <span className="grid size-10 place-items-center rounded-2xl bg-accent text-primary">
+                <ClipboardList className="size-4" />
+              </span>
+              <div>
+                <p className="mc-kicker">Travail pratique</p>
+                <h2 className="mt-1 text-lg font-bold text-ink">
+                  {premium.assignment ? premium.assignment.title : "Aucun devoir pour cette leçon"}
+                </h2>
+              </div>
+            </div>
+
+            {premium.assignment ? (
+              <div className="mt-4">
+                <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+                  {premium.assignment.instructions}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  <span className="rounded-full bg-secondary px-2.5 py-1 font-semibold text-muted-foreground">
+                    Seuil : {premium.assignment.passing_score} %
+                  </span>
+                  {premium.assignment.required ? (
+                    <span className="rounded-full bg-amber-50 px-2.5 py-1 font-semibold text-amber-800">
+                      Obligatoire pour le certificat
+                    </span>
+                  ) : null}
+                </div>
+
+                {premium.assignment.submission_type !== "url" ? (
+                  <Textarea
+                    className="mt-4 min-h-32"
+                    value={assignmentText}
+                    onChange={event => setAssignmentText(event.target.value)}
+                    placeholder="Votre réponse…"
+                  />
+                ) : null}
+                {premium.assignment.submission_type !== "text" ? (
+                  <input
+                    className="mt-3 h-11 w-full rounded-xl border border-input bg-white px-3.5 text-sm"
+                    value={assignmentUrl}
+                    onChange={event => setAssignmentUrl(event.target.value)}
+                    placeholder="https://…"
+                    inputMode="url"
+                  />
+                ) : null}
+
+                {premium.submission ? (
+                  <div className="mt-4 rounded-2xl bg-secondary/45 p-3 text-sm">
+                    <p className="font-bold text-ink">
+                      {premium.submission.status === "graded"
+                        ? premium.submission.passed
+                          ? "Devoir validé"
+                          : "Devoir corrigé"
+                        : premium.submission.status === "revision_requested"
+                          ? "Nouvelle version demandée"
+                          : "En attente de correction"}
+                    </p>
+                    {premium.submission.score !== null && premium.submission.score !== undefined ? (
+                      <p className="mt-1 text-muted-foreground">
+                        Score : {premium.submission.score}/{premium.assignment.max_score}
+                      </p>
+                    ) : null}
+                    {premium.submission.feedback ? (
+                      <p className="mt-2 whitespace-pre-wrap text-muted-foreground">{premium.submission.feedback}</p>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                <Button className="mt-4" onClick={submitAssignment} disabled={busy}>
+                  <Send className="size-4" />
+                  {premium.submission ? "Remettre une nouvelle version" : "Remettre le devoir"}
+                </Button>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm leading-6 text-muted-foreground">
+                Cette leçon ne demande pas de travail à remettre.
+              </p>
+            )}
           </div>
         </section>
 

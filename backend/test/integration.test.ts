@@ -336,6 +336,126 @@ test('Academy supports premium course lifecycle from instructor to certificate',
   assert.equal(inviteEnroll.body.enrollment.status, 'active');
 });
 
+test('Academy premium assignments notes and cohorts gate completion correctly', async () => {
+  const instructor = await user('+2250700000301');
+  await query("UPDATE users SET name='Coach Premium' WHERE id=$1", [instructor.id]);
+  assert.equal((await request('/api/academy/instructor/profile', 'POST', {
+    headline: 'Coach',
+    bio: 'Formation avec devoirs et cohortes'
+  }, instructor.token)).status, 201);
+
+  const learner = await user('+2250700000302');
+  await query("UPDATE users SET name='Apprenante Premium' WHERE id=$1", [learner.id]);
+
+  const created = await request('/api/academy/instructor/courses', 'POST', {
+    title: 'Academy Premium Pro',
+    access_type: 'free',
+    certificate_enabled: true
+  }, instructor.token);
+  assert.equal(created.status, 201);
+  const courseId = created.body.course.id;
+
+  const section = await request(`/api/academy/instructor/courses/${courseId}/sections`, 'POST', {
+    title: 'Module pratique',
+    position: 1
+  }, instructor.token);
+  const lesson = await request(`/api/academy/instructor/sections/${section.body.section.id}/lessons`, 'POST', {
+    title: 'Cas pratique',
+    lesson_type: 'text',
+    content: 'Préparez votre cas pratique.',
+    position: 1,
+    published: true
+  }, instructor.token);
+  const lessonId = lesson.body.lesson.id;
+
+  const assignment = await request(`/api/academy/instructor/lessons/${lessonId}/assignment`, 'PUT', {
+    title: 'Livrable final',
+    instructions: 'Présentez votre stratégie.',
+    submission_type: 'text_or_url',
+    max_score: 20,
+    passing_score: 60,
+    required: true,
+    due_after_days: 7
+  }, instructor.token);
+  assert.equal(assignment.status, 200, JSON.stringify(assignment.body));
+
+  assert.equal((await request(`/api/academy/instructor/courses/${courseId}`, 'PATCH', {
+    status: 'published'
+  }, instructor.token)).status, 200);
+
+  const enroll = await request(`/api/academy/courses/${courseId}/enroll`, 'POST', {}, learner.token);
+  assert.equal(enroll.status, 200);
+  assert.equal(enroll.body.payment_required, false);
+  assert.equal(enroll.body.enrollment.status, 'active');
+
+  const note = await request(`/api/academy/lessons/${lessonId}/note`, 'PUT', {
+    body: 'À revoir avant le devoir.',
+    bookmarked: true
+  }, learner.token);
+  assert.equal(note.status, 200);
+  assert.equal(note.body.note.bookmarked, true);
+
+  const premium = await request(`/api/academy/lessons/${lessonId}/premium`, 'GET', undefined, learner.token);
+  assert.equal(premium.status, 200);
+  assert.equal(premium.body.assignment.title, 'Livrable final');
+  assert.equal(premium.body.note.body, 'À revoir avant le devoir.');
+
+  const progress = await request(`/api/academy/lessons/${lessonId}/progress`, 'POST', {
+    status: 'completed'
+  }, learner.token);
+  assert.equal(progress.status, 200);
+  assert.equal(progress.body.completion, null);
+
+  const submission = await request(`/api/academy/assignments/${assignment.body.assignment.id}/submit`, 'POST', {
+    text_content: 'Ma stratégie détaillée.'
+  }, learner.token);
+  assert.equal(submission.status, 201);
+  assert.equal(submission.body.submission.status, 'submitted');
+
+  const premiumInstructor = await request(`/api/academy/instructor/courses/${courseId}/premium`, 'GET', undefined, instructor.token);
+  assert.equal(premiumInstructor.status, 200);
+  assert.equal(premiumInstructor.body.assignments[0].submissions.length, 1);
+
+  const graded = await request(`/api/academy/instructor/submissions/${submission.body.submission.id}/grade`, 'POST', {
+    score: 16,
+    feedback: 'Très bon travail.'
+  }, instructor.token);
+  assert.equal(graded.status, 200, JSON.stringify(graded.body));
+  assert.equal(graded.body.submission.passed, true);
+  assert.equal(graded.body.completion.completed, true);
+  assert.ok(graded.body.completion.certificate.verification_code);
+
+  const cohort = await request(`/api/academy/instructor/courses/${courseId}/cohorts`, 'POST', {
+    title: 'Cohorte Novembre',
+    starts_at: '2026-11-03T18:00:00.000Z',
+    ends_at: '2026-12-03T18:00:00.000Z',
+    capacity: 25
+  }, instructor.token);
+  assert.equal(cohort.status, 201);
+
+  const member = await request(`/api/academy/instructor/cohorts/${cohort.body.cohort.id}/members/${learner.id}`, 'POST', {}, instructor.token);
+  assert.equal(member.status, 200);
+
+  const session = await request(`/api/academy/instructor/cohorts/${cohort.body.cohort.id}/sessions`, 'POST', {
+    title: 'Coaching collectif',
+    starts_at: '2026-11-05T18:00:00.000Z',
+    duration_minutes: 90,
+    meeting_url: 'https://meet.example.com/mastercota',
+    notes: 'Préparez vos questions.'
+  }, instructor.token);
+  assert.equal(session.status, 201);
+
+  const schedule = await request(`/api/academy/learning/${courseId}/schedule`, 'GET', undefined, learner.token);
+  assert.equal(schedule.status, 200);
+  assert.equal(schedule.body.schedule[0].session_title, 'Coaching collectif');
+  assert.equal(schedule.body.schedule[0].meeting_url, 'https://meet.example.com/mastercota');
+
+  const outsider = await user('+2250700000303');
+  assert.equal((await request(`/api/academy/instructor/submissions/${submission.body.submission.id}/grade`, 'POST', {
+    score: 20
+  }, outsider.token)).status, 403);
+});
+
 test('Academy rejects incomplete premium publication and enforces coupon and invite limits atomically', async () => {
   const instructor = await user('+2250700000201');
   await request('/api/academy/instructor/profile', 'POST', {

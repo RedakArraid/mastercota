@@ -143,7 +143,7 @@ Le workflow manuel `Mobile Release` produit les artefacts signés avec les secre
 
 ## Mastercota Academy
 
-Le dépôt contient désormais un LMS premium intégré à Mastercota : catalogue de cours, espace instructeur, accès gratuit/payant/invitation, paiement direct à l'instructeur, progression, quiz, certificats vérifiables, coupons, Q&R, annonces et analytics.
+Le dépôt contient désormais un LMS premium intégré à Mastercota : catalogue de cours, espace instructeur, accès gratuit/payant/invitation, paiement direct à l'instructeur, progression, quiz, devoirs notés, notes privées, cohortes, sessions live, certificats vérifiables, coupons, Q&R, annonces et analytics.
 
 Le détail fonctionnel et le modèle d'accès sont documentés dans [`docs/academy.md`](docs/academy.md).
 
