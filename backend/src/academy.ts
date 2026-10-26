@@ -1608,16 +1608,16 @@ academyRoutes.post("/instructor/submissions/:id/grade", async c => {
       : 0;
     const passed = percent >= Number(submission.passing_score);
     const status = body.request_revision === true ? "revision_requested" : "graded";
+    const passedValue = status === "graded" ? passed : null;
     const { rows: updated } = await client.query(
       `UPDATE academy_assignment_submissions
-       SET score=$2,passed=CASE WHEN $3='graded' THEN $4 ELSE NULL END,
-           status=$3,feedback=$5,graded_by=$6,graded_at=now(),updated_at=now()
+       SET score=$2,passed=$4,status=$3,feedback=$5,graded_by=$6,graded_at=now(),updated_at=now()
        WHERE id=$1 RETURNING *`,
       [
         submission.id,
         score,
         status,
-        passed,
+        passedValue,
         nullableText(body.feedback, 8000),
         user.id,
       ]
