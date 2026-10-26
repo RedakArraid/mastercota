@@ -11,6 +11,7 @@ import {
   HandCoins,
   Receipt,
   FileText,
+  GraduationCap,
   LogOut,
   Menu,
   X,
@@ -33,6 +34,7 @@ const NAV = [
   { href: "/admin/platform-payments", label: "Frais Mastercota", icon: Receipt },
   { href: "/admin/users", label: "Utilisateurs", icon: Users },
   { href: "/admin/openwa", label: "WhatsApp / OTP", icon: MessageCircle },
+  { href: "/admin/academy", label: "Academy", icon: GraduationCap },
   { href: "/admin/pages", label: "Pages CMS", icon: FileText },
 ];
 

@@ -37,6 +37,7 @@ import { normalizeWavePhone, normalizeWavePayLink } from "./lib/wave.js";
 import { getPispiRequestToPay, pispiStatus, pispiWebhookTxIds, verifyPispiWebhookSignature } from "./lib/pispi.js";
 import { activePlatformPaymentProvider, assertPlatformPaymentProviderAvailable, type PlatformPaymentProvider } from "./lib/platform-payment-provider.js";
 import { adminRoutes } from "./admin.js";
+import { academyRoutes } from "./academy.js";
 import { runtimeReadiness } from "./lib/runtime-readiness.js";
 
 export const app = new Hono();
@@ -910,3 +911,4 @@ app.get("/api/pages", async (c) => {
 });
 
 app.route("/api/admin", adminRoutes);
+app.route("/api/academy", academyRoutes);

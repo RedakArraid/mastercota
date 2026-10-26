@@ -133,12 +133,14 @@ export async function getSiteChrome(): Promise<SiteChrome> {
       shortLabel: "Guide",
     },
     { href: "/frais", label: "Frais", shortLabel: "Frais" },
+    { href: "/academy", label: "Academy", shortLabel: "Academy" },
   ];
 
   const footerDefaults = [
     { href: "/", label: "Accueil" },
     { href: "/comment-ca-marche", label: "Comment ça marche" },
     { href: "/frais", label: "Frais" },
+    { href: "/academy", label: "Academy" },
   ];
 
   const cmsFooter = pages
