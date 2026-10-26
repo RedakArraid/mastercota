@@ -1776,6 +1776,8 @@ academyRoutes.post("/instructor/cohorts/:id/sessions", async c => {
     throw new HTTPException(404, { message: "Cohorte introuvable" });
   }
   const body = await c.req.json();
+  const meetingUrl = optionalUrl(body.meeting_url);
+  if (!meetingUrl) throw new HTTPException(400, { message: "Lien live HTTPS requis" });
   const { rows } = await query(
     `INSERT INTO academy_cohort_sessions(
        cohort_id,course_id,title,starts_at,duration_minutes,meeting_url,recording_url,notes
@@ -1786,12 +1788,11 @@ academyRoutes.post("/instructor/cohorts/:id/sessions", async c => {
       textField(body.title, "Titre de session", 180),
       requiredDate(body.starts_at, "Date de session"),
       intField(body.duration_minutes ?? 60, "Durée", 1, 1440),
-      optionalUrl(body.meeting_url),
+      meetingUrl,
       optionalUrl(body.recording_url),
       nullableText(body.notes, 8000),
     ]
   );
-  if (!rows[0].meeting_url) throw new HTTPException(400, { message: "Lien live HTTPS requis" });
   return c.json({ session: rows[0] }, 201);
 });
 
