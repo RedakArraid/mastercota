@@ -8,6 +8,7 @@ import {
   BookOpen,
   CheckCircle2,
   Gift,
+  GraduationCap,
   LockKeyhole,
   Megaphone,
   Plus,
@@ -290,6 +291,9 @@ export default function CourseBuilderPage({ params }: { params: Promise<{ course
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href={`/teach/${courseId}/premium`}><GraduationCap className="size-4" /> Premium</Link>
+          </Button>
           {course.status === "published" ? (
             <Button asChild variant="outline"><Link href={`/academy/${course.slug}`} target="_blank">Voir la page publique</Link></Button>
           ) : null}
