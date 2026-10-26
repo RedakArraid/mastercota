@@ -198,3 +198,55 @@ export type AcademyQuiz = {
     position: number;
   }>;
 };
+
+
+export type AcademyAssignment = {
+  id: string;
+  lesson_id: string;
+  course_id: string;
+  title: string;
+  instructions: string;
+  submission_type: "text" | "url" | "text_or_url";
+  max_score: number;
+  passing_score: number;
+  required: boolean;
+  due_after_days?: number | null;
+};
+
+export type AcademyAssignmentSubmission = {
+  id: string;
+  assignment_id: string;
+  course_id: string;
+  user_id: string;
+  text_content?: string | null;
+  submission_url?: string | null;
+  status: "submitted" | "graded" | "revision_requested";
+  score?: number | null;
+  passed?: boolean | null;
+  feedback?: string | null;
+  submitted_at: string;
+  graded_at?: string | null;
+};
+
+export type AcademyLessonNote = {
+  user_id: string;
+  lesson_id: string;
+  course_id: string;
+  body: string;
+  bookmarked: boolean;
+  updated_at: string;
+};
+
+export type AcademyCohortScheduleItem = {
+  cohort_id: string;
+  cohort_title: string;
+  cohort_starts_at: string;
+  cohort_ends_at?: string | null;
+  session_id?: string | null;
+  session_title?: string | null;
+  starts_at?: string | null;
+  duration_minutes?: number | null;
+  meeting_url?: string | null;
+  recording_url?: string | null;
+  notes?: string | null;
+};
