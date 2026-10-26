@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, BookOpen, CheckCircle2, Clock3, Megaphone, PlayCircle } from "lucide-react";
+import { ArrowLeft, BookOpen, CalendarDays, CheckCircle2, Clock3, ExternalLink, Megaphone, PlayCircle } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import type { AcademyCourse, AcademyEnrollment, AcademySection } from "@/lib/types";
+import type { AcademyCohortScheduleItem, AcademyCourse, AcademyEnrollment, AcademySection } from "@/lib/types";
 
 type LessonProgress = { lesson_id: string; status: "started" | "completed"; progress_seconds: number };
 type Announcement = { id: string; title: string; body: string; created_at: string };
@@ -18,18 +18,23 @@ export default function LearningCoursePage({ params }: { params: Promise<{ cours
   const [outline, setOutline] = useState<AcademySection[]>([]);
   const [progress, setProgress] = useState<LessonProgress[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
+  const [schedule, setSchedule] = useState<AcademyCohortScheduleItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     params.then(({ courseId: id }) => {
       setCourseId(id);
-      api<{ course: AcademyCourse; enrollment: AcademyEnrollment | null; outline: AcademySection[]; progress: LessonProgress[]; announcements: Announcement[] }>(`/api/academy/learning/${id}`)
-        .then(data => {
+      Promise.all([
+        api<{ course: AcademyCourse; enrollment: AcademyEnrollment | null; outline: AcademySection[]; progress: LessonProgress[]; announcements: Announcement[] }>(`/api/academy/learning/${id}`),
+        api<{ schedule: AcademyCohortScheduleItem[] }>(`/api/academy/learning/${id}/schedule`).catch(() => ({ schedule: [] })),
+      ])
+        .then(([data, calendar]) => {
           setCourse(data.course);
           setEnrollment(data.enrollment);
           setOutline(data.outline || []);
           setProgress(data.progress || []);
           setAnnouncements(data.announcements || []);
+          setSchedule(calendar.schedule || []);
         })
         .catch(err => setError(err instanceof Error ? err.message : "Cours indisponible"));
     });
@@ -87,6 +92,45 @@ export default function LearningCoursePage({ params }: { params: Promise<{ cours
           </div>
         </div>
       </section>
+
+      {schedule.length ? (
+        <section className="mc-panel p-5 sm:p-6">
+          <div className="flex items-start gap-3">
+            <CalendarDays className="mt-0.5 size-5 text-primary" />
+            <div className="min-w-0 flex-1">
+              <p className="mc-kicker">Cohorte & live</p>
+              <h2 className="mt-1 text-xl font-bold text-ink">{schedule[0].cohort_title}</h2>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
+                {schedule.filter(item => item.session_id).map(item => (
+                  <div key={item.session_id} className="rounded-2xl border border-border/80 bg-secondary/35 p-4">
+                    <p className="font-bold text-ink">{item.session_title}</p>
+                    {item.starts_at ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {new Date(item.starts_at).toLocaleString("fr-FR")} · {item.duration_minutes || 60} min
+                      </p>
+                    ) : null}
+                    {item.notes ? <p className="mt-2 text-sm leading-6 text-muted-foreground">{item.notes}</p> : null}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {item.meeting_url ? (
+                        <Button asChild size="sm">
+                          <a href={item.meeting_url} target="_blank" rel="noreferrer">
+                            <ExternalLink className="size-3.5" /> Rejoindre
+                          </a>
+                        </Button>
+                      ) : null}
+                      {item.recording_url ? (
+                        <Button asChild size="sm" variant="outline">
+                          <a href={item.recording_url} target="_blank" rel="noreferrer">Replay</a>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {announcements.length ? (
         <section className="mc-panel p-5">
